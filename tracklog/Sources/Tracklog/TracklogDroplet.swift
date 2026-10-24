@@ -1,11 +1,9 @@
-//
-//  TracklogDroplet.swift
-//  Tracklog
-//
-
+import AppKit
 import Combine
 import DroppyKit
 import SwiftUI
+import TracklogCore
+import TracklogMedia
 
 /// The class Droppy's loader instantiates, named in the bundle's
 /// `NSPrincipalClass`. Keep it empty: it runs before the host is ready.
@@ -23,22 +21,110 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
     /// droplet.json. The loader refuses the bundle if the three disagree.
     public nonisolated static let id: DropletID = "tracklog"
 
+    @Published public private(set) var scrobblingEnabled = false
+    @Published public private(set) var nowPlaying: MediaSample?
+    @Published public private(set) var status: ScrobbleStatus = .idle
+    @Published public private(set) var helperAvailable = true
+    @Published public private(set) var scrobbleCount = 0
+    @Published public private(set) var lastScrobble: Scrobble?
+
     private var host: DropletHost?
+    private let engine = ScrobbleEngine()
+    private var feed: MediaHelperFeed?
 
     public func activate(host: DropletHost) throws {
         self.host = host
+        scrobblingEnabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
+        helperAvailable = MediaHelperFeed().isAvailable
+        if scrobblingEnabled {
+            startFeed()
+        }
         host.log.info("Tracklog activated")
     }
 
     public func deactivate() {
-        // Everything activate() started is torn down here. Swift cannot unload
-        // code, so anything left running keeps running until Droppy relaunches.
+        stopFeed()
+        engine.reset()
         host = nil
     }
 
-    /// What the widget's control does. Replace it with the real action.
-    public func refresh() {
-        host?.log.info("Tracklog refreshed")
+    // MARK: - Scrobbling
+
+    public var scrobblingBinding: Binding<Bool> {
+        Binding(
+            get: { self.scrobblingEnabled },
+            set: { self.setScrobblingEnabled($0) }
+        )
+    }
+
+    public func setScrobblingEnabled(_ enabled: Bool) {
+        guard enabled != scrobblingEnabled else { return }
+        scrobblingEnabled = enabled
+        host?.preferences.setValue(enabled, forKey: "scrobblingEnabled")
+        if enabled {
+            startFeed()
+        } else {
+            stopFeed()
+            engine.reset()
+        }
+    }
+
+    private func startFeed() {
+        guard feed == nil else { return }
+        let feed = MediaHelperFeed()
+        self.feed = feed
+        helperAvailable = feed.isAvailable
+        if feed.isAvailable == false {
+            host?.log.notice("Droppy media helper unavailable; now playing cannot be read")
+        }
+        feed.start { [weak self] sample in
+            self?.handle(sample)
+        }
+    }
+
+    private func stopFeed() {
+        feed?.stop()
+        feed = nil
+        nowPlaying = nil
+        status = .idle
+    }
+
+    private func handle(_ sample: MediaSample?) {
+        nowPlaying = sample
+        let effects = engine.ingest(sample)
+        status = engine.status
+
+        for effect in effects {
+            switch effect {
+            case .nowPlaying(let track):
+                host?.log.info("Now playing: \(track.artist) — \(track.title)")
+            case .scrobble(let scrobble):
+                scrobbleCount += 1
+                lastScrobble = scrobble
+                // The local queue and the service clients land here next.
+                host?.log.info("Scrobbled: \(scrobble.track.artist) — \(scrobble.track.title)")
+            }
+        }
+    }
+
+    // MARK: - Presentation
+
+    public func openSettings() {
+        host?.workspace.openSettings()
+    }
+
+    /// The player's display name, for the widget's status line.
+    public var sourceName: String? {
+        guard let bundleID = nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
+           let name = app.localizedName
+        {
+            return name
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
     }
 }
 
@@ -50,14 +136,8 @@ extension TracklogDroplet: ShelfWidgetProviding {
             ShelfWidgetDescriptor(
                 id: "tracklog",
                 title: "Tracklog",
-                systemImage: "drop.fill",
+                systemImage: "waveform",
                 layoutTraits: ShelfWidgetLayoutTraits(
-                    // The CARD, in points at the Regular shelf size: the area
-                    // your view draws in, which is what the harness shows.
-                    // Droppy adds its own chrome around it. Both widths are
-                    // required; Droppy refuses a descriptor that leaves
-                    // either to a host fallback. The height is clamped to
-                    // 48 through 480 and holds in a paired row too.
                     preferredSoloWidth: 420,
                     preferredPairedWidth: 210,
                     contentHeight: .fixed(150)
@@ -73,53 +153,23 @@ extension TracklogDroplet: ShelfWidgetProviding {
     public func makeWidgetSettingsPopover(_ id: ShelfWidgetID) -> AnyView? { nil }
 }
 
-/// The widget.
-///
-/// Solo and paired are different compositions, not one view at two widths.
-/// Branch on `context.isCompact`, never on a width comparison.
-///
-/// The layout is the one every Droppy widget shares (Design guidelines):
-/// no card or border, the content straight on the shelf; one padding,
-/// `context.contentInsets`, which clears the host's rounded clip for this
-/// slot (8 against the 18pt card corner, 0 alone on the island, which the
-/// island shell clips), and nothing on top of it; the root
-/// fills the rectangle; a header row of symbol and title with the widget's
-/// control at its trailing end; leading text, trailing numbers; buttons are
-/// Droppy's Liquid Glass disc and pill, never a wash of your own.
-private struct TracklogWidget: View {
-    @ObservedObject var droplet: TracklogDroplet
-    let context: ShelfWidgetContext
+// MARK: - Settings
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: DroppySpacing.sm) {
-            HStack(spacing: DroppySpacing.xsm) {
-                Image(systemName: "drop.fill")
-                    .font(.system(size: 12, weight: .medium))
-                Text("Tracklog")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer(minLength: 0)
-                if !context.isCompact {
-                    // The widget's one control: the same Liquid Glass disc the
-                    // File Tray puts on an item.
-                    Button {
-                        droplet.refresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(DroppyCircleButtonStyle(size: 20))
-                    .help("Refresh")
-                    .accessibilityLabel("Refresh")
-                }
-            }
-            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+extension TracklogDroplet: SettingsPaneProviding {
+    public func makeSettingsPane(context: SettingsPaneContext) -> AnyView {
+        AnyView(TracklogSettings(droplet: self))
+    }
 
-            Text(context.isCompact ? "Compact" : "Standalone")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-
-            Spacer(minLength: 0)
-        }
-        .padding(context.contentInsets)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    public var settingsSearchEntries: [SettingsSearchEntry] {
+        [
+            SettingsSearchEntry(
+                title: "Scrobble what I play",
+                keywords: ["scrobble", "play", "now playing"]
+            ),
+            SettingsSearchEntry(
+                title: "Services",
+                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"]
+            ),
+        ]
     }
 }

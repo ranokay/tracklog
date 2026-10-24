@@ -7,12 +7,13 @@
   "category": "media",
   "kit": {
     "abi": 1,
-    "minAPI": "1.6.0"
+    "minAPI": "1.9.0"
   },
   "minAppVersion": "15.3.0",
   "capabilities": [],
   "surfaces": [
-    "shelf-widget"
+    "shelf-widget",
+    "settings-pane"
   ],
   "icon": "Tracklog.icon",
   "creator": {

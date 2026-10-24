@@ -15,16 +15,22 @@ let package = Package(
         .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.6.0")
     ],
     targets: [
+        .target(name: "TracklogCore"),
+        .target(name: "TracklogMedia", dependencies: ["TracklogCore"]),
         .target(
             name: "Tracklog",
-            dependencies: [.product(name: "DroppyKit", package: "droppykit")]
+            dependencies: [
+                "TracklogCore",
+                "TracklogMedia",
+                .product(name: "DroppyKit", package: "droppykit"),
+            ]
         ),
         .executableTarget(
             name: "TracklogHarness",
             dependencies: [
                 "Tracklog",
-                .product(name: "DroppyKitHarness", package: "droppykit")
+                .product(name: "DroppyKitHarness", package: "droppykit"),
             ]
-        )
+        ),
     ]
 )
