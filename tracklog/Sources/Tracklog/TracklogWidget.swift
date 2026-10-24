@@ -2,19 +2,43 @@ import DroppyKit
 import SwiftUI
 import TracklogCore
 
-/// The shelf card: what is playing, and how far it is from a scrobble.
+/// The shelf card in the three directions. Solo and paired are separate
+/// compositions, as the host requires; both draw straight on the shelf black.
 struct TracklogWidget: View {
     @ObservedObject var droplet: TracklogDroplet
     let context: ShelfWidgetContext
 
     var body: some View {
+        Group {
+            switch ProtoConfig.variant {
+            case .ledger:
+                LedgerWidget(context: context, state: ProtoConfig.state)
+            case .sleeve:
+                SleeveWidget(context: context, state: ProtoConfig.state)
+            case .gutter:
+                GutterWidget(context: context, state: ProtoConfig.state)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(context.contentInsets)
+    }
+}
+
+// MARK: - Ledger
+
+private struct LedgerWidget: View {
+    let context: ShelfWidgetContext
+    let state: ProtoState
+
+    var body: some View {
         VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
             header
-            content
-            Spacer(minLength: 0)
+            if context.isPaired {
+                paired
+            } else {
+                solo
+            }
         }
-        .padding(context.contentInsets)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var header: some View {
@@ -24,95 +48,412 @@ struct TracklogWidget: View {
             Text("Tracklog")
                 .font(.system(size: 12, weight: .semibold))
             Spacer(minLength: 0)
-            if !context.isCompact {
-                Button {
-                    droplet.openSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(DroppyCircleButtonStyle(size: 20))
-                .help("Tracklog settings")
-                .accessibilityLabel("Tracklog settings")
+            if state != .idle {
+                ProtoQueueBadge(compact: context.isPaired)
             }
+            ProtoOverflowMenu(size: 20)
         }
         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if !droplet.scrobblingEnabled {
-            title("Scrobbling is off")
-            subtitle(context.isCompact ? "Turn on in Settings" : "Turn it on in Tracklog settings.")
-        } else if let sample = droplet.nowPlaying {
-            Text(sample.track.title)
-                .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                .lineLimit(context.isCompact ? 1 : 2)
-                .minimumScaleFactor(0.9)
-
-            Text(artistLine(sample))
-                .font(.system(size: 13))
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .lineLimit(1)
-
-            if !context.isCompact {
-                ProgressView(value: droplet.status.progress)
-                    .progressViewStyle(.linear)
-                    .tint(AdaptiveColors.notchSurfacePrimaryText)
-                    .controlSize(.small)
+    private var solo: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+            switch state {
+            case .playing:
+                HStack(alignment: .top, spacing: DroppySpacing.md) {
+                    ProtoArtwork(hue: ProtoData.nowPlaying.hue, size: 84)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(ProtoData.nowPlaying.title)
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                        Text("\(ProtoData.nowPlaying.artist) · \(ProtoData.nowPlaying.album)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        ProtoProgress(value: ProtoData.nowPlaying.progress)
+                        HStack(spacing: DroppySpacing.xsm) {
+                            Text("Scrobbling in \(ProtoData.nowPlaying.remaining)")
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            Spacer(minLength: DroppySpacing.xsm)
+                            ProtoLoveButton(size: 20)
+                        }
+                    }
+                }
+                servicesLine
+            case .paused:
+                titleBlock("Paused")
+                subtitle("Scrobbling resumes at 15:42.")
+                Button("Resume") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .off:
+                titleBlock("Scrobbling is off")
+                subtitle("Your listening isn't being saved.")
+                HStack(spacing: DroppySpacing.xsm) {
+                    Button("Turn on") {}
+                        .buttonStyle(DroppyAccentButtonStyle(size: .small))
+                    Spacer(minLength: 0)
+                    Button("Settings") {}
+                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                }
+            case .idle:
+                titleBlock("Nothing playing")
+                subtitle("Play something to start scrobbling.")
+                Spacer(minLength: 0)
             }
-
-            Text(statusLine)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .lineLimit(1)
-        } else {
-            title(droplet.helperAvailable ? "Nothing playing" : "Media feed unavailable")
-            subtitle(
-                droplet.helperAvailable
-                    ? "Play something to start scrobbling."
-                    : "Tracklog cannot read now playing in this host."
-            )
         }
     }
 
-    private func title(_ text: String) -> some View {
+    private var paired: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+            switch state {
+            case .playing:
+                HStack(alignment: .top, spacing: DroppySpacing.sm) {
+                    ProtoArtwork(hue: ProtoData.nowPlaying.hue, size: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ProtoData.nowPlaying.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(2)
+                        Text(ProtoData.nowPlaying.remaining)
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                    }
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: DroppySpacing.xsm) {
+                    Text("Scrobbling")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                    Spacer(minLength: 0)
+                    ProtoLoveButton(size: 20)
+                }
+            case .paused:
+                titleBlock("Paused")
+                subtitle("Resumes at 15:42.")
+                Button("Resume") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .off:
+                titleBlock("Scrobbling is off")
+                Button("Turn on") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .idle:
+                titleBlock("Nothing playing")
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var servicesLine: some View {
+        Text("Last.fm · ListenBrainz · Libre.fm")
+            .font(.system(size: 9))
+            .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+            .lineLimit(1)
+    }
+
+    private func titleBlock(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))
+            .font(.system(size: 20, weight: .semibold, design: .rounded))
             .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             .lineLimit(1)
     }
 
     private func subtitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13))
+            .font(.system(size: 12))
             .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
             .lineLimit(2)
     }
+}
 
-    private func artistLine(_ sample: MediaSample) -> String {
-        let line = [sample.track.artist, sample.track.album]
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: " · ")
-        return line.isEmpty ? "Unknown artist" : line
-    }
+// MARK: - Sleeve
 
-    private var statusLine: String {
-        if !droplet.status.isPlaying {
-            return "Paused"
-        }
-        switch droplet.status.phase {
-        case .scrobbled:
-            return "Scrobbled"
-        case .armed:
-            return "Scrobbling in \(time(droplet.status.remaining))"
-        case .idle:
-            return "Waiting"
+private struct SleeveWidget: View {
+    let context: ShelfWidgetContext
+    let state: ProtoState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.sm) {
+            header
+            if context.isPaired {
+                paired
+            } else {
+                solo
+            }
         }
     }
 
-    private func time(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded(.up))
-        return String(format: "%d:%02d", total / 60, total % 60)
+    private var header: some View {
+        HStack(spacing: DroppySpacing.xsm) {
+            Image(systemName: "waveform")
+                .font(.system(size: 12, weight: .medium))
+            Text("Tracklog")
+                .font(.system(size: 12, weight: .semibold))
+            Spacer(minLength: 0)
+            if state != .idle {
+                ProtoQueueBadge(compact: context.isPaired)
+            }
+            ProtoOverflowMenu(size: 20)
+        }
+        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+    }
+
+    private var solo: some View {
+        Group {
+            switch state {
+            case .playing:
+                HStack(alignment: .top, spacing: DroppySpacing.mdl) {
+                    ProtoArtwork(hue: ProtoData.nowPlaying.hue, size: 92)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ProtoData.nowPlaying.title)
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                        Text(ProtoData.nowPlaying.artist)
+                            .font(.system(size: 13))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .lineLimit(1)
+                        Text(ProtoData.nowPlaying.album)
+                            .font(.system(size: 11))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        ProtoProgress(value: ProtoData.nowPlaying.progress)
+                        HStack(spacing: DroppySpacing.xsm) {
+                            Text("Scrobbling in \(ProtoData.nowPlaying.remaining)")
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            Spacer(minLength: DroppySpacing.xsm)
+                            ProtoLoveButton(size: 20)
+                        }
+                    }
+                }
+            case .paused:
+                titleBlock("Paused")
+                subtitle("Scrobbling resumes at 15:42.")
+                Button("Resume") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .off:
+                titleBlock("Scrobbling is off")
+                subtitle("Your listening isn't being saved.")
+                HStack(spacing: DroppySpacing.xsm) {
+                    Button("Turn on") {}
+                        .buttonStyle(DroppyAccentButtonStyle(size: .small))
+                    Spacer(minLength: 0)
+                    Button("Settings") {}
+                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                }
+            case .idle:
+                titleBlock("Nothing playing")
+                subtitle("Play something to start scrobbling.")
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var paired: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+            switch state {
+            case .playing:
+                HStack(alignment: .top, spacing: DroppySpacing.sm) {
+                    ProtoArtwork(hue: ProtoData.nowPlaying.hue, size: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ProtoData.nowPlaying.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(2)
+                        Text(ProtoData.nowPlaying.artist)
+                            .font(.system(size: 11))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: DroppySpacing.xsm) {
+                    Text(ProtoData.nowPlaying.remaining)
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                    Spacer(minLength: 0)
+                    ProtoLoveButton(size: 20)
+                }
+            case .paused:
+                titleBlock("Paused")
+                subtitle("Resumes at 15:42.")
+                Button("Resume") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .off:
+                titleBlock("Scrobbling is off")
+                Button("Turn on") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .idle:
+                titleBlock("Nothing playing")
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func titleBlock(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 20, weight: .semibold, design: .rounded))
+            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+            .lineLimit(1)
+    }
+
+    private func subtitle(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+            .lineLimit(2)
+    }
+}
+
+// MARK: - Gutter
+
+private struct GutterWidget: View {
+    let context: ShelfWidgetContext
+    let state: ProtoState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.sm) {
+            header
+            if context.isPaired {
+                paired
+            } else {
+                solo
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: DroppySpacing.xsm) {
+            Image(systemName: "waveform")
+                .font(.system(size: 12, weight: .medium))
+            Text("Tracklog")
+                .font(.system(size: 12, weight: .semibold))
+            Spacer(minLength: 0)
+            if state != .idle {
+                ProtoQueueBadge(compact: context.isPaired)
+            }
+            ProtoOverflowMenu(size: 20)
+        }
+        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+    }
+
+    private var solo: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+            switch state {
+            case .playing:
+                HStack(alignment: .top, spacing: DroppySpacing.md) {
+                    ProtoArtwork(hue: ProtoData.nowPlaying.hue, size: 64)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ProtoData.nowPlaying.title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(1)
+                        Text(ProtoData.nowPlaying.artist)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .lineLimit(1)
+                        Text("\(ProtoData.pendingCount) waiting")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.orange.opacity(0.9))
+                    }
+                    Spacer(minLength: DroppySpacing.xsm)
+                    Text(ProtoData.nowPlaying.remaining)
+                        .font(.system(size: 18, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                }
+                ProtoProgress(value: ProtoData.nowPlaying.progress)
+                HStack {
+                    Text("\(ProtoData.nowPlaying.elapsed) elapsed")
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                    Spacer(minLength: 0)
+                    ProtoLoveButton(size: 20)
+                }
+            case .paused:
+                HStack {
+                    titleBlock("Paused")
+                    Spacer(minLength: 0)
+                    Button("Resume") {}
+                        .buttonStyle(DroppyAccentButtonStyle(size: .small))
+                }
+                subtitle("Scrobbling resumes at 15:42.")
+            case .off:
+                titleBlock("Scrobbling is off")
+                subtitle("Your listening isn't being saved.")
+                HStack(spacing: DroppySpacing.xsm) {
+                    Button("Turn on") {}
+                        .buttonStyle(DroppyAccentButtonStyle(size: .small))
+                    Spacer(minLength: 0)
+                    Button("Settings") {}
+                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                }
+            case .idle:
+                titleBlock("Nothing playing")
+                subtitle("Play something to start scrobbling.")
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var paired: some View {
+        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+            switch state {
+            case .playing:
+                Text(ProtoData.nowPlaying.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(ProtoData.nowPlaying.remaining)
+                        .font(.system(size: 20, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                    Spacer(minLength: 0)
+                    ProtoLoveButton(size: 20)
+                }
+                Spacer(minLength: 0)
+                Text("\(ProtoData.pendingCount) waiting")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.orange.opacity(0.9))
+            case .paused:
+                titleBlock("Paused")
+                subtitle("Resumes at 15:42.")
+                Button("Resume") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .off:
+                titleBlock("Scrobbling is off")
+                Button("Turn on") {}
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
+            case .idle:
+                titleBlock("Nothing playing")
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func titleBlock(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 20, weight: .semibold, design: .rounded))
+            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+            .lineLimit(1)
+    }
+
+    private func subtitle(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+            .lineLimit(2)
     }
 }

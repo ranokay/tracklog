@@ -39,6 +39,7 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
         if scrobblingEnabled {
             startFeed()
         }
+        presentPrototypeHUD()
         host.log.info("Tracklog activated")
     }
 
@@ -164,12 +165,97 @@ extension TracklogDroplet: SettingsPaneProviding {
         [
             SettingsSearchEntry(
                 title: "Scrobble what I play",
-                keywords: ["scrobble", "play", "now playing"]
+                keywords: ["scrobble", "play", "now playing", "pause"]
             ),
             SettingsSearchEntry(
                 title: "Services",
-                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"]
+                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma", "account"]
+            ),
+            SettingsSearchEntry(
+                title: "Edits",
+                keywords: ["edit", "replace", "metadata"]
+            ),
+            SettingsSearchEntry(
+                title: "Blocks",
+                keywords: ["block", "skip", "artist", "album", "track"]
+            ),
+            SettingsSearchEntry(
+                title: "Data",
+                keywords: ["export", "import", "history", "backup"]
+            ),
+            SettingsSearchEntry(
+                title: "About",
+                keywords: ["version", "licence", "credits"]
             ),
         ]
+    }
+}
+
+// MARK: - History takeover
+
+extension TracklogDroplet: ExpandedSurfaceProviding {
+    public var expandedSurfaces: [ExpandedSurfaceDescriptor] {
+        [
+            ExpandedSurfaceDescriptor(
+                id: "history",
+                title: "History",
+                systemImage: "clock.arrow.circlepath",
+                suppresses: [.shelfWidgets, .autoCollapse]
+            )
+        ]
+    }
+
+    public func makeExpandedSurfaceView(
+        _ id: ExpandedSurfaceID,
+        context: ExpandedSurfaceContext
+    ) -> AnyView {
+        AnyView(TracklogTakeover(variant: ProtoConfig.variant, state: ProtoConfig.state))
+    }
+
+    public func expandedSurfaceSize(
+        _ id: ExpandedSurfaceID,
+        fitting proposal: ExpandedSurfaceSizeProposal
+    ) -> CGSize? {
+        // The harness window is narrower than the 14-inch display this
+        // surface is designed for, so the prototype asks for a size that
+        // fits the stage rather than clipping its own trailing edge.
+        CGSize(
+            width: min(820, proposal.maximumSize.width),
+            height: min(540, proposal.maximumSize.height)
+        )
+    }
+}
+
+// MARK: - HUD
+
+extension TracklogDroplet: HUDPresenting {}
+
+private extension TracklogDroplet {
+    /// Prototype-only: parks a rate-limit HUD so the harness has something to
+    /// draw. A real droplet presents only when the event happens.
+    func presentPrototypeHUD() {
+        guard let host else { return }
+        _ = host.hud.present(
+            DropletHUDRequest(
+                id: "tracklog.prototype.rate-limit",
+                duration: nil,
+                priority: .normal,
+                accessibilityLabel: "Last.fm rate limited, retrying in 2 minutes"
+            ) {
+                HStack(spacing: 0) {
+                    HStack(spacing: DroppySpacing.xsm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: DroppyLiveActivityMetrics.iconSize, weight: .semibold))
+                        Text("Rate limited")
+                            .font(.system(size: DroppyLiveActivityMetrics.labelFontSize, weight: .semibold))
+                    }
+                    Spacer(minLength: 0)
+                    Text("2m")
+                        .font(.system(size: DroppyLiveActivityMetrics.labelFontSize, weight: .medium))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+            }
+        )
     }
 }
