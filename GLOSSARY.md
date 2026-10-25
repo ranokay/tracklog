@@ -20,6 +20,10 @@ The connection service-backed reads are scoped to: charts, friends, profile, tag
 
 One play of one track, identified by the track's identity and the time it started. A listen fans out to delivery targets, or to none.
 
+## Scrobble
+
+One listen's delivery to one connection: the unit the UI counts when it says "12 scrobbles waiting". A listen with three delivery targets is three scrobbles; a listen with none is still a listen, but no scrobble.
+
 ## Delivery target
 
 A connection a listen was headed for when it was captured. A listen fans out to every enabled connection, so it has several targets, or none.
