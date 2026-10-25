@@ -16,6 +16,10 @@ The account identifier a service reports — a Last.fm, Libre.fm or ListenBrainz
 
 The connection service-backed reads are scoped to: charts, friends, profile, tags, collage top items and service search. A read cursor only; it never decides where a scrobble goes, and local history is not scoped to it.
 
+## Listen
+
+One play of one track, identified by the track's identity and the time it started. A listen fans out to delivery targets, or to none.
+
 ## Delivery target
 
 A connection a listen was headed for when it was captured. A listen fans out to every enabled connection, so it has several targets, or none.
@@ -35,6 +39,10 @@ A connection whose credentials the service rejected. It keeps its identity, hold
 ## Abandoned
 
 A pending delivery dropped because its connection was explicitly unlinked. The listen remains in local history, marked as not delivered to that service.
+
+## Repeat and duplicate
+
+A repeat is a new play of a track that already played, and is scrobbled again. A duplicate is one play recorded twice, and is suppressed by track identity and the play's start time.
 
 ## Local history
 
