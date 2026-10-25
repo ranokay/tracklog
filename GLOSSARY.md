@@ -44,6 +44,14 @@ A pending delivery dropped because its connection was explicitly unlinked. The l
 
 A repeat is a new play of a track that already played, and is scrobbled again. A duplicate is one play recorded twice, and is suppressed by track identity and the play's start time.
 
+## Chart source
+
+Where a statistics view reads from: the current connection's service history, or this Mac's local history. A view names its source; local is the fallback where the connection has no statistics API or the range is custom.
+
+## Friend
+
+A person whose listening the current connection makes visible, such as a Last.fm friend or a ListenBrainz follow. Friends are scoped to one connection and never merged across connections.
+
 ## Local history
 
 The authoritative record of listens on this Mac. Global and independent of connections: every listen survives unlink, is exportable, and can exist with no delivery target.
