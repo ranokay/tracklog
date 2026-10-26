@@ -107,11 +107,17 @@ private struct TracklogHistory: View {
         max(state.historyCount, state.listens.count)
     }
 
+    /// A store that could not open is a capture failure, not a history read
+    /// failure; both leave the surface with nothing to show.
+    private var unavailableFailure: CaptureFailure? {
+        state.captureAvailable ? state.historyFailure : state.failure
+    }
+
     // MARK: Body
 
     @ViewBuilder
     private var content: some View {
-        if state.listens.isEmpty, let failure = state.historyFailure {
+        if state.listens.isEmpty, let failure = unavailableFailure {
             unavailable(failure)
         } else if totalCount == 0 {
             empty
