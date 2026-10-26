@@ -15,6 +15,13 @@ public final class TracklogAppState: ObservableObject {
     /// replaces the general `failure` shown in diagnostics.
     @Published public internal(set) var historyFailure: CaptureFailure?
     @Published public internal(set) var listens: [Listen] = []
+    /// Total stored listens, including rows outside the loaded page.
+    @Published public internal(set) var historyCount = 0
+    /// Whether the store has another page after the loaded rows.
+    @Published public internal(set) var historyHasMore = false
+    /// Total listens per local day, keyed by the day's start. A day that spans
+    /// a page boundary still reports its whole count.
+    @Published public internal(set) var historyDayCounts: [Date: Int] = [:]
     @Published public internal(set) var listenCount = 0
     @Published public internal(set) var lastListen: Listen?
 

@@ -106,7 +106,7 @@ struct CaptureFailureTests: CaptureTestHelpers {
         let runtime = CaptureRuntime(
             clock: clock,
             source: source,
-            store: HistoryReadFailingStore(failsAtCall: 2),
+            store: HistoryReadFailingStore(failsAtCall: 3),
             scrobblingEnabled: true,
         )
         await runtime.start()
@@ -199,8 +199,12 @@ private actor FailingStore: ListenStore {
         throw DatabaseError.sqlite("disk full")
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
         []
+    }
+
+    func count() async throws -> Int {
+        0
     }
 }
 
@@ -216,12 +220,20 @@ private actor HistoryReadFailingStore: ListenStore {
         listen.stored(withID: 1)
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
         recentCalls += 1
         guard recentCalls != failsAtCall else {
             throw DatabaseError.sqlite("read failed")
         }
         return []
+    }
+
+    func count() async throws -> Int {
+        recentCalls += 1
+        guard recentCalls != failsAtCall else {
+            throw DatabaseError.sqlite("read failed")
+        }
+        return 0
     }
 }
 
@@ -235,8 +247,12 @@ private actor SuspendingStore: ListenStore {
         return listen.stored(withID: 1)
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
         []
+    }
+
+    func count() async throws -> Int {
+        0
     }
 
     func releaseInsert() {

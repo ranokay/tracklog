@@ -157,6 +157,100 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         #expect(runtime.state.listens.map(\.processed.title) == ["Newest", "Middle", "Oldest"])
     }
 
+    @Test func historyLoadsOnePageAndTheTotalCount() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 5 {
+            _ = try await store.insert(listen(title: "Song \(index)", start: TimeInterval(index)))
+        }
+
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: store,
+            scrobblingEnabled: false,
+            historyPageSize: 2,
+        )
+        await runtime.start()
+
+        #expect(runtime.state.listens.map(\.processed.title) == ["Song 4", "Song 3"])
+        #expect(runtime.state.historyCount == 5)
+        #expect(runtime.state.historyHasMore)
+    }
+
+    @Test func loadingMoreAppendsOlderRowsWithoutDuplicates() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 5 {
+            _ = try await store.insert(listen(title: "Song \(index)", start: TimeInterval(index)))
+        }
+        let runtime = CaptureRuntime(
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            scrobblingEnabled: false,
+            historyPageSize: 2,
+        )
+        await runtime.start()
+
+        await runtime.loadMoreHistory()
+        #expect(runtime.state.listens.map(\.processed.title) == ["Song 4", "Song 3", "Song 2", "Song 1"])
+        #expect(runtime.state.historyHasMore)
+
+        await runtime.loadMoreHistory()
+        #expect(runtime.state.listens.map(\.processed.title) == ["Song 4", "Song 3", "Song 2", "Song 1", "Song 0"])
+        #expect(Set(runtime.state.listens.compactMap(\.id)).count == 5)
+        #expect(runtime.state.historyHasMore == false)
+    }
+
+    @Test func reloadingHistoryReturnsToTheFirstPage() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 5 {
+            _ = try await store.insert(listen(title: "Song \(index)", start: TimeInterval(index)))
+        }
+        let runtime = CaptureRuntime(
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            scrobblingEnabled: false,
+            historyPageSize: 2,
+        )
+        await runtime.start()
+        await runtime.loadMoreHistory()
+        #expect(runtime.state.listens.count == 4)
+
+        await runtime.reloadHistory()
+        #expect(runtime.state.listens.map(\.processed.title) == ["Song 4", "Song 3"])
+        #expect(runtime.state.historyHasMore)
+    }
+
+    @Test func aCapturedListenAppearsInStartOrderInTheLoadedHistory() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        _ = try await store.insert(listen(title: "Old", start: 100))
+        _ = try await store.insert(listen(title: "Middle", start: 200))
+        _ = try await store.insert(listen(title: "Newest", start: 300))
+
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = runtime(database: database, clock: clock, source: source)
+        await runtime.start()
+        #expect(runtime.state.listens.map(\.processed.title) == ["Newest", "Middle", "Old"])
+
+        let track = track()
+        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+            clock.now = base.addingTimeInterval(600 + second)
+            await runtime.ingest(sample(track, at: 600 + second, elapsed: 350 + second))
+        }
+
+        #expect(runtime.state.listens.map(\.processed.title) == ["Newest", "Song", "Middle", "Old"])
+        #expect(runtime.state.historyCount == 4)
+        #expect(runtime.state.listenCount == 1)
+    }
+
     @Test func capturesPublishIntoTheStateTheDropletAlreadyOwns() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)

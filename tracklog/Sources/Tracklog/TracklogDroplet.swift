@@ -34,18 +34,30 @@ public final class TracklogDroplet: NSObject, Droplet {
     public func activate(host: DropletHost) throws {
         self.host = host
 
-        let enabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
-        let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
-        let runtime = CaptureRuntime.open(
-            state: state,
-            databaseURL: databaseURL,
-            clock: SystemClock(),
-            source: MediaHelperFeed(),
-            scrobblingEnabled: enabled,
-            persistScrobbling: { enabled in
-                host.preferences.setValue(enabled, forKey: "scrobblingEnabled")
-            },
-        )
+        let isHarness = host.environment.isHarness
+        let runtime: CaptureRuntime
+        if isHarness {
+            runtime = CaptureRuntime(
+                state: state,
+                clock: SystemClock(),
+                source: HarnessDemoSource(),
+                store: HarnessDemoStore(),
+                scrobblingEnabled: true,
+            )
+        } else {
+            let enabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
+            let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
+            runtime = CaptureRuntime.open(
+                state: state,
+                databaseURL: databaseURL,
+                clock: SystemClock(),
+                source: MediaHelperFeed(),
+                scrobblingEnabled: enabled,
+                persistScrobbling: { enabled in
+                    host.preferences.setValue(enabled, forKey: "scrobblingEnabled")
+                },
+            )
+        }
         self.runtime = runtime
 
         if let failure = runtime.state.failure {
@@ -54,7 +66,12 @@ public final class TracklogDroplet: NSObject, Droplet {
         if !runtime.state.feedAvailable {
             host.log.notice("Droppy media helper unavailable; now playing cannot be read")
         }
-        activationTask = Task { await runtime.start() }
+        activationTask = Task {
+            await runtime.start()
+            if isHarness {
+                await HarnessDemo.showNowPlaying(on: runtime)
+            }
+        }
         host.log.info("Tracklog activated")
     }
 
@@ -83,6 +100,30 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     public func openSettings() {
         host?.workspace.openSettings()
+    }
+
+    public func presentHistory() {
+        guard let host else { return }
+        host.notchSurface.presentExpandedSurface(
+            ExpandedSurfacePresentationRequest(surfaceID: tracklogHistorySurfaceID),
+        )
+    }
+
+    // MARK: - History
+
+    func reloadHistory() async {
+        await runtime?.reloadHistory()
+    }
+
+    func loadMoreHistory() async {
+        await runtime?.loadMoreHistory()
+    }
+
+    func copyMetadata(for listen: Listen) {
+        guard let host else { return }
+        if !host.workspace.copyToPasteboard(listen.processed.copyText) {
+            host.log.notice("Copy metadata was refused")
+        }
     }
 
     /// The player's display name, for the widget's status line.

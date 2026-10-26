@@ -8,15 +8,19 @@ public final class CaptureRuntime {
 
     private let clock: any Clock
     private let source: any NowPlayingSource
-    private let store: (any ListenStore)?
+    let store: (any ListenStore)?
     private let persistScrobbling: (@MainActor (Bool) -> Void)?
     private let engine: ScrobbleEngine
-    private let historyLimit: Int
+    let historyPageSize: Int
 
-    private var started = false
+    var started = false
     /// Identifies the start that owns `started`, so a cancelled older start
     /// cannot clear a newer start's state after a stop and retry.
-    private var startGeneration = 0
+    var startGeneration = 0
+    /// Identifies the newest history request, so a reload cannot be overwritten
+    /// by an older in-flight append.
+    var historyGeneration = 0
+    var historyLoading = false
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
@@ -30,7 +34,7 @@ public final class CaptureRuntime {
         scrobblingEnabled: Bool = false,
         persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
-        historyLimit: Int = 100,
+        historyPageSize: Int = 100,
     ) {
         self.state = state
         self.clock = clock
@@ -38,7 +42,7 @@ public final class CaptureRuntime {
         self.store = store
         self.persistScrobbling = persistScrobbling
         engine = ScrobbleEngine(configuration: configuration)
-        self.historyLimit = historyLimit
+        self.historyPageSize = max(1, historyPageSize)
 
         state.scrobblingEnabled = scrobblingEnabled
         state.captureAvailable = store != nil
@@ -57,7 +61,7 @@ public final class CaptureRuntime {
         scrobblingEnabled: Bool,
         persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
-        historyLimit: Int = 100,
+        historyPageSize: Int = 100,
     ) -> CaptureRuntime {
         var store: SQLiteListenStore?
         var failure: CaptureFailure?
@@ -79,7 +83,7 @@ public final class CaptureRuntime {
             scrobblingEnabled: scrobblingEnabled,
             persistScrobbling: persistScrobbling,
             configuration: configuration,
-            historyLimit: historyLimit,
+            historyPageSize: historyPageSize,
         )
     }
 
@@ -91,15 +95,8 @@ public final class CaptureRuntime {
         state.feedAvailable = source.isAvailable
 
         if let store {
-            do {
-                let listens = try await store.recent(limit: historyLimit)
-                guard finishStart(generation) else { return }
-                state.listens = listens
-                clearHistoryFailure()
-            } catch {
-                guard finishStart(generation) else { return }
-                recordHistoryFailure(error)
-            }
+            await loadFirstPage(from: store, generation: generation)
+            guard finishStart(generation) else { return }
         }
 
         guard finishStart(generation) else { return }
@@ -194,8 +191,8 @@ public final class CaptureRuntime {
     }
 
     /// Persists one threshold-crossing listen. A write admitted before a stop
-    /// or switch-off may finish, but it cannot publish or refresh history after
-    /// either; nothing new is admitted.
+    /// or switch-off may finish, but it cannot publish history after either;
+    /// nothing new is admitted.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
         guard !Task.isCancelled, started, state.scrobblingEnabled,
               let processed = MetadataPipeline.process(scrobble.track)
@@ -208,31 +205,11 @@ public final class CaptureRuntime {
             else { return }
             state.lastListen = stored
             state.listenCount += 1
-            do {
-                let listens = try await store.recent(limit: historyLimit)
-                guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
-                state.listens = listens
-                clearHistoryFailure()
-            } catch {
-                guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
-                recordHistoryFailure(error)
-            }
+            state.historyCount += 1
+            await reloadVisibleHistory(in: store)
         } catch {
             guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.failure = .storage(error: error)
-        }
-    }
-
-    private func recordHistoryFailure(_ error: Error) {
-        let failure = CaptureFailure.history(error: error)
-        state.historyFailure = failure
-        state.failure = failure
-    }
-
-    private func clearHistoryFailure() {
-        state.historyFailure = nil
-        if state.failure?.stage == .history {
-            state.failure = nil
         }
     }
 }

@@ -12,10 +12,13 @@ struct TracklogWidget: View {
         VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
             header
             content
+                .contentShape(Rectangle())
+                .onTapGesture { droplet.presentHistory() }
             Spacer(minLength: 0)
         }
         .padding(context.contentInsets)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityAction(named: "Open history") { droplet.presentHistory() }
     }
 
     private var header: some View {
