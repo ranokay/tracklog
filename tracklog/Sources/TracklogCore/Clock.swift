@@ -12,7 +12,9 @@ public protocol Clock {
 public struct SystemClock: Clock {
     public init() {}
 
-    public var now: Date { Date() }
+    public var now: Date {
+        Date()
+    }
 
     public func sleep(until date: Date) async throws {
         let interval = date.timeIntervalSince(now)

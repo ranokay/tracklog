@@ -44,7 +44,7 @@ public final class TracklogDroplet: NSObject, Droplet {
             scrobblingEnabled: enabled,
             persistScrobbling: { enabled in
                 host.preferences.setValue(enabled, forKey: "scrobblingEnabled")
-            }
+            },
         )
         self.runtime = runtime
 

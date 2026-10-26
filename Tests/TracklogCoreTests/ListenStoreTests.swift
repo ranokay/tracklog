@@ -14,7 +14,7 @@ struct ListenStoreTests {
         title: String = "Song",
         artist: String = "Artist",
         start: TimeInterval = 0,
-        captured: TimeInterval = 0
+        captured: TimeInterval = 0,
     ) -> Listen {
         Listen(
             raw: metadata(title: title, artist: artist),
@@ -23,7 +23,7 @@ struct ListenStoreTests {
             duration: 200,
             playedDuration: 100,
             startedAt: base.addingTimeInterval(start),
-            capturedAt: base.addingTimeInterval(captured)
+            capturedAt: base.addingTimeInterval(captured),
         )
     }
 
@@ -60,7 +60,7 @@ struct ListenStoreTests {
             duration: 200,
             playedDuration: 200,
             startedAt: base,
-            capturedAt: base.addingTimeInterval(999)
+            capturedAt: base.addingTimeInterval(999),
         )
         let duplicate = try await store.insert(differentCase)
 
@@ -116,7 +116,7 @@ struct ListenStoreTests {
         let migrations = SQLiteListenStore.schemaMigrations + [
             SQLiteListenStore.Migration(version: 2) { handle in
                 try SQLiteListenStore.execute(handle, "ALTER TABLE listens ADD COLUMN note TEXT NOT NULL DEFAULT ''")
-            }
+            },
         ]
         let migrated = try SQLiteListenStore(url: database.url, migrations: migrations)
 

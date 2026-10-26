@@ -11,7 +11,7 @@ public enum MetadataPipeline {
             title: track.title.trimmingCharacters(in: .whitespacesAndNewlines),
             artist: track.artist.trimmingCharacters(in: .whitespacesAndNewlines),
             album: track.album.trimmingCharacters(in: .whitespacesAndNewlines),
-            albumArtist: track.albumArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            albumArtist: track.albumArtist.trimmingCharacters(in: .whitespacesAndNewlines),
         )
         guard !processed.title.isEmpty, !processed.artist.isEmpty else { return nil }
         return processed

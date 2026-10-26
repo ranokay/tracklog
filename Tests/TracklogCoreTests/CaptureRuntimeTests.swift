@@ -4,77 +4,7 @@ import Testing
 
 @Suite("Capture runtime")
 @MainActor
-struct CaptureRuntimeTests {
-    private let base = Date(timeIntervalSince1970: 1_000_000)
-
-    private func track(
-        title: String = "Song",
-        artist: String = "Artist",
-        album: String = "Album",
-        albumArtist: String = "Album Artist",
-        duration: TimeInterval = 30,
-        bundleID: String = "com.apple.Music"
-    ) -> Track {
-        Track(
-            title: title,
-            artist: artist,
-            album: album,
-            albumArtist: albumArtist,
-            duration: duration,
-            bundleID: bundleID
-        )
-    }
-
-    private func sample(
-        _ track: Track,
-        at offset: TimeInterval,
-        elapsed: TimeInterval,
-        playing: Bool = true
-    ) -> MediaSample {
-        MediaSample(
-            track: track,
-            elapsed: elapsed,
-            playbackRate: playing ? 1 : 0,
-            isPlaying: playing,
-            timestamp: base.addingTimeInterval(offset)
-        )
-    }
-
-    /// Thirty seconds of two-second samples: enough for the engine's threshold
-    /// on a 30-second track, with the reconstructed start at `base`.
-    private func thresholdSamples(_ track: Track, offset: TimeInterval = 0) -> [MediaSample] {
-        stride(from: 0.0, through: 30.0, by: 2.0).map { second in
-            sample(track, at: offset + second, elapsed: second)
-        }
-    }
-
-    private func runtime(
-        database: TemporaryDatabase,
-        clock: FakeClock,
-        source: ReplayedNowPlaying,
-        enabled: Bool = true,
-        persistScrobbling: (@MainActor (Bool) -> Void)? = nil
-    ) -> CaptureRuntime {
-        CaptureRuntime.open(
-            databaseURL: database.url,
-            clock: clock,
-            source: source,
-            scrobblingEnabled: enabled,
-            persistScrobbling: persistScrobbling
-        )
-    }
-
-    private func replay(
-        _ samples: [MediaSample],
-        on runtime: CaptureRuntime,
-        clock: FakeClock
-    ) async {
-        for sample in samples {
-            clock.now = sample.timestamp
-            await runtime.ingest(sample)
-        }
-    }
-
+struct CaptureRuntimeTests: CaptureTestHelpers {
     @Test func aValidPlayingSampleCreatesExactlyOneListen() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
@@ -86,7 +16,7 @@ struct CaptureRuntimeTests {
             title: "  Song ",
             artist: " Artist ",
             album: " Album ",
-            albumArtist: " Album Artist "
+            albumArtist: " Album Artist ",
         )
         await replay(thresholdSamples(rawTrack), on: runtime, clock: clock)
 
@@ -97,13 +27,13 @@ struct CaptureRuntimeTests {
             title: "  Song ",
             artist: " Artist ",
             album: " Album ",
-            albumArtist: " Album Artist "
+            albumArtist: " Album Artist ",
         ))
         #expect(listen.processed == ListenMetadata(
             title: "Song",
             artist: "Artist",
             album: "Album",
-            albumArtist: "Album Artist"
+            albumArtist: "Album Artist",
         ))
         #expect(listen.bundleID == "com.apple.Music")
         #expect(listen.duration == 30)
@@ -149,7 +79,7 @@ struct CaptureRuntimeTests {
         #expect(try await store.recent(limit: 10).count == 1)
     }
 
-    @Test func masterSwitchOffReadsNoFeedAndStoresNothing() async throws {
+    @Test func switchOffReadsNoFeedAndStoresNothing() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
@@ -159,7 +89,7 @@ struct CaptureRuntimeTests {
             clock: clock,
             source: source,
             enabled: false,
-            persistScrobbling: { persisted.append($0) }
+            persistScrobbling: { persisted.append($0) },
         )
         await runtime.start()
 
@@ -184,44 +114,6 @@ struct CaptureRuntimeTests {
         #expect(runtime.state.nowPlaying == nil)
         #expect(runtime.state.status == .idle)
         #expect(persisted == [true, false])
-    }
-
-    @Test func aDatabaseThatCannotOpenDisablesCaptureWithDiagnostics() async throws {
-        let database = try TemporaryDatabase()
-        let garbage = Data("this is not a database".utf8)
-        try database.write(garbage)
-        let clock = FakeClock(base)
-        let source = ReplayedNowPlaying()
-        let runtime = runtime(database: database, clock: clock, source: source)
-        await runtime.start()
-
-        #expect(runtime.state.captureAvailable == false)
-        let failure = try #require(runtime.state.failure)
-        #expect(failure.stage == .database)
-        #expect(failure.diagnostics.contains(database.url.path))
-        #expect(source.startCount == 0)
-
-        await replay(thresholdSamples(track()), on: runtime, clock: clock)
-        #expect(runtime.state.listens.isEmpty)
-        #expect(try database.readData() == garbage)
-    }
-
-    @Test func aNewerSchemaRefusesToOpenAndDisablesCapture() async throws {
-        let database = try TemporaryDatabase()
-        let store = try SQLiteListenStore(url: database.url)
-        await store.close()
-        try database.setUserVersion(99)
-        let clock = FakeClock(base)
-        let source = ReplayedNowPlaying()
-        let runtime = runtime(database: database, clock: clock, source: source)
-        await runtime.start()
-
-        #expect(runtime.state.captureAvailable == false)
-        let failure = try #require(runtime.state.failure)
-        #expect(failure.stage == .database)
-        #expect(failure.diagnostics.contains("99"))
-        #expect(source.startCount == 0)
-        #expect(try database.userVersion() == 99)
     }
 
     @Test func historyIsEmptyOnFirstRun() async throws {
@@ -260,7 +152,7 @@ struct CaptureRuntimeTests {
             databaseURL: database.url,
             clock: clock,
             source: source,
-            scrobblingEnabled: true
+            scrobblingEnabled: true,
         )
         await runtime.start()
 
@@ -269,82 +161,5 @@ struct CaptureRuntimeTests {
         #expect(runtime.state === shared)
         #expect(shared.listens.count == 1)
         #expect(shared.listenCount == 1)
-    }
-
-    @Test func aFailedInsertIsVisibleAndNeverLooksDelivered() async throws {
-        let clock = FakeClock(base)
-        let source = ReplayedNowPlaying()
-        let runtime = CaptureRuntime(
-            clock: clock,
-            source: source,
-            store: FailingStore(),
-            scrobblingEnabled: true
-        )
-        await runtime.start()
-
-        await replay(thresholdSamples(track()), on: runtime, clock: clock)
-
-        let failure = try #require(runtime.state.failure)
-        #expect(failure.stage == .storage)
-        #expect(failure.diagnostics.contains("disk full"))
-        #expect(runtime.state.listens.isEmpty)
-        #expect(runtime.state.listenCount == 0)
-        #expect(runtime.state.lastListen == nil)
-        #expect(runtime.state.captureAvailable)
-    }
-
-    @Test func aListenWithoutAnArtistIsNotStored() async throws {
-        let database = try TemporaryDatabase()
-        let clock = FakeClock(base)
-        let source = ReplayedNowPlaying()
-        let runtime = runtime(database: database, clock: clock, source: source)
-        await runtime.start()
-
-        await replay(thresholdSamples(track(artist: "   ")), on: runtime, clock: clock)
-
-        #expect(runtime.state.listens.isEmpty)
-        #expect(runtime.state.failure == nil)
-        #expect(runtime.state.listenCount == 0)
-        #expect(runtime.state.nowPlaying == nil)
-        #expect(runtime.state.status == .idle)
-    }
-
-    @Test func pausedSamplesNeverCapture() async throws {
-        let database = try TemporaryDatabase()
-        let clock = FakeClock(base)
-        let source = ReplayedNowPlaying()
-        let runtime = runtime(database: database, clock: clock, source: source)
-        await runtime.start()
-
-        let track = track()
-        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
-            clock.now = base.addingTimeInterval(second)
-            await runtime.ingest(sample(track, at: second, elapsed: 0, playing: false))
-        }
-
-        #expect(runtime.state.listens.isEmpty)
-        #expect(runtime.state.status.isPlaying == false)
-    }
-
-    private func listen(title: String, start: TimeInterval) -> Listen {
-        Listen(
-            raw: ListenMetadata(title: title, artist: "Artist"),
-            processed: ListenMetadata(title: title, artist: "Artist"),
-            bundleID: "com.apple.Music",
-            duration: 200,
-            playedDuration: 100,
-            startedAt: base.addingTimeInterval(start),
-            capturedAt: base.addingTimeInterval(start)
-        )
-    }
-}
-
-private actor FailingStore: ListenStore {
-    func insert(_ listen: Listen) async throws -> Listen? {
-        throw DatabaseError.sqlite("disk full")
-    }
-
-    func recent(limit: Int) async throws -> [Listen] {
-        []
     }
 }

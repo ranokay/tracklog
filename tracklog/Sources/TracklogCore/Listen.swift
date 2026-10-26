@@ -50,7 +50,7 @@ public struct Listen: Identifiable, Equatable, Sendable {
         duration: TimeInterval,
         playedDuration: TimeInterval,
         startedAt: Date,
-        capturedAt: Date
+        capturedAt: Date,
     ) {
         self.id = id
         self.raw = raw
@@ -71,7 +71,7 @@ public struct Listen: Identifiable, Equatable, Sendable {
             duration: scrobble.track.duration,
             playedDuration: scrobble.playedDuration,
             startedAt: scrobble.playedAt,
-            capturedAt: capturedAt
+            capturedAt: capturedAt,
         )
     }
 
@@ -94,7 +94,7 @@ public struct Listen: Identifiable, Equatable, Sendable {
             duration: duration,
             playedDuration: playedDuration,
             startedAt: startedAt,
-            capturedAt: capturedAt
+            capturedAt: capturedAt,
         )
     }
 }
@@ -124,7 +124,7 @@ public struct CaptureFailure: Equatable, Sendable {
             Tracklog could not open its local history database.
             File: \(url.path)
             Error: \(error)
-            """
+            """,
         )
     }
 
@@ -132,7 +132,7 @@ public struct CaptureFailure: Equatable, Sendable {
         CaptureFailure(
             stage: .storage,
             message: "This listen could not be saved, so it was not kept.",
-            diagnostics: "Tracklog could not write to its local history database.\nError: \(error)"
+            diagnostics: "Tracklog could not write to its local history database.\nError: \(error)",
         )
     }
 }

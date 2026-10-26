@@ -27,14 +27,14 @@ public final class CaptureRuntime {
         scrobblingEnabled: Bool = false,
         persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
-        historyLimit: Int = 100
+        historyLimit: Int = 100,
     ) {
         self.state = state
         self.clock = clock
         self.source = source
         self.store = store
         self.persistScrobbling = persistScrobbling
-        self.engine = ScrobbleEngine(configuration: configuration)
+        engine = ScrobbleEngine(configuration: configuration)
         self.historyLimit = historyLimit
 
         state.scrobblingEnabled = scrobblingEnabled
@@ -54,14 +54,14 @@ public final class CaptureRuntime {
         scrobblingEnabled: Bool,
         persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
-        historyLimit: Int = 100
+        historyLimit: Int = 100,
     ) -> CaptureRuntime {
         var store: SQLiteListenStore?
         var failure: CaptureFailure?
         do {
             try FileManager.default.createDirectory(
                 at: databaseURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
+                withIntermediateDirectories: true,
             )
             store = try SQLiteListenStore(url: databaseURL)
         } catch {
@@ -76,7 +76,7 @@ public final class CaptureRuntime {
             scrobblingEnabled: scrobblingEnabled,
             persistScrobbling: persistScrobbling,
             configuration: configuration,
-            historyLimit: historyLimit
+            historyLimit: historyLimit,
         )
     }
 
@@ -137,7 +137,7 @@ public final class CaptureRuntime {
         state.status = engine.status
 
         for effect in effects {
-            guard case .scrobble(let scrobble) = effect else { continue }
+            guard case let .scrobble(scrobble) = effect else { continue }
             await persist(scrobble, in: store)
         }
     }
@@ -151,7 +151,7 @@ public final class CaptureRuntime {
         feedTask = Task { [weak self] in
             for await sample in samples {
                 guard let self else { return }
-                await self.ingest(sample)
+                await ingest(sample)
             }
         }
         source.start { sample in

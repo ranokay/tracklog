@@ -91,7 +91,7 @@ final class FakeClock: Clock {
         self.now = now
     }
 
-    func sleep(until date: Date) async throws {}
+    func sleep(until _: Date) async throws {}
 }
 
 @MainActor
@@ -109,5 +109,94 @@ final class ReplayedNowPlaying: NowPlayingSource {
     func stop() {
         stopCount += 1
         handler = nil
+    }
+}
+
+/// Fixtures shared by the capture suites. A dedicated track plays for thirty
+/// seconds of two-second samples, enough to cross the engine's threshold.
+@MainActor
+protocol CaptureTestHelpers {}
+
+extension CaptureTestHelpers {
+    var base: Date {
+        Date(timeIntervalSince1970: 1_000_000)
+    }
+
+    func track(
+        title: String = "Song",
+        artist: String = "Artist",
+        album: String = "Album",
+        albumArtist: String = "Album Artist",
+        duration: TimeInterval = 30,
+        bundleID: String = "com.apple.Music",
+    ) -> Track {
+        Track(
+            title: title,
+            artist: artist,
+            album: album,
+            albumArtist: albumArtist,
+            duration: duration,
+            bundleID: bundleID,
+        )
+    }
+
+    func sample(
+        _ track: Track,
+        at offset: TimeInterval,
+        elapsed: TimeInterval,
+        playing: Bool = true,
+    ) -> MediaSample {
+        MediaSample(
+            track: track,
+            elapsed: elapsed,
+            playbackRate: playing ? 1 : 0,
+            isPlaying: playing,
+            timestamp: base.addingTimeInterval(offset),
+        )
+    }
+
+    func thresholdSamples(_ track: Track, offset: TimeInterval = 0) -> [MediaSample] {
+        stride(from: 0.0, through: 30.0, by: 2.0).map { second in
+            sample(track, at: offset + second, elapsed: second)
+        }
+    }
+
+    func runtime(
+        database: TemporaryDatabase,
+        clock: FakeClock,
+        source: ReplayedNowPlaying,
+        enabled: Bool = true,
+        persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
+    ) -> CaptureRuntime {
+        CaptureRuntime.open(
+            databaseURL: database.url,
+            clock: clock,
+            source: source,
+            scrobblingEnabled: enabled,
+            persistScrobbling: persistScrobbling,
+        )
+    }
+
+    func replay(
+        _ samples: [MediaSample],
+        on runtime: CaptureRuntime,
+        clock: FakeClock,
+    ) async {
+        for sample in samples {
+            clock.now = sample.timestamp
+            await runtime.ingest(sample)
+        }
+    }
+
+    func listen(title: String, start: TimeInterval) -> Listen {
+        Listen(
+            raw: ListenMetadata(title: title, artist: "Artist"),
+            processed: ListenMetadata(title: title, artist: "Artist"),
+            bundleID: "com.apple.Music",
+            duration: 200,
+            playedDuration: 100,
+            startedAt: base.addingTimeInterval(start),
+            capturedAt: base.addingTimeInterval(start),
+        )
     }
 }

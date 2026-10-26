@@ -9,13 +9,13 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .open(let message):
+        case let .open(message):
             "the database could not be opened: \(message)"
-        case .sqlite(let message):
+        case let .sqlite(message):
             "SQLite reported: \(message)"
-        case .newerSchema(let found, let supported):
+        case let .newerSchema(found, supported):
             "the database was written by a newer Tracklog (schema \(found); this build understands \(supported))"
-        case .migrationFailed(let version, let message):
+        case let .migrationFailed(version, message):
             "migration \(version) failed: \(message)"
         }
     }
@@ -26,55 +26,10 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 public actor SQLiteListenStore: ListenStore {
     public static let schemaVersion = 1
 
-    /// A migration's closure runs synchronously inside `open`, before the
-    /// actor is shared, so sending it is safe even though the closure is not
-    /// `Sendable` itself.
-    public struct Migration: @unchecked Sendable {
-        public let version: Int
-        let apply: (OpaquePointer) throws -> Void
-
-        init(version: Int, apply: @escaping (OpaquePointer) throws -> Void) {
-            self.version = version
-            self.apply = apply
-        }
-    }
-
-    /// Computed rather than stored: the closures run once during `open`,
-    /// before the actor is shared, and are not `Sendable`.
-    static var schemaMigrations: [Migration] {
-        [
-            Migration(version: 1) { handle in
-                try execute(
-                    handle,
-                    """
-                    CREATE TABLE listens (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        raw_title TEXT NOT NULL,
-                        raw_artist TEXT NOT NULL,
-                        raw_album TEXT NOT NULL,
-                        raw_album_artist TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        artist TEXT NOT NULL,
-                        album TEXT NOT NULL,
-                        album_artist TEXT NOT NULL,
-                        bundle_id TEXT NOT NULL,
-                        duration REAL NOT NULL,
-                        played_duration REAL NOT NULL,
-                        started_at REAL NOT NULL,
-                        captured_at REAL NOT NULL,
-                        dedup_key TEXT NOT NULL UNIQUE
-                    );
-                    CREATE INDEX listens_started_at ON listens (started_at DESC, id DESC);
-                    """
-                )
-            },
-        ]
-    }
-
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
     /// no other reference can reach it.
-    nonisolated(unsafe) private var db: OpaquePointer?
+    private nonisolated(unsafe) var connection: OpaquePointer?
     private let url: URL
 
     public init(url: URL) throws {
@@ -83,12 +38,12 @@ public actor SQLiteListenStore: ListenStore {
 
     init(url: URL, migrations: [Migration]) throws {
         self.url = url
-        self.db = try Self.open(url: url, migrations: migrations)
+        connection = try Self.open(url: url, migrations: migrations)
     }
 
     deinit {
-        if let db {
-            sqlite3_close(db)
+        if let connection {
+            sqlite3_close(connection)
         }
     }
 
@@ -102,7 +57,7 @@ public actor SQLiteListenStore: ListenStore {
                 title, artist, album, album_artist,
                 bundle_id, duration, played_duration, started_at, captured_at, dedup_key
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
+            """,
         )
         defer { sqlite3_finalize(statement) }
 
@@ -139,7 +94,7 @@ public actor SQLiteListenStore: ListenStore {
             FROM listens
             ORDER BY started_at DESC, id DESC
             LIMIT ?
-            """
+            """,
         )
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_int(statement, 1, Int32(limit))
@@ -155,20 +110,20 @@ public actor SQLiteListenStore: ListenStore {
                             title: text(statement, 1),
                             artist: text(statement, 2),
                             album: text(statement, 3),
-                            albumArtist: text(statement, 4)
+                            albumArtist: text(statement, 4),
                         ),
                         processed: ListenMetadata(
                             title: text(statement, 5),
                             artist: text(statement, 6),
                             album: text(statement, 7),
-                            albumArtist: text(statement, 8)
+                            albumArtist: text(statement, 8),
                         ),
                         bundleID: text(statement, 9),
                         duration: sqlite3_column_double(statement, 10),
                         playedDuration: sqlite3_column_double(statement, 11),
                         startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
-                        capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13))
-                    )
+                        capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
+                    ),
                 )
             case SQLITE_DONE:
                 return listens
@@ -181,20 +136,20 @@ public actor SQLiteListenStore: ListenStore {
     // MARK: - Lifecycle
 
     public func close() async {
-        if let db {
-            sqlite3_close(db)
-            self.db = nil
+        if let connection {
+            sqlite3_close(connection)
+            self.connection = nil
         }
     }
 
     // MARK: - Introspection for the migration tests
 
     func userVersion() throws -> Int {
-        try Self.intValue(try database(), "PRAGMA user_version")
+        try Self.intValue(database(), "PRAGMA user_version")
     }
 
     func foreignKeysEnabled() throws -> Bool {
-        try Self.intValue(try database(), "PRAGMA foreign_keys") == 1
+        try Self.intValue(database(), "PRAGMA foreign_keys") == 1
     }
 
     // MARK: - Opening and migrating
@@ -205,7 +160,9 @@ public actor SQLiteListenStore: ListenStore {
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
             let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
-            if let handle { sqlite3_close(handle) }
+            if let handle {
+                sqlite3_close(handle)
+            }
             throw DatabaseError.open(message)
         }
 
@@ -264,7 +221,7 @@ public actor SQLiteListenStore: ListenStore {
         let stamp = ISO8601DateFormatter.string(
             from: Date(),
             timeZone: .gmt,
-            formatOptions: [.withInternetDateTime, .withFractionalSeconds]
+            formatOptions: [.withInternetDateTime, .withFractionalSeconds],
         )
         .replacingOccurrences(of: ":", with: "-")
         let name = "\(url.deletingPathExtension().lastPathComponent)-backup-\(stamp).sqlite"
@@ -279,8 +236,8 @@ public actor SQLiteListenStore: ListenStore {
     // MARK: - SQLite helpers
 
     private func database() throws -> OpaquePointer {
-        guard let db else { throw DatabaseError.open("the database is closed") }
-        return db
+        guard let connection else { throw DatabaseError.open("the database is closed") }
+        return connection
     }
 
     private func prepare(_ handle: OpaquePointer, _ sql: String) throws -> OpaquePointer {
