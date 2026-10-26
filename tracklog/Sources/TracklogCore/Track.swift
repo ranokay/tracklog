@@ -113,7 +113,9 @@ public struct ScrobbleStatus: Equatable, Sendable {
         isPlaying: false
     )
 
-    public var remaining: TimeInterval { max(0, target - played) }
+    public var remaining: TimeInterval {
+        max(0, target - played)
+    }
 
     public var progress: Double {
         guard target > 0 else { return 0 }

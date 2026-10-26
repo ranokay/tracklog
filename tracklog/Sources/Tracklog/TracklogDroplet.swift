@@ -9,9 +9,13 @@ import TracklogMedia
 /// `NSPrincipalClass`. Keep it empty: it runs before the host is ready.
 @objc(TracklogPrincipal)
 public final class TracklogPrincipal: NSObject, DropletPrincipal {
-    public override init() { super.init() }
+    override public init() {
+        super.init()
+    }
 
-    @MainActor public func makeDroplet() -> AnyObject { TracklogDroplet() }
+    @MainActor public func makeDroplet() -> AnyObject {
+        TracklogDroplet()
+    }
 }
 
 /// Tracklog.
@@ -96,9 +100,9 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
 
         for effect in effects {
             switch effect {
-            case .nowPlaying(let track):
+            case let .nowPlaying(track):
                 host?.log.info("Now playing: \(track.artist) — \(track.title)")
-            case .scrobble(let scrobble):
+            case let .scrobble(scrobble):
                 scrobbleCount += 1
                 lastScrobble = scrobble
                 // The local queue and the service clients land here next.
@@ -117,8 +121,7 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
     public var sourceName: String? {
         guard let bundleID = nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-           let name = app.localizedName
-        {
+           let name = app.localizedName {
             return name
         }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
@@ -146,17 +149,19 @@ extension TracklogDroplet: ShelfWidgetProviding {
         ]
     }
 
-    public func makeWidgetView(_ id: ShelfWidgetID, context: ShelfWidgetContext) -> AnyView {
+    public func makeWidgetView(_: ShelfWidgetID, context: ShelfWidgetContext) -> AnyView {
         AnyView(TracklogWidget(droplet: self, context: context))
     }
 
-    public func makeWidgetSettingsPopover(_ id: ShelfWidgetID) -> AnyView? { nil }
+    public func makeWidgetSettingsPopover(_: ShelfWidgetID) -> AnyView? {
+        nil
+    }
 }
 
 // MARK: - Settings
 
 extension TracklogDroplet: SettingsPaneProviding {
-    public func makeSettingsPane(context: SettingsPaneContext) -> AnyView {
+    public func makeSettingsPane(context _: SettingsPaneContext) -> AnyView {
         AnyView(TracklogSettings(droplet: self))
     }
 
@@ -169,7 +174,7 @@ extension TracklogDroplet: SettingsPaneProviding {
             SettingsSearchEntry(
                 title: "Services",
                 keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"]
-            ),
+            )
         ]
     }
 }

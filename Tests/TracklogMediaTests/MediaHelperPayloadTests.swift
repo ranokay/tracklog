@@ -19,7 +19,7 @@ struct MediaHelperPayloadTests {
                 "elapsedTime": 42.0,
                 "playbackRate": 1.0,
                 "playing": true,
-                "parentApplicationBundleIdentifier": "com.apple.Music",
+                "parentApplicationBundleIdentifier": "com.apple.Music"
             ]
         ])
 
@@ -55,7 +55,7 @@ struct MediaHelperPayloadTests {
     @Test func bundleIdentifierFallsBackToThePlainKey() throws {
         let payload = try data(["payload": [
             "title": "Song",
-            "bundleIdentifier": "com.spotify.client",
+            "bundleIdentifier": "com.spotify.client"
         ]])
 
         #expect(MediaHelperPayload.decode(payload)?.track.bundleID == "com.spotify.client")
@@ -65,7 +65,7 @@ struct MediaHelperPayloadTests {
         let payload = try data(["payload": [
             "title": "Song",
             "bundleIdentifier": "com.spotify.client",
-            "parentApplicationBundleIdentifier": "com.apple.Music",
+            "parentApplicationBundleIdentifier": "com.apple.Music"
         ]])
 
         #expect(MediaHelperPayload.decode(payload)?.track.bundleID == "com.apple.Music")
@@ -123,7 +123,7 @@ struct MediaHelperFeedTests {
 
         #expect(feed.isAvailable == false)
 
-        var received: MediaSample?? = nil
+        var received: MediaSample??
         feed.start { received = $0 }
 
         #expect(received == .some(nil))

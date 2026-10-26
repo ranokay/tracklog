@@ -24,17 +24,19 @@ struct ScrobbleEngineTests {
     }
 
     private func isScrobble(_ effect: ScrobbleEffect) -> Bool {
-        if case .scrobble = effect { return true }
+        if case .scrobble = effect {
+            return true
+        }
         return false
     }
 
     @Test func thresholdUsesPanoFormula() {
         let cases: [(duration: TimeInterval, target: TimeInterval)] = [
             (200, 100),
-            (1_000, 240),
+            (1000, 240),
             (30, 29.4),
             (10, 29.4),
-            (0, 30),
+            (0, 30)
         ]
 
         for (duration, expected) in cases {

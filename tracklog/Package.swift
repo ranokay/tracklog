@@ -27,15 +27,15 @@ let package = Package(
             dependencies: [
                 "TracklogCore",
                 "TracklogMedia",
-                .product(name: "DroppyKit", package: "droppykit"),
+                .product(name: "DroppyKit", package: "droppykit")
             ]
         ),
         .executableTarget(
             name: "TracklogHarness",
             dependencies: [
                 "Tracklog",
-                .product(name: "DroppyKitHarness", package: "droppykit"),
+                .product(name: "DroppyKitHarness", package: "droppykit")
             ]
-        ),
+        )
     ]
 )

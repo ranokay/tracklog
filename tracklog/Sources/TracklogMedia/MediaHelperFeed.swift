@@ -42,9 +42,9 @@ public final class MediaHelperFeed {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                let sample = await self.read(helperURL: helperURL)
+                let sample = await read(helperURL: helperURL)
                 guard !Task.isCancelled else { return }
-                self.handler?(sample)
+                handler?(sample)
                 try? await Task.sleep(for: .seconds(2))
             }
         }

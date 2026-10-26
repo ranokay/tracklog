@@ -156,10 +156,8 @@ public final class ScrobbleEngine {
     }
 
     private func finalize(at now: Date) -> [ScrobbleEffect] {
-        guard let current = session, !current.scrobbled, current.played >= current.target else {
-            return []
-        }
-        guard !isDuplicate(current.track.identity, at: now) else { return [] }
+        guard let current = session, !current.scrobbled, current.played >= current.target,
+              !isDuplicate(current.track.identity, at: now) else { return [] }
         lastScrobble = (current.track.identity, now)
         return [
             .scrobble(
