@@ -154,7 +154,7 @@ private struct TracklogHistory: View {
                         itemView(item)
                             .id(item.id)
                     }
-                    if state.historyHasMore, !state.listens.isEmpty {
+                    if state.historyHasMore, !state.listens.isEmpty, state.historyFailure == nil {
                         Color.clear
                             .frame(height: 1)
                             .id(HistoryAnchor.footer)
@@ -164,6 +164,12 @@ private struct TracklogHistory: View {
                             .task(id: state.listens) {
                                 await droplet.loadMoreHistory()
                             }
+                    } else if state.historyFailure != nil, !state.listens.isEmpty {
+                        Text("Older history could not be loaded.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, DroppySpacing.md)
                     }
                 }
                 .droppyFlatGlassControls()
