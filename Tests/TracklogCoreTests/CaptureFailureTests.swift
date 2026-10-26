@@ -96,6 +96,7 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(failure.stage == .history)
         #expect(failure.diagnostics.contains("read failed"))
         #expect(failure.message.contains("load"))
+        #expect(runtime.state.historyFailure != nil)
         #expect(runtime.state.captureAvailable)
     }
 
@@ -114,6 +115,7 @@ struct CaptureFailureTests: CaptureTestHelpers {
 
         let failure = try #require(runtime.state.failure)
         #expect(failure.stage == .history)
+        #expect(runtime.state.historyFailure != nil)
         #expect(runtime.state.listenCount == 1, "the listen itself was stored")
         #expect(runtime.state.lastListen != nil)
     }

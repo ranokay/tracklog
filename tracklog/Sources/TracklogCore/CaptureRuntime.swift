@@ -95,9 +95,10 @@ public final class CaptureRuntime {
                 let listens = try await store.recent(limit: historyLimit)
                 guard finishStart(generation) else { return }
                 state.listens = listens
+                clearHistoryFailure()
             } catch {
                 guard finishStart(generation) else { return }
-                state.failure = .history(error: error)
+                recordHistoryFailure(error)
             }
         }
 
@@ -211,13 +212,27 @@ public final class CaptureRuntime {
                 let listens = try await store.recent(limit: historyLimit)
                 guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
                 state.listens = listens
+                clearHistoryFailure()
             } catch {
                 guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
-                state.failure = .history(error: error)
+                recordHistoryFailure(error)
             }
         } catch {
             guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.failure = .storage(error: error)
+        }
+    }
+
+    private func recordHistoryFailure(_ error: Error) {
+        let failure = CaptureFailure.history(error: error)
+        state.historyFailure = failure
+        state.failure = failure
+    }
+
+    private func clearHistoryFailure() {
+        state.historyFailure = nil
+        if state.failure?.stage == .history {
+            state.failure = nil
         }
     }
 }

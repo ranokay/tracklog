@@ -60,7 +60,7 @@ struct TracklogSettings: View {
                 settingsSectionHeader("History")
             } content: {
                 DropletSettingsCard {
-                    if state.failure?.stage == .history {
+                    if state.historyFailure != nil {
                         DropletControlRow(title: "History unavailable") {
                             Text("History could not be loaded from this Mac.")
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)

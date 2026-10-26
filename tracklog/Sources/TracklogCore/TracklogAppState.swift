@@ -11,6 +11,9 @@ public final class TracklogAppState: ObservableObject {
     /// Whether the database opened, and with it whether capture can run.
     @Published public internal(set) var captureAvailable = true
     @Published public internal(set) var failure: CaptureFailure?
+    /// Set until a history read succeeds, even if a later write failure
+    /// replaces the general `failure` shown in diagnostics.
+    @Published public internal(set) var historyFailure: CaptureFailure?
     @Published public internal(set) var listens: [Listen] = []
     @Published public internal(set) var listenCount = 0
     @Published public internal(set) var lastListen: Listen?
