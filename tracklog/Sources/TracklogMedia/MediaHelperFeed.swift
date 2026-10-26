@@ -78,13 +78,20 @@ public final class MediaHelperFeed {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return nil }
-            return decode(data)
+            return MediaHelperPayload.decode(data)
         } catch {
             return nil
         }
     }
+}
 
-    private nonisolated static func decode(_ data: Data) -> MediaSample? {
+/// The helper's `get --now --no-artwork` JSON, decoded.
+///
+/// Public so the sibling test package can exercise the payload shapes without
+/// launching the helper. Everything is optional by design: Droppy's helper is
+/// undocumented, and a changed payload reads as "nothing playing".
+public enum MediaHelperPayload {
+    public static func decode(_ data: Data) -> MediaSample? {
         guard
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let payload = object["payload"] as? [String: Any],
