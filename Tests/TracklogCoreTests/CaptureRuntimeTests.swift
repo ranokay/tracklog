@@ -227,6 +227,32 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         #expect(runtime.state.historyHasMore)
     }
 
+    @Test func aCaptureOlderThanTheLoadedPageWaitsForPaging() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 150 {
+            _ = try await store.insert(listen(title: "Song \(index)", start: Double(index + 10)))
+        }
+
+        let clock = FakeClock(base)
+        let runtime = runtime(database: database, clock: clock, source: ReplayedNowPlaying())
+        await runtime.start()
+        #expect(runtime.state.listens.count == 100)
+
+        await replay(thresholdSamples(track(title: "Oldest")), on: runtime, clock: clock)
+
+        #expect(runtime.state.listens.count == 100)
+        #expect(runtime.state.listens.contains { $0.processed.title == "Oldest" } == false)
+        #expect(runtime.state.historyCount == 151)
+        #expect(runtime.state.historyHasMore)
+
+        await runtime.loadMoreHistory()
+
+        #expect(runtime.state.listens.count == 151)
+        #expect(runtime.state.listens.last?.processed.title == "Oldest")
+        #expect(Set(runtime.state.listens.compactMap(\.id)).count == 151)
+    }
+
     @Test func aCapturedListenAppearsInStartOrderInTheLoadedHistory() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
