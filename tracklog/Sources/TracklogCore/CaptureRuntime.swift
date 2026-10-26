@@ -81,22 +81,22 @@ public final class CaptureRuntime {
     }
 
     public func start() async {
-        guard !started else { return }
+        guard !Task.isCancelled, !started else { return }
         started = true
         state.feedAvailable = source.isAvailable
 
         if let store {
             do {
                 let listens = try await store.recent(limit: historyLimit)
-                guard started else { return }
+                guard !Task.isCancelled, started else { return }
                 state.listens = listens
             } catch {
-                guard started else { return }
-                state.failure = .storage(error: error)
+                guard !Task.isCancelled, started else { return }
+                state.failure = .history(error: error)
             }
         }
 
-        guard started else { return }
+        guard !Task.isCancelled, started else { return }
         if state.scrobblingEnabled, store != nil {
             startFeed()
         }
@@ -174,19 +174,23 @@ public final class CaptureRuntime {
     }
 
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
-        guard let processed = MetadataPipeline.process(scrobble.track) else { return }
+        guard !Task.isCancelled, started, let processed = MetadataPipeline.process(scrobble.track) else { return }
         let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
 
         do {
-            guard let stored = try await store.insert(listen) else { return }
+            guard let stored = try await store.insert(listen), !Task.isCancelled, started else { return }
             state.lastListen = stored
             state.listenCount += 1
             do {
-                state.listens = try await store.recent(limit: historyLimit)
+                let listens = try await store.recent(limit: historyLimit)
+                guard !Task.isCancelled, started else { return }
+                state.listens = listens
             } catch {
-                state.failure = .storage(error: error)
+                guard !Task.isCancelled, started else { return }
+                state.failure = .history(error: error)
             }
         } catch {
+            guard !Task.isCancelled, started else { return }
             state.failure = .storage(error: error)
         }
     }

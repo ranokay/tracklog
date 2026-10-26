@@ -81,6 +81,71 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(runtime.state.status == .idle)
     }
 
+    @Test func aHistoryReadFailureUsesTheHistoryStage() async throws {
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: HistoryReadFailingStore(failsAtCall: 1),
+            scrobblingEnabled: true,
+        )
+        await runtime.start()
+
+        let failure = try #require(runtime.state.failure)
+        #expect(failure.stage == .history)
+        #expect(failure.diagnostics.contains("read failed"))
+        #expect(failure.message.contains("load"))
+        #expect(runtime.state.captureAvailable)
+    }
+
+    @Test func aFailedHistoryRefreshIsNotAWriteFailure() async throws {
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: HistoryReadFailingStore(failsAtCall: 2),
+            scrobblingEnabled: true,
+        )
+        await runtime.start()
+
+        await replay(thresholdSamples(track()), on: runtime, clock: clock)
+
+        let failure = try #require(runtime.state.failure)
+        #expect(failure.stage == .history)
+        #expect(runtime.state.listenCount == 1, "the listen itself was stored")
+        #expect(runtime.state.lastListen != nil)
+    }
+
+    @Test func stoppingDuringAnInsertDoesNotPublishAfterTeardown() async {
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let store = SuspendingStore()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: store,
+            scrobblingEnabled: true,
+        )
+        await runtime.start()
+
+        let ingest = Task {
+            await replay(thresholdSamples(track()), on: runtime, clock: clock)
+        }
+        while await store.insertStarted == false {
+            await Task.yield()
+        }
+
+        runtime.stop()
+        await store.releaseInsert()
+        await ingest.value
+
+        #expect(runtime.state.listenCount == 0)
+        #expect(runtime.state.lastListen == nil)
+        #expect(runtime.state.listens.isEmpty)
+    }
+
     @Test func pausedSamplesNeverCapture() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
@@ -106,5 +171,46 @@ private actor FailingStore: ListenStore {
 
     func recent(limit _: Int) async throws -> [Listen] {
         []
+    }
+}
+
+private actor HistoryReadFailingStore: ListenStore {
+    private let failsAtCall: Int
+    private var recentCalls = 0
+
+    init(failsAtCall: Int) {
+        self.failsAtCall = failsAtCall
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        listen.stored(withID: 1)
+    }
+
+    func recent(limit _: Int) async throws -> [Listen] {
+        recentCalls += 1
+        guard recentCalls != failsAtCall else {
+            throw DatabaseError.sqlite("read failed")
+        }
+        return []
+    }
+}
+
+private actor SuspendingStore: ListenStore {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var insertStarted = false
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        insertStarted = true
+        await withCheckedContinuation { continuation = $0 }
+        return listen.stored(withID: 1)
+    }
+
+    func recent(limit _: Int) async throws -> [Listen] {
+        []
+    }
+
+    func releaseInsert() {
+        continuation?.resume()
+        continuation = nil
     }
 }

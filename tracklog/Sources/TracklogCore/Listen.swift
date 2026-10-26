@@ -104,6 +104,7 @@ public struct CaptureFailure: Equatable, Sendable {
     public enum Stage: String, Sendable {
         case database
         case storage
+        case history
     }
 
     public let stage: Stage
@@ -133,6 +134,16 @@ public struct CaptureFailure: Equatable, Sendable {
             stage: .storage,
             message: "This listen could not be saved, so it was not kept.",
             diagnostics: "Tracklog could not write to its local history database.\nError: \(error)",
+        )
+    }
+
+    /// A read failed. A listen inserted just before a failed refresh is still
+    /// stored, so this never claims that anything was lost.
+    public static func history(error: Error) -> CaptureFailure {
+        CaptureFailure(
+            stage: .history,
+            message: "History could not be loaded from this Mac.",
+            diagnostics: "Tracklog could not read its local history database.\nError: \(error)",
         )
     }
 }

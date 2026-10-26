@@ -44,6 +44,9 @@ struct TracklogWidget: View {
         if !state.scrobblingEnabled {
             title("Scrobbling is off")
             subtitle(context.isCompact ? "Turn on in Settings" : "Turn it on in Tracklog settings.")
+        } else if !state.captureAvailable {
+            title("History unavailable")
+            subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
         } else if let sample = state.nowPlaying {
             Text(sample.track.title)
                 .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))

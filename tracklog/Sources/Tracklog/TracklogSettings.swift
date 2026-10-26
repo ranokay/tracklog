@@ -24,7 +24,7 @@ struct TracklogSettings: View {
                 } content: {
                     DropletSettingsCard {
                         DropletControlRow(title: failure.message) {
-                            DropletValuePill(text: state.captureAvailable ? "Write failed" : "Unavailable")
+                            DropletValuePill(text: failureLabel(for: failure))
                         }
                         DropletStackedRow(title: "Diagnostics") {
                             Text(failure.diagnostics)
@@ -99,6 +99,14 @@ struct TracklogSettings: View {
     private func serviceRow(_ name: String) -> some View {
         DropletControlRow(title: name) {
             DropletValuePill(text: "Not connected")
+        }
+    }
+
+    private func failureLabel(for failure: CaptureFailure) -> String {
+        switch failure.stage {
+        case .database: "Unavailable"
+        case .storage: "Write failed"
+        case .history: "Read failed"
         }
     }
 }

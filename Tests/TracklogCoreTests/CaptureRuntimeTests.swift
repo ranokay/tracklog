@@ -116,6 +116,21 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         #expect(persisted == [true, false])
     }
 
+    @Test func aCancelledStartDoesNotArmTheFeed() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = runtime(database: database, clock: clock, source: source)
+
+        let start = Task { await runtime.start() }
+        start.cancel()
+        await start.value
+
+        #expect(source.startCount == 0)
+        #expect(source.handler == nil)
+        #expect(runtime.state.listens.isEmpty)
+    }
+
     @Test func historyIsEmptyOnFirstRun() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
