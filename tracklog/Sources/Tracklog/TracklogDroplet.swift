@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import DroppyKit
 import SwiftUI
 import TracklogCore
@@ -20,35 +19,50 @@ public final class TracklogPrincipal: NSObject, DropletPrincipal {
 
 /// Tracklog.
 @MainActor
-public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
+public final class TracklogDroplet: NSObject, Droplet {
     /// Must equal `DroppyDropletID` in the bundle's Info.plist and `id` in
     /// droplet.json. The loader refuses the bundle if the three disagree.
     public nonisolated static let id: DropletID = "tracklog"
 
-    @Published public private(set) var scrobblingEnabled = false
-    @Published public private(set) var nowPlaying: MediaSample?
-    @Published public private(set) var status: ScrobbleStatus = .idle
-    @Published public private(set) var helperAvailable = true
-    @Published public private(set) var scrobbleCount = 0
-    @Published public private(set) var lastScrobble: Scrobble?
+    /// The one observable state every surface reads.
+    public let state = TracklogAppState()
 
     private var host: DropletHost?
-    private let engine = ScrobbleEngine()
-    private var feed: MediaHelperFeed?
+    private var runtime: CaptureRuntime?
+    private var activationTask: Task<Void, Never>?
 
     public func activate(host: DropletHost) throws {
         self.host = host
-        scrobblingEnabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
-        helperAvailable = MediaHelperFeed().isAvailable
-        if scrobblingEnabled {
-            startFeed()
+
+        let enabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
+        let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
+        let runtime = CaptureRuntime.open(
+            state: state,
+            databaseURL: databaseURL,
+            clock: SystemClock(),
+            source: MediaHelperFeed(),
+            scrobblingEnabled: enabled,
+            persistScrobbling: { enabled in
+                host.preferences.setValue(enabled, forKey: "scrobblingEnabled")
+            }
+        )
+        self.runtime = runtime
+
+        if let failure = runtime.state.failure {
+            host.log.notice(failure.diagnostics)
         }
+        if !runtime.state.feedAvailable {
+            host.log.notice("Droppy media helper unavailable; now playing cannot be read")
+        }
+        activationTask = Task { await runtime.start() }
         host.log.info("Tracklog activated")
     }
 
     public func deactivate() {
-        stopFeed()
-        engine.reset()
+        activationTask?.cancel()
+        activationTask = nil
+        runtime?.stop()
+        runtime = nil
         host = nil
     }
 
@@ -56,59 +70,13 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
 
     public var scrobblingBinding: Binding<Bool> {
         Binding(
-            get: { self.scrobblingEnabled },
+            get: { self.state.scrobblingEnabled },
             set: { self.setScrobblingEnabled($0) },
         )
     }
 
     public func setScrobblingEnabled(_ enabled: Bool) {
-        guard enabled != scrobblingEnabled else { return }
-        scrobblingEnabled = enabled
-        host?.preferences.setValue(enabled, forKey: "scrobblingEnabled")
-        if enabled {
-            startFeed()
-        } else {
-            stopFeed()
-            engine.reset()
-        }
-    }
-
-    private func startFeed() {
-        guard feed == nil else { return }
-        let feed = MediaHelperFeed()
-        self.feed = feed
-        helperAvailable = feed.isAvailable
-        if feed.isAvailable == false {
-            host?.log.notice("Droppy media helper unavailable; now playing cannot be read")
-        }
-        feed.start { [weak self] sample in
-            self?.handle(sample)
-        }
-    }
-
-    private func stopFeed() {
-        feed?.stop()
-        feed = nil
-        nowPlaying = nil
-        status = .idle
-    }
-
-    private func handle(_ sample: MediaSample?) {
-        nowPlaying = sample
-        let effects = engine.ingest(sample)
-        status = engine.status
-
-        for effect in effects {
-            switch effect {
-            case let .nowPlaying(track):
-                host?.log.info("Now playing: \(track.artist) — \(track.title)")
-            case let .scrobble(scrobble):
-                scrobbleCount += 1
-                lastScrobble = scrobble
-                // The local queue and the service clients land here next.
-                host?.log.info("Scrobbled: \(scrobble.track.artist) — \(scrobble.track.title)")
-            }
-        }
+        runtime?.setScrobblingEnabled(enabled)
     }
 
     // MARK: - Presentation
@@ -119,7 +87,7 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
 
     /// The player's display name, for the widget's status line.
     public var sourceName: String? {
-        guard let bundleID = nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
+        guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
            let name = app.localizedName {
             return name
@@ -150,7 +118,7 @@ extension TracklogDroplet: ShelfWidgetProviding {
     }
 
     public func makeWidgetView(_: ShelfWidgetID, context: ShelfWidgetContext) -> AnyView {
-        AnyView(TracklogWidget(droplet: self, context: context))
+        AnyView(TracklogWidget(droplet: self, state: state, context: context))
     }
 
     public func makeWidgetSettingsPopover(_: ShelfWidgetID) -> AnyView? {
@@ -162,7 +130,7 @@ extension TracklogDroplet: ShelfWidgetProviding {
 
 extension TracklogDroplet: SettingsPaneProviding {
     public func makeSettingsPane(context _: SettingsPaneContext) -> AnyView {
-        AnyView(TracklogSettings(droplet: self))
+        AnyView(TracklogSettings(droplet: self, state: state))
     }
 
     public var settingsSearchEntries: [SettingsSearchEntry] {

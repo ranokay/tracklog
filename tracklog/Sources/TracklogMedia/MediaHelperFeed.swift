@@ -12,7 +12,7 @@ import TracklogCore
 /// player. Two seconds while enabled is the budget the research found
 /// defensible; a flat one-second loop is not.
 @MainActor
-public final class MediaHelperFeed {
+public final class MediaHelperFeed: NowPlayingSource {
     public typealias Handler = @MainActor (MediaSample?) -> Void
 
     public private(set) var isAvailable: Bool
@@ -103,6 +103,7 @@ public enum MediaHelperPayload {
 
         let artist = payload["artist"] as? String ?? ""
         let album = payload["album"] as? String ?? ""
+        let albumArtist = payload["albumArtist"] as? String ?? ""
         let duration = payload["duration"] as? Double ?? 0
         let elapsed = payload["elapsedTime"] as? Double ?? 0
         let playbackRate = payload["playbackRate"] as? Double ?? 0
@@ -110,19 +111,33 @@ public enum MediaHelperPayload {
         let bundleID = payload["parentApplicationBundleIdentifier"] as? String
             ?? payload["bundleIdentifier"] as? String
             ?? ""
+        let timestamp = timestamp(from: payload["timestamp"] as? String) ?? Date()
 
         return MediaSample(
             track: Track(
                 title: title,
                 artist: artist,
                 album: album,
+                albumArtist: albumArtist,
                 duration: duration,
                 bundleID: bundleID,
             ),
             elapsed: elapsed,
             playbackRate: playbackRate,
             isPlaying: playing,
-            timestamp: Date(),
+            timestamp: timestamp,
         )
+    }
+
+    /// Droppy emits milliseconds and the Playground whole seconds; both are
+    /// valid ISO 8601. A missing or malformed value falls back to now.
+    private static func timestamp(from string: String?) -> Date? {
+        guard let string else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: string) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: string)
     }
 }

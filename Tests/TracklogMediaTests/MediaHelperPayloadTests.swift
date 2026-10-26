@@ -15,6 +15,7 @@ struct MediaHelperPayloadTests {
                 "title": "Song",
                 "artist": "Artist",
                 "album": "Album",
+                "albumArtist": "Album Artist",
                 "duration": 200.0,
                 "elapsedTime": 42.0,
                 "playbackRate": 1.0,
@@ -29,6 +30,7 @@ struct MediaHelperPayloadTests {
             title: "Song",
             artist: "Artist",
             album: "Album",
+            albumArtist: "Album Artist",
             duration: 200,
             bundleID: "com.apple.Music",
         ))
@@ -78,6 +80,7 @@ struct MediaHelperPayloadTests {
 
         #expect(sample?.track.artist == "")
         #expect(sample?.track.album == "")
+        #expect(sample?.track.albumArtist == "")
         #expect(sample?.track.duration == 0)
         #expect(sample?.track.bundleID == "")
         #expect(sample?.elapsed == 0)
@@ -93,6 +96,22 @@ struct MediaHelperPayloadTests {
         #expect(sample?.track.duration == 200)
         #expect(sample?.elapsed == 42)
         #expect(sample?.playbackRate == 1)
+    }
+
+    @Test func usesTheHelperReportedTimestamp() {
+        let fractional = Data(#"{"payload":{"title":"Song","timestamp":"1970-01-12T13:46:40.789Z"}}"#.utf8)
+        let whole = Data(#"{"payload":{"title":"Song","timestamp":"1970-01-12T13:46:40Z"}}"#.utf8)
+
+        #expect(MediaHelperPayload.decode(fractional)?.timestamp == Date(timeIntervalSince1970: 1_000_000.789))
+        #expect(MediaHelperPayload.decode(whole)?.timestamp == Date(timeIntervalSince1970: 1_000_000))
+    }
+
+    @Test func malformedTimestampFallsBackToNow() {
+        let payload = Data(#"{"payload":{"title":"Song","timestamp":"not a date"}}"#.utf8)
+
+        let timestamp = MediaHelperPayload.decode(payload)?.timestamp ?? .distantPast
+
+        #expect(abs(timestamp.timeIntervalSinceNow) < 1)
     }
 
     @Test func missingOrBlankTitleIsNil() throws {
