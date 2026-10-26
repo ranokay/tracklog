@@ -1,0 +1,14 @@
+amends "package://github.com/jdx/hk/releases/download/v2.8.1/hk@2.8.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.8.1/hk@2.8.1#/Builtins.pkl"
+
+steps {
+  ["swiftformat"] = new Step {
+    glob = List("**/*.swift")
+    check = "swiftformat --lint {{files}}"
+    fix = "swiftformat {{files}}"
+  }
+  ["swiftlint"] = (Builtins.swiftlint) {
+    check = "swiftlint lint --strict {{files}}"
+  }
+  ["jactionlint"] = Builtins.jactionlint
+}

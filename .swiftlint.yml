@@ -1,0 +1,17 @@
+included:
+  - tracklog
+  - Tests
+excluded:
+  - tracklog/.build
+  - tracklog/.swiftpm
+  - tracklog/shots
+  - Tests/.build
+  - Tests/.swiftpm
+disabled_rules:
+  - trailing_comma
+line_length:
+  warning: 140
+  error: 160
+function_body_length:
+  warning: 80
+  error: 120

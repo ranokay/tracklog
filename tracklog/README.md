@@ -11,6 +11,14 @@ is not affiliated with it. No Pano code, strings or assets are used.
 ## Developing
 
 ```bash
+mise install         # hk, jactionlint, SwiftLint, SwiftFormat, shellcheck
+mise run hooks       # install the hk Git hooks
+mise run gate        # lint, test, build, validate, shots
+mise run lint        # SwiftFormat, SwiftLint and jactionlint
+mise run format      # apply SwiftFormat fixes
+```
+
+```bash
 droppykit run        # open the droplet in Droppy's harness
 droppykit build      # produce Tracklog.droplet
 droppykit validate   # the checks the Store repository runs
