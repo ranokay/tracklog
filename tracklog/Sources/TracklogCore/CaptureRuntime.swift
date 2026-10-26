@@ -14,6 +14,9 @@ public final class CaptureRuntime {
     private let historyLimit: Int
 
     private var started = false
+    /// Identifies the start that owns `started`, so a cancelled older start
+    /// cannot clear a newer start's state after a stop and retry.
+    private var startGeneration = 0
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
@@ -83,23 +86,36 @@ public final class CaptureRuntime {
     public func start() async {
         guard !Task.isCancelled, !started else { return }
         started = true
+        startGeneration += 1
+        let generation = startGeneration
         state.feedAvailable = source.isAvailable
 
         if let store {
             do {
                 let listens = try await store.recent(limit: historyLimit)
-                guard !Task.isCancelled, started else { return }
+                guard finishStart(generation) else { return }
                 state.listens = listens
             } catch {
-                guard !Task.isCancelled, started else { return }
+                guard finishStart(generation) else { return }
                 state.failure = .history(error: error)
             }
         }
 
-        guard !Task.isCancelled, started else { return }
+        guard finishStart(generation) else { return }
         if state.scrobblingEnabled, store != nil {
             startFeed()
         }
+    }
+
+    /// Returns false when this start no longer owns the runtime. A cancelled
+    /// start clears `started` only while it is still the current generation.
+    private func finishStart(_ generation: Int) -> Bool {
+        guard started, generation == startGeneration else { return false }
+        if Task.isCancelled {
+            started = false
+            return false
+        }
+        return true
     }
 
     public func stop() {
@@ -173,6 +189,8 @@ public final class CaptureRuntime {
         state.status = .idle
     }
 
+    /// Persists one threshold-crossing listen. A write admitted before a stop
+    /// or switch-off may finish; nothing new is admitted afterwards.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
         guard !Task.isCancelled, started, let processed = MetadataPipeline.process(scrobble.track) else { return }
         let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
