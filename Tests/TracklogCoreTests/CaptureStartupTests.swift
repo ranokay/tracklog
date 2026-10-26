@@ -37,6 +37,35 @@ struct CaptureStartupTests: CaptureTestHelpers {
         #expect(source.handler != nil)
     }
 
+    @Test func cancellingStartStopsAFeedStartedWhileItWasReading() async {
+        let store = SuspendedReadStore()
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: store,
+            scrobblingEnabled: false,
+        )
+
+        let start = Task { await runtime.start() }
+        while await store.pendingReads < 1 {
+            await Task.yield()
+        }
+
+        runtime.setScrobblingEnabled(true)
+        #expect(source.startCount == 1)
+
+        start.cancel()
+        await store.releaseNextRead()
+        await start.value
+
+        #expect(source.stopCount == 1)
+        #expect(source.handler == nil)
+        #expect(runtime.state.nowPlaying == nil)
+        #expect(runtime.state.status == .idle)
+    }
+
     @Test func aCancelledOlderStartDoesNotResetANewerStart() async {
         let store = SuspendedReadStore()
         let clock = FakeClock(base)

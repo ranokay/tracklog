@@ -112,6 +112,9 @@ public final class CaptureRuntime {
     private func finishStart(_ generation: Int) -> Bool {
         guard started, generation == startGeneration else { return false }
         if Task.isCancelled {
+            // The switch can start the feed while the history read is
+            // suspended; cancellation must stop it before releasing ownership.
+            stopFeed()
             started = false
             return false
         }
