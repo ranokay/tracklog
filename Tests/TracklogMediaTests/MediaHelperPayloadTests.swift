@@ -20,7 +20,7 @@ struct MediaHelperPayloadTests {
                 "playbackRate": 1.0,
                 "playing": true,
                 "parentApplicationBundleIdentifier": "com.apple.Music",
-            ]
+            ],
         ])
 
         let sample = MediaHelperPayload.decode(payload)
@@ -30,7 +30,7 @@ struct MediaHelperPayloadTests {
             artist: "Artist",
             album: "Album",
             duration: 200,
-            bundleID: "com.apple.Music"
+            bundleID: "com.apple.Music",
         ))
         #expect(sample?.elapsed == 42)
         #expect(sample?.playbackRate == 1)
@@ -123,7 +123,7 @@ struct MediaHelperFeedTests {
 
         #expect(feed.isAvailable == false)
 
-        var received: MediaSample?? = nil
+        var received: MediaSample??
         feed.start { received = $0 }
 
         #expect(received == .some(nil))

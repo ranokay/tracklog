@@ -10,14 +10,14 @@ struct TrackTests {
             artist: " Artist ",
             album: " Album ",
             duration: 200,
-            bundleID: " com.apple.Music "
+            bundleID: " com.apple.Music ",
         )
         let second = Track(
             title: "song",
             artist: "artist",
             album: "album",
             duration: 180,
-            bundleID: "com.apple.music"
+            bundleID: "com.apple.music",
         )
 
         #expect(first.identity == second.identity)

@@ -9,5 +9,15 @@ Pleroma, with a local queue, a local history, metadata edits and blocks.
 - **Research:** `research/*` branches, one per question; no pull requests.
 - **Licence:** MIT. Clean-room; no GPL code, strings or assets from Pano Scrobbler.
 
+## Development
+
+```bash
+mise install
+mise run hooks
+mise run gate
+```
+
+`mise run lint` runs SwiftFormat, SwiftLint and jactionlint through `hk`; `mise run format` applies SwiftFormat. The same `hk check --all` runs in CI.
+
 Inspired by [Pano Scrobbler](https://github.com/kawaiiDango/pano-scrobbler), not affiliated
 with it.

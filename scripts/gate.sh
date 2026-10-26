@@ -9,6 +9,14 @@ if ! command -v droppykit >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v hk >/dev/null 2>&1; then
+    echo "error: hk is not on PATH; run mise install" >&2
+    exit 1
+fi
+
+echo "==> lint"
+hk check --all
+
 echo "==> engine tests"
 swift test --package-path Tests
 

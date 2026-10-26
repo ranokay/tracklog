@@ -13,5 +13,7 @@ import Tracklog
 
 @main
 struct TracklogHarness: DropletHarnessApp {
-    static func makeDroplet() -> any Droplet { TracklogDroplet() }
+    static func makeDroplet() -> any Droplet {
+        TracklogDroplet()
+    }
 }

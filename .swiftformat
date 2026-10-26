@@ -1,0 +1,7 @@
+--indent 4
+--swiftversion 6.2
+--maxwidth 140
+--disable swiftTestingTestCaseNames
+--disable numberFormatting
+--disable wrapMultilineStatementBraces
+--exclude tracklog/.build,tracklog/.swiftpm,tracklog/shots,Tests/.build,Tests/.swiftpm

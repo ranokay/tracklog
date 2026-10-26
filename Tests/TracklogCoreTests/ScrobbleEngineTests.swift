@@ -12,26 +12,28 @@ struct ScrobbleEngineTests {
         at offset: TimeInterval,
         elapsed: TimeInterval,
         playing: Bool = true,
-        rate: Double? = nil
+        rate: Double? = nil,
     ) -> MediaSample {
         MediaSample(
             track: track,
             elapsed: elapsed,
             playbackRate: rate ?? (playing ? 1 : 0),
             isPlaying: playing,
-            timestamp: base.addingTimeInterval(offset)
+            timestamp: base.addingTimeInterval(offset),
         )
     }
 
     private func isScrobble(_ effect: ScrobbleEffect) -> Bool {
-        if case .scrobble = effect { return true }
+        if case .scrobble = effect {
+            return true
+        }
         return false
     }
 
     @Test func thresholdUsesPanoFormula() {
         let cases: [(duration: TimeInterval, target: TimeInterval)] = [
             (200, 100),
-            (1_000, 240),
+            (1000, 240),
             (30, 29.4),
             (10, 29.4),
             (0, 30),
@@ -117,10 +119,10 @@ struct ScrobbleEngineTests {
                     Scrobble(
                         track: track,
                         playedAt: base,
-                        playedDuration: 30
-                    )
-                )
-            ]
+                        playedDuration: 30,
+                    ),
+                ),
+            ],
         )
         #expect(engine.status.phase == .scrobbled)
     }
@@ -140,10 +142,10 @@ struct ScrobbleEngineTests {
                     Scrobble(
                         track: track,
                         playedAt: base.addingTimeInterval(-50),
-                        playedDuration: 30
-                    )
-                )
-            ]
+                        playedDuration: 30,
+                    ),
+                ),
+            ],
         )
     }
 
@@ -180,10 +182,10 @@ struct ScrobbleEngineTests {
                     Scrobble(
                         track: track,
                         playedAt: base.addingTimeInterval(20),
-                        playedDuration: 2
-                    )
-                )
-            ]
+                        playedDuration: 2,
+                    ),
+                ),
+            ],
         )
     }
 
@@ -241,7 +243,7 @@ struct ScrobbleEngineTests {
             minThreshold: 2,
             settleTime: 0.1,
             dedupWindow: 8,
-            maxSampleGap: 5
+            maxSampleGap: 5,
         )
     }
 }

@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  path_filters:
+    - "!tracklog/.build/**"
+    - "!tracklog/.swiftpm/**"
+    - "!tracklog/shots/**"
+    - "!Tests/.build/**"
+    - "!Tests/.swiftpm/**"
+  path_instructions:
+    - path: "tracklog/**"
+      instructions: "Follow tracklog/AGENTS.md: DroppyKit conventions, no changes to the placeholder icon, and no tests or test targets inside the droplet package."
+    - path: "Tests/**"
+      instructions: "Swift Testing; test public behavior and edge cases, not implementation details."
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+chat:
+  auto_reply: true
