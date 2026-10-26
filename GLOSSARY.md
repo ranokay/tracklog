@@ -16,6 +16,14 @@ The account identifier a service reports — a Last.fm, Libre.fm or ListenBrainz
 
 The connection service-backed reads are scoped to: charts, friends, profile, tags, collage top items and service search. A read cursor only; it never decides where a scrobble goes, and local history is not scoped to it.
 
+## Listen
+
+One play of one track, identified by the track's identity and the time it started. A listen fans out to delivery targets, or to none.
+
+## Scrobble
+
+One listen's delivery to one connection: the unit the UI counts when it says "12 scrobbles waiting". A listen with three delivery targets is three scrobbles; a listen with none is still a listen, but no scrobble.
+
 ## Delivery target
 
 A connection a listen was headed for when it was captured. A listen fans out to every enabled connection, so it has several targets, or none.
@@ -35,6 +43,22 @@ A connection whose credentials the service rejected. It keeps its identity, hold
 ## Abandoned
 
 A pending delivery dropped because its connection was explicitly unlinked. The listen remains in local history, marked as not delivered to that service.
+
+## Repeat and duplicate
+
+A repeat is a new play of a track that already played, and is scrobbled again. A duplicate is one play recorded twice, and is suppressed by track identity and the play's start time.
+
+## Chart source
+
+Where a statistics view reads from: the current connection's service history, or this Mac's local history. A view names its source; local is the fallback where the connection has no statistics API or the range is custom.
+
+## Friend
+
+A person whose listening the current connection makes visible, such as a Last.fm friend or a ListenBrainz follow. Friends are scoped to one connection and never merged across connections.
+
+## Media source
+
+The adapter currently supplying playback observations: Droppy's media helper, or Automation for Music or Spotify when the helper cannot see the player. One source speaks at a time, and the helper is authoritative wherever it does.
 
 ## Local history
 
