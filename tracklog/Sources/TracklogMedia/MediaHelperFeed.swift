@@ -117,12 +117,12 @@ public enum MediaHelperPayload {
                 artist: artist,
                 album: album,
                 duration: duration,
-                bundleID: bundleID
+                bundleID: bundleID,
             ),
             elapsed: elapsed,
             playbackRate: playbackRate,
             isPlaying: playing,
-            timestamp: Date()
+            timestamp: Date(),
         )
     }
 }

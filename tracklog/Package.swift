@@ -14,10 +14,10 @@ let package = Package(
         // Do not make it static: the app already carries DroppyKit, and a
         // second copy inside the droplet gives the same type two metadata
         // records, which fails every cast between them.
-        .library(name: "Tracklog", type: .dynamic, targets: ["Tracklog"])
+        .library(name: "Tracklog", type: .dynamic, targets: ["Tracklog"]),
     ],
     dependencies: [
-        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.20.1")
+        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.20.1"),
     ],
     targets: [
         .target(name: "TracklogCore"),
@@ -27,15 +27,15 @@ let package = Package(
             dependencies: [
                 "TracklogCore",
                 "TracklogMedia",
-                .product(name: "DroppyKit", package: "droppykit")
-            ]
+                .product(name: "DroppyKit", package: "droppykit"),
+            ],
         ),
         .executableTarget(
             name: "TracklogHarness",
             dependencies: [
                 "Tracklog",
-                .product(name: "DroppyKitHarness", package: "droppykit")
-            ]
-        )
-    ]
+                .product(name: "DroppyKitHarness", package: "droppykit"),
+            ],
+        ),
+    ],
 )

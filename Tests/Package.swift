@@ -9,23 +9,23 @@ let package = Package(
     name: "TracklogTests",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(path: "../tracklog")
+        .package(path: "../tracklog"),
     ],
     targets: [
         .testTarget(
             name: "TracklogCoreTests",
             dependencies: [
-                .product(name: "TracklogCore", package: "Tracklog")
+                .product(name: "TracklogCore", package: "Tracklog"),
             ],
-            path: "TracklogCoreTests"
+            path: "TracklogCoreTests",
         ),
         .testTarget(
             name: "TracklogMediaTests",
             dependencies: [
                 .product(name: "TracklogMedia", package: "Tracklog"),
-                .product(name: "TracklogCore", package: "Tracklog")
+                .product(name: "TracklogCore", package: "Tracklog"),
             ],
-            path: "TracklogMediaTests"
-        )
-    ]
+            path: "TracklogMediaTests",
+        ),
+    ],
 )

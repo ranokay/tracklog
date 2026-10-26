@@ -71,7 +71,7 @@ struct TracklogWidget: View {
             subtitle(
                 droplet.helperAvailable
                     ? "Play something to start scrobbling."
-                    : "Tracklog cannot read now playing in this host."
+                    : "Tracklog cannot read now playing in this host.",
             )
         }
     }

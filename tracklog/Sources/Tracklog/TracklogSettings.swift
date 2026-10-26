@@ -13,7 +13,7 @@ struct TracklogSettings: View {
                 DropletToggleRow(
                     title: "Scrobble what I play",
                     subtitle: "Reads the system now-playing feed and sends listens to the services you connect.",
-                    isOn: droplet.scrobblingBinding
+                    isOn: droplet.scrobblingBinding,
                 )
             }
 

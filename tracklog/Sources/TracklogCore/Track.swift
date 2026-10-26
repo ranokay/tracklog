@@ -14,7 +14,7 @@ public struct Track: Equatable, Sendable {
         artist: String = "",
         album: String = "",
         duration: TimeInterval = 0,
-        bundleID: String = ""
+        bundleID: String = "",
     ) {
         self.title = title
         self.artist = artist
@@ -53,7 +53,7 @@ public struct MediaSample: Equatable, Sendable {
         elapsed: TimeInterval,
         playbackRate: Double,
         isPlaying: Bool,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
     ) {
         self.track = track
         self.elapsed = elapsed
@@ -110,7 +110,7 @@ public struct ScrobbleStatus: Equatable, Sendable {
         track: nil,
         played: 0,
         target: 0,
-        isPlaying: false
+        isPlaying: false,
     )
 
     public var remaining: TimeInterval {

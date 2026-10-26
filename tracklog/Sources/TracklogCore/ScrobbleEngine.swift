@@ -27,7 +27,7 @@ public final class ScrobbleEngine {
             minThreshold: TimeInterval = 30,
             settleTime: TimeInterval = 1,
             dedupWindow: TimeInterval = 8,
-            maxSampleGap: TimeInterval = 5
+            maxSampleGap: TimeInterval = 5,
         ) {
             self.scrobblePercent = scrobblePercent
             self.maxThreshold = maxThreshold
@@ -86,7 +86,7 @@ public final class ScrobbleEngine {
                 played: 0,
                 nowPlayingSent: false,
                 scrobbled: false,
-                target: threshold(for: sample.track.duration)
+                target: threshold(for: sample.track.duration),
             )
         }
 
@@ -103,7 +103,7 @@ public final class ScrobbleEngine {
                 played: max(0, sample.elapsed),
                 nowPlayingSent: false,
                 scrobbled: false,
-                target: threshold(for: sample.track.duration)
+                target: threshold(for: sample.track.duration),
             )
         } else {
             if sample.isPlaying {
@@ -131,9 +131,9 @@ public final class ScrobbleEngine {
                         Scrobble(
                             track: current.track,
                             playedAt: current.startedAt,
-                            playedDuration: current.played
-                        )
-                    )
+                            playedDuration: current.played,
+                        ),
+                    ),
                 )
             }
         }
@@ -144,7 +144,7 @@ public final class ScrobbleEngine {
             track: current.track,
             played: current.played,
             target: current.target,
-            isPlaying: sample.isPlaying
+            isPlaying: sample.isPlaying,
         )
         return effects
     }
@@ -164,9 +164,9 @@ public final class ScrobbleEngine {
                 Scrobble(
                     track: current.track,
                     playedAt: current.startedAt,
-                    playedDuration: current.played
-                )
-            )
+                    playedDuration: current.played,
+                ),
+            ),
         ]
     }
 
@@ -180,7 +180,7 @@ public final class ScrobbleEngine {
         guard duration > 0 else { return configuration.minThreshold }
         return max(
             min(duration * configuration.scrobblePercent, configuration.maxThreshold),
-            configuration.minThreshold - 0.6
+            configuration.minThreshold - 0.6,
         )
     }
 }

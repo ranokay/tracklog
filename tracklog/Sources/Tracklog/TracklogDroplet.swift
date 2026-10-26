@@ -57,7 +57,7 @@ public final class TracklogDroplet: NSObject, ObservableObject, Droplet {
     public var scrobblingBinding: Binding<Bool> {
         Binding(
             get: { self.scrobblingEnabled },
-            set: { self.setScrobblingEnabled($0) }
+            set: { self.setScrobblingEnabled($0) },
         )
     }
 
@@ -143,9 +143,9 @@ extension TracklogDroplet: ShelfWidgetProviding {
                 layoutTraits: ShelfWidgetLayoutTraits(
                     preferredSoloWidth: 420,
                     preferredPairedWidth: 210,
-                    contentHeight: .fixed(150)
-                )
-            )
+                    contentHeight: .fixed(150),
+                ),
+            ),
         ]
     }
 
@@ -169,12 +169,12 @@ extension TracklogDroplet: SettingsPaneProviding {
         [
             SettingsSearchEntry(
                 title: "Scrobble what I play",
-                keywords: ["scrobble", "play", "now playing"]
+                keywords: ["scrobble", "play", "now playing"],
             ),
             SettingsSearchEntry(
                 title: "Services",
-                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"]
-            )
+                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"],
+            ),
         ]
     }
 }
