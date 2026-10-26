@@ -85,6 +85,16 @@ struct MediaHelperPayloadTests {
         #expect(sample?.isPlaying == false)
     }
 
+    @Test func integerNumbersDecode() {
+        let payload = Data(#"{"payload":{"title":"Song","duration":200,"elapsedTime":42,"playbackRate":1}}"#.utf8)
+
+        let sample = MediaHelperPayload.decode(payload)
+
+        #expect(sample?.track.duration == 200)
+        #expect(sample?.elapsed == 42)
+        #expect(sample?.playbackRate == 1)
+    }
+
     @Test func missingOrBlankTitleIsNil() throws {
         let missing = try data(["payload": ["artist": "Artist"]])
         let blank = try data(["payload": ["title": "   "]])
