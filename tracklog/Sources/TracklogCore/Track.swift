@@ -5,6 +5,7 @@ public struct Track: Equatable, Sendable {
     public let title: String
     public let artist: String
     public let album: String
+    public let albumArtist: String
     public let duration: TimeInterval
     /// Bundle identifier of the app that owns the player, when known.
     public let bundleID: String
@@ -13,12 +14,14 @@ public struct Track: Equatable, Sendable {
         title: String,
         artist: String = "",
         album: String = "",
+        albumArtist: String = "",
         duration: TimeInterval = 0,
         bundleID: String = "",
     ) {
         self.title = title
         self.artist = artist
         self.album = album
+        self.albumArtist = albumArtist
         self.duration = duration
         self.bundleID = bundleID
     }
@@ -28,9 +31,7 @@ public struct Track: Equatable, Sendable {
     /// Case and surrounding whitespace are noise: the same listen can arrive
     /// spelled two ways between two polls.
     public var identity: String {
-        [title, artist, album, bundleID]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .joined(separator: "\u{1F}")
+        Identity.joined([title, artist, album, albumArtist, bundleID])
     }
 
     public var isEmpty: Bool {

@@ -4,7 +4,8 @@ import TracklogCore
 
 /// The shelf card: what is playing, and how far it is from a scrobble.
 struct TracklogWidget: View {
-    @ObservedObject var droplet: TracklogDroplet
+    let droplet: TracklogDroplet
+    @ObservedObject var state: TracklogAppState
     let context: ShelfWidgetContext
 
     var body: some View {
@@ -40,10 +41,13 @@ struct TracklogWidget: View {
 
     @ViewBuilder
     private var content: some View {
-        if !droplet.scrobblingEnabled {
+        if !state.scrobblingEnabled {
             title("Scrobbling is off")
             subtitle(context.isCompact ? "Turn on in Settings" : "Turn it on in Tracklog settings.")
-        } else if let sample = droplet.nowPlaying {
+        } else if !state.captureAvailable {
+            title("History unavailable")
+            subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
+        } else if let sample = state.nowPlaying {
             Text(sample.track.title)
                 .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
@@ -56,7 +60,7 @@ struct TracklogWidget: View {
                 .lineLimit(1)
 
             if !context.isCompact {
-                ProgressView(value: droplet.status.progress)
+                ProgressView(value: state.status.progress)
                     .progressViewStyle(.linear)
                     .tint(AdaptiveColors.notchSurfacePrimaryText)
                     .controlSize(.small)
@@ -67,9 +71,9 @@ struct TracklogWidget: View {
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .lineLimit(1)
         } else {
-            title(droplet.helperAvailable ? "Nothing playing" : "Media feed unavailable")
+            title(state.feedAvailable ? "Nothing playing" : "Media feed unavailable")
             subtitle(
-                droplet.helperAvailable
+                state.feedAvailable
                     ? "Play something to start scrobbling."
                     : "Tracklog cannot read now playing in this host.",
             )
@@ -98,14 +102,14 @@ struct TracklogWidget: View {
     }
 
     private var statusLine: String {
-        if !droplet.status.isPlaying {
+        if !state.status.isPlaying {
             return "Paused"
         }
-        switch droplet.status.phase {
+        switch state.status.phase {
         case .scrobbled:
             return "Scrobbled"
         case .armed:
-            return "Scrobbling in \(time(droplet.status.remaining))"
+            return "Scrobbling in \(time(state.status.remaining))"
         case .idle:
             return "Waiting"
         }
