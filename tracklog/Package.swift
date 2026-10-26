@@ -17,7 +17,7 @@ let package = Package(
         .library(name: "Tracklog", type: .dynamic, targets: ["Tracklog"])
     ],
     dependencies: [
-        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.6.0")
+        .package(url: "https://gitlab.com/droppyformac1/droppykit.git", from: "1.20.1")
     ],
     targets: [
         .target(name: "TracklogCore"),
