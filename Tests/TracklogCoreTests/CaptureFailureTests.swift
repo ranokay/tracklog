@@ -146,6 +146,34 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(runtime.state.listens.isEmpty)
     }
 
+    @Test func disablingCaptureDuringAnInsertPreventsPublishing() async {
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        let store = SuspendingStore()
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: store,
+            scrobblingEnabled: true,
+        )
+        await runtime.start()
+
+        let ingest = Task {
+            await replay(thresholdSamples(track()), on: runtime, clock: clock)
+        }
+        while await store.insertStarted == false {
+            await Task.yield()
+        }
+
+        runtime.setScrobblingEnabled(false)
+        await store.releaseInsert()
+        await ingest.value
+
+        #expect(runtime.state.listenCount == 0)
+        #expect(runtime.state.lastListen == nil)
+        #expect(runtime.state.listens.isEmpty)
+    }
+
     @Test func pausedSamplesNeverCapture() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)

@@ -60,7 +60,12 @@ struct TracklogSettings: View {
                 settingsSectionHeader("History")
             } content: {
                 DropletSettingsCard {
-                    if state.listens.isEmpty {
+                    if state.failure?.stage == .history {
+                        DropletControlRow(title: "History unavailable") {
+                            Text("History could not be loaded from this Mac.")
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        }
+                    } else if state.listens.isEmpty {
                         DropletControlRow(title: "Nothing played yet") {
                             Text("Play something to start your history.")
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)

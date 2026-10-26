@@ -193,25 +193,30 @@ public final class CaptureRuntime {
     }
 
     /// Persists one threshold-crossing listen. A write admitted before a stop
-    /// or switch-off may finish; nothing new is admitted afterwards.
+    /// or switch-off may finish, but it cannot publish or refresh history after
+    /// either; nothing new is admitted.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
-        guard !Task.isCancelled, started, let processed = MetadataPipeline.process(scrobble.track) else { return }
+        guard !Task.isCancelled, started, state.scrobblingEnabled,
+              let processed = MetadataPipeline.process(scrobble.track)
+        else { return }
         let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
 
         do {
-            guard let stored = try await store.insert(listen), !Task.isCancelled, started else { return }
+            guard let stored = try await store.insert(listen),
+                  !Task.isCancelled, started, state.scrobblingEnabled
+            else { return }
             state.lastListen = stored
             state.listenCount += 1
             do {
                 let listens = try await store.recent(limit: historyLimit)
-                guard !Task.isCancelled, started else { return }
+                guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
                 state.listens = listens
             } catch {
-                guard !Task.isCancelled, started else { return }
+                guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
                 state.failure = .history(error: error)
             }
         } catch {
-            guard !Task.isCancelled, started else { return }
+            guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.failure = .storage(error: error)
         }
     }
