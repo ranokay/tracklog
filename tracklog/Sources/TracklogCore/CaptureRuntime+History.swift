@@ -19,7 +19,13 @@ extension CaptureRuntime {
 
         let request = historyGeneration
         historyLoading = true
-        defer { historyLoading = false }
+        defer {
+            // A newer request already released the flag; clearing it here
+            // would drop that load's claim.
+            if historyGeneration == request {
+                historyLoading = false
+            }
+        }
 
         do {
             let page = try await store.page(limit: historyPageSize, before: cursor)
@@ -153,6 +159,9 @@ extension CaptureRuntime {
 
     private func nextHistoryRequest() -> Int {
         historyGeneration += 1
+        // A reload supersedes any in-flight page request. Release its claim
+        // so the next page can start instead of waiting on the stale one.
+        historyLoading = false
         return historyGeneration
     }
 
