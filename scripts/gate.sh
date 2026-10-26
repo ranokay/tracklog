@@ -20,7 +20,7 @@ echo "==> droplet validation"
 
 echo "==> surface shots"
 mkdir -p tracklog/shots
-rm -f tracklog/shots/report.json
+rm -f tracklog/shots/report.json tracklog/shots/*.png
 (cd tracklog && droppykit run -- --shots ./shots --report ./shots/report.json)
 
 python3 - "$ROOT/tracklog/shots/report.json" <<'PY'
@@ -68,7 +68,7 @@ for surface in surfaces:
     page = pages.get(surface)
     if page is None:
         missing.append(f"{surface}: no known shot page")
-    elif not os.path.getsize(os.path.join(shot_dir, page)):
+    elif not os.path.exists(os.path.join(shot_dir, page)) or not os.path.getsize(os.path.join(shot_dir, page)):
         missing.append(f"{surface}: {page} is missing or empty")
 if missing:
     sys.exit("declared surfaces were not rendered:\n  " + "\n  ".join(missing))
