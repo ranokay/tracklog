@@ -280,6 +280,19 @@ struct ScrobbleEngineTests {
         #expect(abs(engine.status.target - 100) < 0.001)
     }
 
+    @Test func theSameIdentityContinuesTheSessionAcrossObservations() {
+        let track = Track(title: "Track", duration: 200, bundleID: "com.apple.Music")
+        let engine = ScrobbleEngine()
+
+        _ = engine.ingest(sample(track, at: 0, elapsed: 40))
+        let before = engine.status
+        _ = engine.ingest(sample(track, at: 2, elapsed: 42))
+
+        #expect(engine.status.track == track)
+        #expect(engine.status.played == 2, "the same identity continues the session")
+        #expect(before.played == 0)
+    }
+
     private func shortThresholdConfiguration() -> ScrobbleEngine.Configuration {
         ScrobbleEngine.Configuration(
             scrobblePercent: 0,

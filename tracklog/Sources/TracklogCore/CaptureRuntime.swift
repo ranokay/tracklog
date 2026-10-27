@@ -66,7 +66,7 @@ public final class CaptureRuntime {
         state.minimumDuration = settings.minimumDuration
         state.captureAvailable = store != nil
         state.failure = failure
-        state.feedAvailable = source.isAvailable
+        state.mediaStatus = source.mediaStatus
     }
 
     /// Opens the real database in the droplet's container. A database that
@@ -117,7 +117,7 @@ public final class CaptureRuntime {
         started = true
         startGeneration += 1
         let generation = startGeneration
-        state.feedAvailable = source.isAvailable
+        state.mediaStatus = source.mediaStatus
         clearExpiredPauseOnActivation()
 
         if let store {
@@ -261,9 +261,19 @@ public final class CaptureRuntime {
                 await ingest(sample)
             }
         }
-        source.start { sample in
-            continuation.yield(sample)
-        }
+        source.start(
+            onSample: { sample in
+                continuation.yield(sample)
+            },
+            onStatus: { [weak self] status in
+                self?.applyMediaStatus(status)
+            },
+        )
+    }
+
+    private func applyMediaStatus(_ status: MediaStatus) {
+        guard status != state.mediaStatus else { return }
+        state.mediaStatus = status
     }
 
     func stopFeed() {

@@ -29,6 +29,7 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     private var host: DropletHost?
     private var runtime: CaptureRuntime?
+    private var automationGate: HostAutomationPermissionGate?
     private var activationTask: Task<Void, Never>?
 
     public func activate(host: DropletHost) throws {
@@ -59,11 +60,16 @@ public final class TracklogDroplet: NSObject, Droplet {
                 ),
             )
             let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
+            let gate = HostAutomationPermissionGate(host: host)
+            automationGate = gate
             runtime = CaptureRuntime.open(
                 state: state,
                 databaseURL: databaseURL,
                 clock: SystemClock(),
-                source: MediaHelperFeed(),
+                source: MediaArbiter(
+                    helper: MediaHelperReader(),
+                    permissions: gate,
+                ),
                 settings: settings,
                 // The delivery outbox (#39) supplies the now-playing sender;
                 // the toggle persists and the gate is ready for it.
@@ -80,8 +86,9 @@ public final class TracklogDroplet: NSObject, Droplet {
         if let failure = runtime.state.failure {
             host.log.notice(failure.diagnostics)
         }
-        if !runtime.state.feedAvailable {
-            host.log.notice("Droppy media helper unavailable; now playing cannot be read")
+        let mediaStatus = runtime.state.mediaStatus
+        if !mediaStatus.isAvailable {
+            host.log.notice("No media source can read now playing: \(mediaStatus.helperHealth.summary)")
         }
         activationTask = Task {
             await runtime.start()
@@ -97,6 +104,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         runtime?.stop()
         runtime = nil
+        automationGate = nil
         host = nil
     }
 
@@ -237,6 +245,25 @@ public final class TracklogDroplet: NSObject, Droplet {
         if !host.workspace.copyToPasteboard(listen.processed.copyText) {
             host.log.notice("Copy metadata was refused")
         }
+    }
+
+    // MARK: - Media
+
+    func copyMediaDiagnostics() {
+        guard let host else { return }
+        let text = MediaDiagnostics.text(
+            status: state.mediaStatus,
+            macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            droppyVersion: host.environment.appVersion,
+        )
+        if !host.workspace.copyToPasteboard(text) {
+            host.log.notice("Copy diagnostics was refused")
+        }
+    }
+
+    func openAutomationSettings() {
+        automationGate?.forgetDenial()
+        host?.permissions.openSystemSettings(for: .appleEvents)
     }
 
     // MARK: - Edits

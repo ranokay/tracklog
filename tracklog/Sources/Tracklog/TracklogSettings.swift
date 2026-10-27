@@ -99,6 +99,8 @@ struct TracklogSettings: View {
                 }
             }
 
+            mediaSection
+
             DropletSettingsSection {
                 settingsSectionHeader("Status")
             } content: {
@@ -320,6 +322,45 @@ struct TracklogAppsPage: View {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Media
+
+private extension TracklogSettings {
+    var mediaSection: some View {
+        DropletSettingsSection {
+            settingsSectionHeader("Media")
+        } content: {
+            DropletSettingsCard {
+                DropletControlRow(title: "Source") {
+                    DropletValuePill(text: state.mediaStatus.source.displayName)
+                }
+                DropletStackedRow(title: "Media helper") {
+                    Text(state.mediaStatus.helperHealth.summary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if state.mediaStatus.automation == .denied {
+                    DropletControlRow(title: "Automation") {
+                        HStack(spacing: DroppySpacing.sm) {
+                            DropletValuePill(text: "Denied")
+                            Button("Open System Settings") {
+                                droplet.openAutomationSettings()
+                            }
+                            .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                        }
+                    }
+                }
+                DropletControlRow(title: "Diagnostics") {
+                    Button("Copy diagnostics") {
+                        droplet.copyMediaDiagnostics()
+                    }
+                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
                 }
             }
         }
