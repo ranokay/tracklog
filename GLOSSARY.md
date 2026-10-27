@@ -79,4 +79,3 @@ A saved cancellation rule with four fields: track, artist, album and album artis
 ## Cancelled listen
 
 The in-flight listen the user suppressed before it scrobbled. Cancel keeps the session's played time and threshold, suppresses its scrobble and history row until the track changes or restarts, and leaves an already-sent now playing alone. Undo re-enables it from the same played time. Once the threshold fires there is nothing left to cancel, so the control is hidden.
-

@@ -90,7 +90,7 @@ public struct MediaSample: Equatable, Sendable {
 /// A listen that met the threshold and should reach the services.
 public struct Scrobble: Equatable, Sendable {
     /// The player's raw observation, kept for history and deduplication.
-    public let track: Track
+    public let raw: Track
     /// The metadata to submit, after any in-flight revision.
     public let submitted: Track
     /// When the track started, not when the threshold fired.
@@ -98,13 +98,13 @@ public struct Scrobble: Equatable, Sendable {
     public let playedDuration: TimeInterval
 
     public init(
-        track: Track,
+        raw: Track,
         submitted: Track? = nil,
         playedAt: Date,
         playedDuration: TimeInterval,
     ) {
-        self.track = track
-        self.submitted = submitted ?? track
+        self.raw = raw
+        self.submitted = submitted ?? raw
         self.playedAt = playedAt
         self.playedDuration = playedDuration
     }

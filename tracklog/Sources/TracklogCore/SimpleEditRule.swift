@@ -167,9 +167,9 @@ public enum SimpleEditRuleValidationError: Error, Equatable, Sendable {
 // MARK: - Field plumbing
 
 public extension SimpleEditRule.Match {
-    /// A new rule's match fields, pre-filled from a listen's raw metadata.
-    /// A field is active only when the player supplied a value, so the Edits
-    /// form enables album and album artist only when they exist.
+    /// A new rule's match fields, pre-filled from a listen's metadata as the
+    /// pipeline will match it. A field is active only when it has a value, so
+    /// the Edits form enables album and album artist only when they exist.
     static func prefilled(from metadata: ListenMetadata) -> SimpleEditRule.Match {
         SimpleEditRule.Match(
             track: active(metadata.title),

@@ -61,7 +61,7 @@ public final class TracklogAppState: ObservableObject {
 }
 
 /// A new edit rule requested from the widget or the now-playing strip.
-public struct EditPrefill: Identifiable, Equatable, Sendable {
+public struct EditPrefill: Equatable, Sendable {
     public let id: UUID
     public let match: SimpleEditRule.Match
 

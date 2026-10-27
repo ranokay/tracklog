@@ -164,8 +164,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     func editCurrentListen() {
         guard let runtime, let match = runtime.editMatchForCurrentListen() else { return }
         state.requestEditPrefill(match)
-        if host?.workspace.openSettingsPage(tracklogEditsPageID, title: "Edits") != true {
+        guard host?.workspace.openSettingsPage(tracklogEditsPageID, title: "Edits") == true else {
+            // Discard the request so a refused open does not surface a draft
+            // the next time the user visits Edits by hand.
+            _ = state.takeEditPrefill()
             host?.log.notice("Opening the Edits page was refused")
+            return
         }
     }
 

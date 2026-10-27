@@ -32,38 +32,12 @@ struct TracklogWidget: View {
     }
 
     private var controls: some View {
-        HStack(spacing: DroppySpacing.xs) {
-            if state.status.canUndo {
-                Button {
-                    droplet.undoCancelCurrentListen()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
-                .help("Undo cancel")
-                .accessibilityLabel("Undo cancel")
-            } else if state.status.canCancel {
-                Button {
-                    droplet.cancelCurrentListen()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
-                .help("Cancel this listen")
-                .accessibilityLabel("Cancel this listen")
-            }
-
-            Button {
-                droplet.editCurrentListen()
-            } label: {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(DroppyCircleButtonStyle(size: 24))
-            .help("Edit this listen")
-            .accessibilityLabel("Edit this listen")
-
-            Spacer(minLength: 0)
-        }
+        ListenControls(
+            droplet: droplet,
+            status: state.status,
+            transition: DroppyTransition.element,
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
@@ -151,7 +125,7 @@ struct TracklogWidget: View {
 
     private var statusLine: String {
         if state.status.isCancelled {
-            return "Tracking cancelled"
+            return trackingCancelledText
         }
         if !state.status.isPlaying {
             return "Paused"

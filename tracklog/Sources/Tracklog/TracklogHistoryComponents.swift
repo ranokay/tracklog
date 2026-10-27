@@ -168,41 +168,16 @@ struct NowPlayingStrip: View {
     }
 
     private var controls: some View {
-        HStack(spacing: DroppySpacing.xs) {
-            if status.canUndo {
-                Button {
-                    droplet.undoCancelCurrentListen()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
-                .help("Undo cancel")
-                .accessibilityLabel("Undo cancel")
-            } else if status.canCancel {
-                Button {
-                    droplet.cancelCurrentListen()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(DroppyCircleButtonStyle(size: 24))
-                .help("Cancel this listen")
-                .accessibilityLabel("Cancel this listen")
-            }
-
-            Button {
-                droplet.editCurrentListen()
-            } label: {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(DroppyCircleButtonStyle(size: 24))
-            .help("Edit this listen")
-            .accessibilityLabel("Edit this listen")
-        }
+        ListenControls(
+            droplet: droplet,
+            status: status,
+            transition: DroppyTransition.compactContent,
+        )
     }
 
     private var elapsedText: String {
         if status.isCancelled {
-            return "Tracking cancelled"
+            return trackingCancelledText
         }
         let elapsed = time(sample.elapsed)
         guard sample.track.duration > 0 else { return "\(elapsed) played" }

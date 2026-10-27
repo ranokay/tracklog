@@ -229,18 +229,20 @@ public final class CaptureRuntime {
         guard started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
         state.nowPlaying = displayed
-        let effects = engine.ingest(raw, submitted: displayed?.track)
+        // The toggle is applied while the sample is ingested, so with it off
+        // nothing is marked as already sent and turning it on can still start
+        // now playing for the same track.
+        let effects = engine.ingest(
+            raw,
+            submitted: displayed?.track,
+            nowPlayingEnabled: state.nowPlayingEnabled,
+        )
         state.status = engine.status
 
         for effect in effects {
             switch effect {
             case let .nowPlaying(track):
-                // The now-playing toggle is applied at send time: with it off,
-                // the widget still shows the track and the listen still
-                // becomes history.
-                if state.nowPlayingEnabled {
-                    sendNowPlaying?(track)
-                }
+                sendNowPlaying?(track)
             case let .scrobble(scrobble):
                 await persist(scrobble, in: store)
             }

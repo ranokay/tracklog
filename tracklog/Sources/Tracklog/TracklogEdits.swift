@@ -93,8 +93,8 @@ struct TracklogEditsPage: View {
         .onChange(of: state.editPrefill) { _, _ in applyEditPrefill() }
     }
 
-    /// A widget Edit action opens this page with a new draft made from the
-    /// current listen's raw fields.
+    /// The widget and now-playing strip's Edit action opens this page with a
+    /// new draft made from the current listen's raw fields.
     private func applyEditPrefill() {
         guard let prefill = state.takeEditPrefill() else { return }
         draft = EditDraft(prefill: prefill.match)

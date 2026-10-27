@@ -103,6 +103,47 @@ struct ListenControlTests: CaptureTestHelpers {
         #expect(runtime.state.status.canUndo == false)
     }
 
+    @Test func nowPlayingStartsWhenTheToggleComesBackOn() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        var sent: [Track] = []
+        let runtime = runtime(
+            database: database,
+            clock: clock,
+            source: ReplayedNowPlaying(),
+            settings: CaptureSettings(scrobblingEnabled: true, nowPlayingEnabled: false),
+            sendNowPlaying: { sent.append($0) },
+        )
+        await runtime.start()
+
+        await runtime.ingest(sample(track(), at: 0, elapsed: 0))
+        await runtime.ingest(sample(track(), at: 2, elapsed: 2))
+        #expect(sent.isEmpty)
+
+        runtime.setNowPlayingEnabled(true)
+        await runtime.ingest(sample(track(), at: 4, elapsed: 4))
+        #expect(sent.count == 1, "the first send happens once the toggle is on")
+
+        await runtime.ingest(sample(track(), at: 6, elapsed: 6, playing: false))
+        await runtime.ingest(sample(track(), at: 8, elapsed: 8))
+        #expect(sent.count == 1, "a resume inside the stale window stays quiet")
+    }
+
+    @Test func editPrefillUsesTheValuesThePipelineMatchesOn() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let runtime = runtime(database: database, clock: clock, source: ReplayedNowPlaying())
+        await runtime.start()
+
+        await runtime.ingest(
+            sample(track(album: "Unknown Album", albumArtist: "VA"), at: 0, elapsed: 0),
+        )
+
+        let match = try #require(runtime.editMatchForCurrentListen())
+        #expect(match.album == nil, "the pipeline blanks an unknown album before matching")
+        #expect(match.albumArtist == "Various Artists", "VA normalizes before matching")
+    }
+
     @Test func editPrefillUsesRawValuesAndSkipsEmptyFields() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
@@ -130,5 +171,19 @@ struct ListenControlTests: CaptureTestHelpers {
         let next = try #require(runtime.editMatchForCurrentListen())
         #expect(next.track == "Next")
         #expect(next.artist == "Other")
+    }
+
+    @Test func anEditPrefillIsTakenOnceAndEachRequestIsDistinct() {
+        let state = TracklogAppState()
+        let match = SimpleEditRule.Match(track: "Song", artist: "Artist")
+
+        state.requestEditPrefill(match)
+        let first = state.takeEditPrefill()
+        #expect(first?.match == match)
+        #expect(state.editPrefill == nil)
+
+        state.requestEditPrefill(match)
+        let second = state.takeEditPrefill()
+        #expect(second?.id != first?.id, "tapping Edit twice starts two drafts")
     }
 }

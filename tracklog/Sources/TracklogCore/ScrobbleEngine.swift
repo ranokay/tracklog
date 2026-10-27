@@ -70,6 +70,10 @@ public final class ScrobbleEngine {
 
     public private(set) var status: ScrobbleStatus = .idle
 
+    /// The longest a now playing may stay on a service before a resume
+    /// refreshes it, independent of the scrobble threshold cap.
+    private static let nowPlayingStaleCap: TimeInterval = 240
+
     private var configuration: Configuration
     private var session: Session?
     private var lastScrobble: (identity: String, at: Date)?
@@ -90,7 +94,13 @@ public final class ScrobbleEngine {
     /// `submitted` is the metadata a scrobble should carry, when the caller
     /// has run the metadata pipeline. It is only a revision: it never changes
     /// the session identity, played time, threshold or now playing.
-    public func ingest(_ sample: MediaSample?, submitted: Track? = nil) -> [ScrobbleEffect] {
+    /// `nowPlayingEnabled` is the user's toggle at sample time: with it off,
+    /// no now playing goes out and none is recorded as sent.
+    public func ingest(
+        _ sample: MediaSample?,
+        submitted: Track? = nil,
+        nowPlayingEnabled: Bool = true,
+    ) -> [ScrobbleEffect] {
         let now = sample?.timestamp ?? Date()
 
         guard let sample, !sample.track.isEmpty else {
@@ -121,11 +131,13 @@ public final class ScrobbleEngine {
 
         let wasPlaying = current.isPlaying
         current = advance(current, with: sample, submitted: submitted, at: now)
-        current.target = threshold(for: current.rawTrack.duration)
+        current.target = threshold(for: sample.track.duration)
 
         effects += nowPlayingEffects(
             for: &current,
             resumed: sample.isPlaying && !wasPlaying,
+            duration: sample.track.duration,
+            enabled: nowPlayingEnabled,
             at: now,
         )
         effects += scrobbleEffects(for: &current, at: now)
@@ -137,7 +149,7 @@ public final class ScrobbleEngine {
 
     /// Revises what the current session will submit without resetting played
     /// time, the threshold or now playing. The raw identity is untouched.
-    public func reviseCurrentTrack(_ track: Track) {
+    public func reviseSubmittedTrack(_ track: Track) {
         guard var current = session, !current.scrobbled else { return }
         current.submittedTrack = track
         session = current
@@ -233,14 +245,16 @@ public final class ScrobbleEngine {
     private func nowPlayingEffects(
         for current: inout Session,
         resumed: Bool,
+        duration: TimeInterval,
+        enabled: Bool,
         at now: Date,
     ) -> [ScrobbleEffect] {
-        guard current.isPlaying, !current.cancelled else { return [] }
+        guard enabled, current.isPlaying else { return [] }
 
         let isDue = if let sentAt = current.nowPlayingSentAt {
             // A resume refreshes a stale now playing. A seek, a pause or a
             // revision never does, and a pause never withdraws one.
-            resumed && now.timeIntervalSince(sentAt) > staleWindow(for: current.rawTrack.duration)
+            resumed && now.timeIntervalSince(sentAt) > staleWindow(for: duration)
         } else {
             current.played >= configuration.settleTime
         }
@@ -259,7 +273,7 @@ public final class ScrobbleEngine {
         return [
             .scrobble(
                 Scrobble(
-                    track: current.rawTrack,
+                    raw: current.rawTrack,
                     submitted: current.submittedTrack,
                     playedAt: current.startedAt,
                     playedDuration: current.played,
@@ -287,7 +301,7 @@ public final class ScrobbleEngine {
         return [
             .scrobble(
                 Scrobble(
-                    track: current.rawTrack,
+                    raw: current.rawTrack,
                     submitted: current.submittedTrack,
                     playedAt: current.startedAt,
                     playedDuration: current.played,
@@ -314,6 +328,6 @@ public final class ScrobbleEngine {
     /// quarters of the duration, capped at four minutes. An unknown duration
     /// has a zero window, so every resume refreshes it.
     private func staleWindow(for duration: TimeInterval) -> TimeInterval {
-        min(max(0, duration) * 0.75, configuration.maxThreshold)
+        min(max(0, duration) * 0.75, Self.nowPlayingStaleCap)
     }
 }

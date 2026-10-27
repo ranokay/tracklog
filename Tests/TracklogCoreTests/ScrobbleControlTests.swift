@@ -28,7 +28,7 @@ struct ScrobbleControlTests: CaptureTestHelpers {
         let target = engine.status.target
         let played = engine.status.played
 
-        engine.reviseCurrentTrack(revised)
+        engine.reviseSubmittedTrack(revised)
         #expect(engine.status.played == played)
         #expect(engine.status.target == target)
 
@@ -42,7 +42,7 @@ struct ScrobbleControlTests: CaptureTestHelpers {
             }
             return nil
         }.first
-        #expect(scrobble?.track == track, "the raw observation is kept for history and dedup")
+        #expect(scrobble?.raw == track, "the raw observation is kept for history and dedup")
         #expect(scrobble?.submitted == revised)
         #expect(scrobble?.playedAt == base)
         #expect(scrobble?.playedDuration == 30)
@@ -75,25 +75,13 @@ struct ScrobbleControlTests: CaptureTestHelpers {
             effects == [
                 .scrobble(
                     Scrobble(
-                        track: track,
+                        raw: track,
                         playedAt: base,
                         playedDuration: 42,
                     ),
                 ),
             ],
         )
-    }
-
-    @Test func cancelBeforeNowPlayingSuppressesIt() {
-        let track = Track(title: "Track", duration: 200)
-        let engine = ScrobbleEngine()
-
-        _ = engine.ingest(sample(track, at: 0, elapsed: 0))
-        #expect(engine.cancelCurrentSession())
-
-        let effects = engine.ingest(sample(track, at: 2, elapsed: 2))
-        #expect(effects.isEmpty)
-        #expect(engine.status.isCancelled)
     }
 
     @Test func cancelAfterTheThresholdHasNoEffect() {
@@ -207,7 +195,7 @@ struct ScrobbleControlTests: CaptureTestHelpers {
         _ = engine.ingest(sample(track, at: 0, elapsed: 0))
         #expect(engine.ingest(sample(track, at: 2, elapsed: 2)) == [.nowPlaying(track)])
 
-        engine.reviseCurrentTrack(revised)
+        engine.reviseSubmittedTrack(revised)
         #expect(engine.ingest(sample(track, at: 4, elapsed: 4)).isEmpty, "an edit never re-sends")
 
         #expect(engine.ingest(sample(track, at: 6, elapsed: 100)).isEmpty, "a seek never re-sends")

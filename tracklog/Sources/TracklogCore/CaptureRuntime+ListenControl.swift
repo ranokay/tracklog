@@ -8,42 +8,26 @@ public extension CaptureRuntime {
     /// has fired, which the status exposes as `canCancel`.
     @discardableResult
     func cancelCurrentListen() -> Bool {
-        let cancelled = engine.cancelCurrentSession()
-        if cancelled {
-            state.status = engine.status
-        }
-        return cancelled
+        publish(engine.cancelCurrentSession())
     }
 
     @discardableResult
     func undoCancelCurrentListen() -> Bool {
-        let undone = engine.undoCancelCurrentSession()
-        if undone {
-            state.status = engine.status
-        }
-        return undone
+        publish(engine.undoCancelCurrentSession())
     }
 
-    /// The raw fields of the current listen, ready to pre-fill a new edit.
-    /// Nil when no track is armed.
+    /// The current listen's fields as the rules will see them, ready to
+    /// pre-fill a new edit. Sentinel cleanup runs first, so a placeholder the
+    /// pipeline blanks is not offered as a match that can never fire.
     func editMatchForCurrentListen() -> SimpleEditRule.Match? {
         guard let raw = engine.currentRawTrack else { return nil }
-        return .prefilled(from: ListenMetadata(raw))
+        return .prefilled(from: MetadataPipeline.sentinelCleanup(ListenMetadata(raw)))
     }
-}
 
-extension CaptureRuntime {
-    /// Pushes the metadata the current rules would submit into the session in
-    /// flight. Called when the rules change, so an edit saved mid-track
-    /// revises the eventual scrobble without touching played time.
-    func reviseCurrentSubmission() {
-        guard let raw = engine.currentRawTrack,
-              let processed = MetadataPipeline.process(
-                  raw,
-                  edits: state.simpleEdits,
-                  blocks: state.blocks,
-              )
-        else { return }
-        engine.reviseCurrentTrack(raw.replacingMetadata(processed))
+    private func publish(_ applied: Bool) -> Bool {
+        if applied {
+            state.status = engine.status
+        }
+        return applied
     }
 }
