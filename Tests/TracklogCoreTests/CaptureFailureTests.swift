@@ -50,7 +50,8 @@ struct CaptureFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: FailingStore(),
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 
@@ -88,7 +89,8 @@ struct CaptureFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: HistoryReadFailingStore(failsAtCall: 1),
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 
@@ -107,7 +109,8 @@ struct CaptureFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: HistoryReadFailingStore(failsAtCall: 3),
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 
@@ -128,7 +131,8 @@ struct CaptureFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 
@@ -156,7 +160,8 @@ struct CaptureFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 

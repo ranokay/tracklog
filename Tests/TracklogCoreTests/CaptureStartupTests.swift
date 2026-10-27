@@ -13,7 +13,8 @@ struct CaptureStartupTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
 
         let first = Task { await runtime.start() }
@@ -45,7 +46,8 @@ struct CaptureStartupTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: false,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: false),
         )
 
         let start = Task { await runtime.start() }
@@ -74,7 +76,8 @@ struct CaptureStartupTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
 
         let first = Task { await runtime.start() }

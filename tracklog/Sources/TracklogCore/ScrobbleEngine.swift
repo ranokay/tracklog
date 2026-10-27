@@ -13,6 +13,10 @@ public final class ScrobbleEngine {
         public var scrobblePercent: Double
         public var maxThreshold: TimeInterval
         public var minThreshold: TimeInterval
+        /// The floor for a track whose duration the player does not report.
+        /// Kept separate from `minThreshold` so changing the user's minimum
+        /// duration never moves this flat fallback.
+        public var unknownDurationThreshold: TimeInterval
         /// Time a track must play before now-playing is sent.
         public var settleTime: TimeInterval
         /// The coarse cross-session lock. A repeat inside this window is not
@@ -25,6 +29,7 @@ public final class ScrobbleEngine {
             scrobblePercent: Double = 0.5,
             maxThreshold: TimeInterval = 240,
             minThreshold: TimeInterval = 30,
+            unknownDurationThreshold: TimeInterval = 30,
             settleTime: TimeInterval = 1,
             dedupWindow: TimeInterval = 8,
             maxSampleGap: TimeInterval = 5,
@@ -32,6 +37,7 @@ public final class ScrobbleEngine {
             self.scrobblePercent = scrobblePercent
             self.maxThreshold = maxThreshold
             self.minThreshold = minThreshold
+            self.unknownDurationThreshold = unknownDurationThreshold
             self.settleTime = settleTime
             self.dedupWindow = dedupWindow
             self.maxSampleGap = maxSampleGap
@@ -51,7 +57,7 @@ public final class ScrobbleEngine {
 
     public private(set) var status: ScrobbleStatus = .idle
 
-    private let configuration: Configuration
+    private var configuration: Configuration
     private var session: Session?
     private var lastScrobble: (identity: String, at: Date)?
 
@@ -155,6 +161,12 @@ public final class ScrobbleEngine {
         status = .idle
     }
 
+    /// Moves the threshold floor without touching the 4-minute cap or the
+    /// percentage. The current session picks it up with its next sample.
+    public func setMinimumThreshold(_ seconds: TimeInterval) {
+        configuration.minThreshold = seconds
+    }
+
     private func finalize(at now: Date) -> [ScrobbleEffect] {
         guard let current = session, !current.scrobbled, current.played >= current.target,
               !isDuplicate(current.track.identity, at: now) else { return [] }
@@ -177,7 +189,7 @@ public final class ScrobbleEngine {
     }
 
     private func threshold(for duration: TimeInterval) -> TimeInterval {
-        guard duration > 0 else { return configuration.minThreshold }
+        guard duration > 0 else { return configuration.unknownDurationThreshold }
         return max(
             min(duration * configuration.scrobblePercent, configuration.maxThreshold),
             configuration.minThreshold - 0.6,

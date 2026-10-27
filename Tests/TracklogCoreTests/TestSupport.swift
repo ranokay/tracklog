@@ -85,13 +85,54 @@ final class TemporaryDatabase {
 
 @MainActor
 final class FakeClock: Clock {
-    var now: Date
+    private struct Sleeper {
+        let until: Date
+        let continuation: CheckedContinuation<Void, Error>
+    }
+
+    private var sleepers: [UUID: Sleeper] = [:]
+
+    var now: Date {
+        didSet { wakeSleepers() }
+    }
 
     init(_ now: Date) {
         self.now = now
     }
 
-    func sleep(until _: Date) async throws {}
+    /// Moves time forward, waking every sleeper whose deadline has passed.
+    func advance(to date: Date) {
+        now = max(now, date)
+    }
+
+    func sleep(until date: Date) async throws {
+        guard date > now else { return }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                sleepers[id] = Sleeper(until: date, continuation: continuation)
+                // The clock may have moved between the guard and here.
+                wakeSleepers()
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelSleeper(id)
+            }
+        }
+    }
+
+    private func wakeSleepers() {
+        let ready = sleepers.filter { $0.value.until <= now }.map(\.key)
+        for id in ready {
+            guard let sleeper = sleepers.removeValue(forKey: id) else { continue }
+            sleeper.continuation.resume()
+        }
+    }
+
+    private func cancelSleeper(_ id: UUID) {
+        guard let sleeper = sleepers.removeValue(forKey: id) else { return }
+        sleeper.continuation.resume(throwing: CancellationError())
+    }
 }
 
 @MainActor
@@ -109,6 +150,41 @@ final class ReplayedNowPlaying: NowPlayingSource {
     func stop() {
         stopCount += 1
         handler = nil
+    }
+}
+
+/// The allowlist the capture tests drive. Music and Spotify start allowed, the
+/// way a new database seeds them.
+actor InMemoryAppAllowlist: AppAllowlistStore {
+    private var recorded: [SeenApp]
+
+    init(allowed: [String] = SeededPlayers.bundleIDs) {
+        recorded = allowed.map { SeenApp(bundleID: $0, isAllowed: true) }
+    }
+
+    func apps() async throws -> [SeenApp] {
+        recorded
+    }
+
+    func isAllowed(_ bundleID: String) async throws -> Bool {
+        recorded.first { $0.bundleID == bundleID }?.isAllowed ?? false
+    }
+
+    @discardableResult
+    func recordSeen(_ bundleID: String) async throws -> SeenApp? {
+        let normalized = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        if let existing = recorded.first(where: { $0.bundleID == normalized }) {
+            return existing
+        }
+        let app = SeenApp(bundleID: normalized, isAllowed: false)
+        recorded.append(app)
+        return app
+    }
+
+    func setAllowed(_ bundleID: String, allowed: Bool) async throws {
+        guard let index = recorded.firstIndex(where: { $0.bundleID == bundleID }) else { return }
+        recorded[index].isAllowed = allowed
     }
 }
 
@@ -166,14 +242,17 @@ extension CaptureTestHelpers {
         clock: FakeClock,
         source: ReplayedNowPlaying,
         enabled: Bool = true,
-        persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
+        settings: CaptureSettings? = nil,
+        persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
+        sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
     ) -> CaptureRuntime {
         CaptureRuntime.open(
             databaseURL: database.url,
             clock: clock,
             source: source,
-            scrobblingEnabled: enabled,
-            persistScrobbling: persistScrobbling,
+            settings: settings ?? CaptureSettings(scrobblingEnabled: enabled),
+            persistSettings: persistSettings,
+            sendNowPlaying: sendNowPlaying,
         )
     }
 
@@ -185,6 +264,21 @@ extension CaptureTestHelpers {
         for sample in samples {
             clock.now = sample.timestamp
             await runtime.ingest(sample)
+        }
+    }
+
+    /// Pumps the main actor until `condition` holds. The pause's deadline is
+    /// driven by `FakeClock`, so a test advances the clock and then lets the
+    /// expiry task run.
+    func yieldUntil(
+        _ condition: @MainActor () -> Bool,
+        rounds: Int = 200,
+    ) async {
+        for _ in 0 ..< rounds {
+            if condition() {
+                return
+            }
+            await Task.yield()
         }
     }
 

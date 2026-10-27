@@ -24,7 +24,8 @@ struct HistoryDayCountTests: CaptureTestHelpers {
             clock: FakeClock(base),
             source: ReplayedNowPlaying(),
             store: store,
-            scrobblingEnabled: false,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: false),
             historyPageSize: 100,
         )
         await runtime.start()

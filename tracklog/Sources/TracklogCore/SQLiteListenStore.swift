@@ -23,8 +23,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 
 /// One SQLite file in the droplet's container: local history, versioned
 /// migrations, and the durable duplicate key.
-public actor SQLiteListenStore: ListenStore {
-    public static let schemaVersion = 1
+public actor SQLiteListenStore: ListenStore, AppAllowlistStore {
+    public static let schemaVersion = 2
 
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
@@ -124,19 +124,12 @@ public actor SQLiteListenStore: ListenStore {
         }
     }
 
-    // MARK: - Introspection for the migration tests
-
-    func userVersion() throws -> Int {
-        try Self.intValue(database(), "PRAGMA user_version")
-    }
-
-    func foreignKeysEnabled() throws -> Bool {
-        try Self.intValue(database(), "PRAGMA foreign_keys") == 1
-    }
-
     // MARK: - Opening and migrating
 
-    private static func open(url: URL, migrations: [Migration]) throws -> OpaquePointer {
+    private static func open(
+        url: URL,
+        migrations: [Migration],
+    ) throws -> OpaquePointer {
         let existed = FileManager.default.fileExists(atPath: url.path)
         var handle: OpaquePointer?
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
@@ -217,12 +210,12 @@ public actor SQLiteListenStore: ListenStore {
 
     // MARK: - SQLite helpers
 
-    private func database() throws -> OpaquePointer {
+    func database() throws -> OpaquePointer {
         guard let connection else { throw DatabaseError.open("the database is closed") }
         return connection
     }
 
-    private func prepare(_ handle: OpaquePointer, _ sql: String) throws -> OpaquePointer {
+    func prepare(_ handle: OpaquePointer, _ sql: String) throws -> OpaquePointer {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             throw DatabaseError.sqlite(errorMessage(handle))
@@ -230,7 +223,7 @@ public actor SQLiteListenStore: ListenStore {
         return statement
     }
 
-    private func bind(_ value: String, at index: Int32, in statement: OpaquePointer) throws {
+    func bind(_ value: String, at index: Int32, in statement: OpaquePointer) throws {
         guard sqlite3_bind_text(statement, index, value, -1, Self.transient) == SQLITE_OK else {
             throw DatabaseError.sqlite("could not bind a text value")
         }
@@ -271,11 +264,11 @@ public actor SQLiteListenStore: ListenStore {
         }
     }
 
-    private func text(_ statement: OpaquePointer, _ index: Int32) -> String {
+    func text(_ statement: OpaquePointer, _ index: Int32) -> String {
         sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
     }
 
-    private func errorMessage(_ handle: OpaquePointer) -> String {
+    func errorMessage(_ handle: OpaquePointer) -> String {
         String(cString: sqlite3_errmsg(handle))
     }
 
@@ -288,7 +281,7 @@ public actor SQLiteListenStore: ListenStore {
         }
     }
 
-    private static func intValue(_ handle: OpaquePointer, _ sql: String) throws -> Int {
+    static func intValue(_ handle: OpaquePointer, _ sql: String) throws -> Int {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             throw DatabaseError.sqlite("could not prepare \(sql)")

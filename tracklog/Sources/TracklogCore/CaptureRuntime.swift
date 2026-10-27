@@ -6,10 +6,12 @@ import Foundation
 public final class CaptureRuntime {
     public let state: TracklogAppState
 
-    private let clock: any Clock
+    let clock: any Clock
     private let source: any NowPlayingSource
     let store: (any ListenStore)?
-    private let persistScrobbling: (@MainActor (Bool) -> Void)?
+    let allowlist: any AppAllowlistStore
+    let persistSettings: (@MainActor (CaptureSettings) -> Void)?
+    private let sendNowPlaying: (@MainActor (Track) -> Void)?
     private let engine: ScrobbleEngine
     let historyPageSize: Int
 
@@ -24,15 +26,18 @@ public final class CaptureRuntime {
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
+    var pauseTask: Task<Void, Never>?
 
     public init(
         state: TracklogAppState = TracklogAppState(),
         clock: any Clock,
         source: any NowPlayingSource,
         store: (any ListenStore)?,
+        allowlist: any AppAllowlistStore,
         failure: CaptureFailure? = nil,
-        scrobblingEnabled: Bool = false,
-        persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
+        settings: CaptureSettings = CaptureSettings(),
+        persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
+        sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
     ) {
@@ -40,11 +45,19 @@ public final class CaptureRuntime {
         self.clock = clock
         self.source = source
         self.store = store
-        self.persistScrobbling = persistScrobbling
-        engine = ScrobbleEngine(configuration: configuration)
+        self.allowlist = allowlist
+        self.persistSettings = persistSettings
+        self.sendNowPlaying = sendNowPlaying
+
+        var engineConfiguration = configuration
+        engineConfiguration.minThreshold = settings.minimumDuration
+        engine = ScrobbleEngine(configuration: engineConfiguration)
         self.historyPageSize = max(1, historyPageSize)
 
-        state.scrobblingEnabled = scrobblingEnabled
+        state.scrobblingEnabled = settings.scrobblingEnabled
+        state.nowPlayingEnabled = settings.nowPlayingEnabled
+        state.pausedUntil = settings.pausedUntil
+        state.minimumDuration = settings.minimumDuration
         state.captureAvailable = store != nil
         state.failure = failure
         state.feedAvailable = source.isAvailable
@@ -58,8 +71,9 @@ public final class CaptureRuntime {
         databaseURL: URL,
         clock: any Clock,
         source: any NowPlayingSource,
-        scrobblingEnabled: Bool,
-        persistScrobbling: (@MainActor (Bool) -> Void)? = nil,
+        settings: CaptureSettings = CaptureSettings(),
+        persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
+        sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
     ) -> CaptureRuntime {
@@ -74,14 +88,17 @@ public final class CaptureRuntime {
         } catch {
             failure = .database(url: databaseURL, error: error)
         }
+        let allowlist: any AppAllowlistStore = store ?? UnavailableAppAllowlist()
         return CaptureRuntime(
             state: state,
             clock: clock,
             source: source,
             store: store,
+            allowlist: allowlist,
             failure: failure,
-            scrobblingEnabled: scrobblingEnabled,
-            persistScrobbling: persistScrobbling,
+            settings: settings,
+            persistSettings: persistSettings,
+            sendNowPlaying: sendNowPlaying,
             configuration: configuration,
             historyPageSize: historyPageSize,
         )
@@ -93,16 +110,20 @@ public final class CaptureRuntime {
         startGeneration += 1
         let generation = startGeneration
         state.feedAvailable = source.isAvailable
+        clearExpiredPauseOnActivation()
 
         if let store {
             await loadFirstPage(from: store, generation: generation)
             guard finishStart(generation) else { return }
         }
 
+        await loadSeenApps()
         guard finishStart(generation) else { return }
-        if state.scrobblingEnabled, store != nil {
+
+        if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
             startFeed()
         }
+        schedulePauseExpiry()
     }
 
     /// Returns false when this start no longer owns the runtime. A cancelled
@@ -120,6 +141,8 @@ public final class CaptureRuntime {
     }
 
     public func stop() {
+        pauseTask?.cancel()
+        pauseTask = nil
         stopFeed()
         started = false
     }
@@ -127,39 +150,74 @@ public final class CaptureRuntime {
     public func setScrobblingEnabled(_ enabled: Bool) {
         guard enabled != state.scrobblingEnabled else { return }
         state.scrobblingEnabled = enabled
-        persistScrobbling?(enabled)
-        if enabled, store != nil, started {
+        persistCurrentSettings()
+        if enabled, store != nil, started, state.pausedUntil == nil {
             startFeed()
         } else {
             stopFeed()
         }
     }
 
+    /// Moves the engine's threshold floor. The current session picks it up on
+    /// its next sample; a track is never pre-filtered by its duration.
+    public func setMinimumDuration(_ seconds: TimeInterval) {
+        let range = CaptureSettings.minimumDurationRange
+        let clamped = min(max(seconds, range.lowerBound), range.upperBound)
+        guard clamped != state.minimumDuration else { return }
+        state.minimumDuration = clamped
+        engine.setMinimumThreshold(clamped)
+        persistCurrentSettings()
+    }
+
     /// Feeds one observation through the engine and, when the threshold is
     /// crossed, into durable history. Public so tests replay samples without
     /// sleeping on a feed.
     public func ingest(_ sample: MediaSample?) async {
-        guard started, state.scrobblingEnabled, let store else { return }
+        guard started, state.scrobblingEnabled, state.pausedUntil == nil, let store else { return }
+
+        // The allowlist is a gate, not a filter: a denied app produces no now
+        // playing, no history and no delivery, and its sample must not keep an
+        // older allowed session alive.
+        guard let sample, await isAppAllowed(sample.track.bundleID) else {
+            await consume(nil, into: store)
+            return
+        }
+
+        // The allowlist read above can suspend; pause or switch-off may have
+        // landed in the meantime. Do not let the sample re-arm the engine.
+        guard !Task.isCancelled, started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
         // A sample without a title and artist after trimming is not a
         // candidate for now playing or history, and must not arm the engine.
-        let observation: MediaSample? = if let sample, MetadataPipeline.process(sample.track) != nil {
-            sample
-        } else {
-            nil
-        }
+        let observation: MediaSample? = MetadataPipeline.process(sample.track) != nil ? sample : nil
+        await consume(observation, into: store)
+    }
+
+    private func consume(_ observation: MediaSample?, into store: any ListenStore) async {
+        // The allowlist read can suspend, and pause or switch-off can land
+        // while it is in flight. Re-check every gate so a stale sample cannot
+        // re-arm a feed that was just stopped.
+        guard started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
         state.nowPlaying = observation
         let effects = engine.ingest(observation)
         state.status = engine.status
 
         for effect in effects {
-            guard case let .scrobble(scrobble) = effect else { continue }
-            await persist(scrobble, in: store)
+            switch effect {
+            case let .nowPlaying(track):
+                // Applied at send time, not at capture: the widget still
+                // shows the track, and its listen still becomes history.
+                if state.nowPlayingEnabled {
+                    sendNowPlaying?(track)
+                }
+            case let .scrobble(scrobble):
+                await persist(scrobble, in: store)
+            }
         }
     }
 
-    private func startFeed() {
+    func startFeed() {
         guard !feedRunning else { return }
         feedRunning = true
 
@@ -176,7 +234,7 @@ public final class CaptureRuntime {
         }
     }
 
-    private func stopFeed() {
+    func stopFeed() {
         if feedRunning {
             feedRunning = false
             source.stop()
@@ -212,4 +270,22 @@ public final class CaptureRuntime {
             state.failure = .storage(error: error)
         }
     }
+}
+
+/// A database that could not open leaves capture unavailable, so no player is
+/// allowed and nothing is listed.
+private struct UnavailableAppAllowlist: AppAllowlistStore {
+    func apps() async throws -> [SeenApp] {
+        []
+    }
+
+    func isAllowed(_: String) async throws -> Bool {
+        false
+    }
+
+    func recordSeen(_: String) async throws -> SeenApp? {
+        nil
+    }
+
+    func setAllowed(_: String, allowed _: Bool) async throws {}
 }

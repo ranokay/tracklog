@@ -11,7 +11,8 @@ struct HistoryPagingTests: CaptureTestHelpers {
             clock: FakeClock(base),
             source: ReplayedNowPlaying(),
             store: store,
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
             historyPageSize: 2,
         )
         await runtime.start()

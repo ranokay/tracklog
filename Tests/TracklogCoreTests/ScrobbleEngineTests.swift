@@ -47,6 +47,26 @@ struct ScrobbleEngineTests {
         }
     }
 
+    @Test func minimumThresholdIsTheFloorAndNeverRaisesTheCap() {
+        let short = Track(title: "Short", duration: 10)
+        let long = Track(title: "Long", duration: 1000)
+        let engine = ScrobbleEngine()
+
+        _ = engine.ingest(sample(short, at: 0, elapsed: 0))
+        #expect(abs(engine.status.target - 29.4) < 0.001, "the default floor is 30 seconds")
+
+        engine.setMinimumThreshold(120)
+        _ = engine.ingest(sample(short, at: 2, elapsed: 2))
+        #expect(abs(engine.status.target - 119.4) < 0.001)
+
+        _ = engine.ingest(sample(long, at: 4, elapsed: 4))
+        #expect(abs(engine.status.target - 240) < 0.001, "the 4-minute cap still wins")
+
+        engine.setMinimumThreshold(300)
+        _ = engine.ingest(sample(short, at: 6, elapsed: 6))
+        #expect(abs(engine.status.target - 299.4) < 0.001)
+    }
+
     @Test func nowPlayingArrivesAfterSettle() {
         let track = Track(title: "Track", duration: 200)
         let engine = ScrobbleEngine()
@@ -236,11 +256,24 @@ struct ScrobbleEngineTests {
         #expect(abs(engine.status.progress - 0.02) < 0.001)
     }
 
+    @Test func unknownDurationKeepsItsFlatFloorWhenTheMinimumChanges() {
+        let track = Track(title: "Unknown", duration: 0)
+        let engine = ScrobbleEngine()
+
+        _ = engine.ingest(sample(track, at: 0, elapsed: 0))
+        #expect(engine.status.target == 30)
+
+        engine.setMinimumThreshold(120)
+        _ = engine.ingest(sample(track, at: 2, elapsed: 2))
+        #expect(engine.status.target == 30, "the user's minimum never moves the unknown-duration floor")
+    }
+
     private func shortThresholdConfiguration() -> ScrobbleEngine.Configuration {
         ScrobbleEngine.Configuration(
             scrobblePercent: 0,
             maxThreshold: 0,
             minThreshold: 2,
+            unknownDurationThreshold: 2,
             settleTime: 0.1,
             dedupWindow: 8,
             maxSampleGap: 5,

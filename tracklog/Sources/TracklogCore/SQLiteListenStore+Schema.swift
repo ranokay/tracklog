@@ -43,6 +43,34 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 2) { handle in
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE apps (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bundle_id TEXT NOT NULL UNIQUE,
+                        allowed INTEGER NOT NULL DEFAULT 0
+                    );
+                    """,
+                )
+                // The seed belongs to the schema that creates the table, so a
+                // v1 database upgrading to v2 gets the same first-run defaults.
+                // A later open never reruns it, so a denial survives.
+                try seedDefaultApps(handle)
+            },
         ]
+    }
+}
+
+// MARK: - Test introspection
+
+extension SQLiteListenStore {
+    func userVersion() throws -> Int {
+        try Self.intValue(database(), "PRAGMA user_version")
+    }
+
+    func foreignKeysEnabled() throws -> Bool {
+        try Self.intValue(database(), "PRAGMA foreign_keys") == 1
     }
 }

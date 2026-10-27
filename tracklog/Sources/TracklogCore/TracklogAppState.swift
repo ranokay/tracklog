@@ -5,6 +5,14 @@ import Foundation
 @MainActor
 public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var scrobblingEnabled = false
+    /// Whether now playing is sent. Capture keeps running when this is off.
+    @Published public internal(set) var nowPlayingEnabled = true
+    /// End of the current pause, or `nil` when capture is not paused.
+    @Published public internal(set) var pausedUntil: Date?
+    /// The engine's threshold floor, in seconds.
+    @Published public internal(set) var minimumDuration = CaptureSettings.defaultMinimumDuration
+    /// Every player the feed has seen, in first-seen order.
+    @Published public internal(set) var seenApps: [SeenApp] = []
     @Published public internal(set) var nowPlaying: MediaSample?
     @Published public internal(set) var status: ScrobbleStatus = .idle
     @Published public internal(set) var feedAvailable = true
