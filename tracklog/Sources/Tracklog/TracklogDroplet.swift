@@ -160,7 +160,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     }
 
     /// Opens the Edits page with a new rule pre-filled from the current
-    /// listen's raw fields.
+    /// track's fields as the metadata pipeline matches them.
     func editCurrentListen() {
         guard let runtime, let match = runtime.editMatchForCurrentListen() else { return }
         state.requestEditPrefill(match)

@@ -162,7 +162,7 @@ struct ListenControlTests: CaptureTestHelpers {
 
         let match = try #require(runtime.editMatchForCurrentListen())
         #expect(match.track == "Song")
-        #expect(match.artist == "Artist", "the edit form is prefilled from the raw values")
+        #expect(match.artist == "Artist", "the edit form uses the raw artist, not the processed one")
         #expect(match.album == nil)
         #expect(match.albumArtist == nil)
 

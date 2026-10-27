@@ -9,15 +9,14 @@ struct TracklogWidget: View {
     let context: ShelfWidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+        VStack(alignment: .leading, spacing: DroppySpacing.xs) {
             header
             content
                 .contentShape(Rectangle())
                 .onTapGesture { droplet.presentHistory() }
             if showsControls {
-                controls
+                statusAndControls
             }
-            Spacer(minLength: 0)
         }
         .padding(context.contentInsets)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -31,13 +30,22 @@ struct TracklogWidget: View {
             && state.status.track != nil
     }
 
-    private var controls: some View {
-        ListenControls(
-            droplet: droplet,
-            status: state.status,
-            transition: DroppyTransition.element,
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// The status and the controls share one row: with the two-line title,
+    /// the artist, the progress bar and the header, a separate control row
+    /// does not fit the card's declared 150-point height.
+    private var statusAndControls: some View {
+        HStack(spacing: DroppySpacing.xs) {
+            Text(statusLine)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            ListenControls(
+                droplet: droplet,
+                status: state.status,
+                transition: DroppyTransition.element,
+            )
+        }
     }
 
     private var header: some View {
@@ -71,7 +79,7 @@ struct TracklogWidget: View {
             subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
         } else if let sample = state.nowPlaying {
             Text(sample.track.title)
-                .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))
+                .font(.system(size: context.isCompact ? 16 : 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                 .lineLimit(context.isCompact ? 1 : 2)
                 .minimumScaleFactor(0.9)
@@ -87,11 +95,6 @@ struct TracklogWidget: View {
                     .tint(AdaptiveColors.notchSurfacePrimaryText)
                     .controlSize(.small)
             }
-
-            Text(statusLine)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .lineLimit(1)
         } else {
             title(state.feedAvailable ? "Nothing playing" : "Media feed unavailable")
             subtitle(

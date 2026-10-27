@@ -94,7 +94,8 @@ struct TracklogEditsPage: View {
     }
 
     /// The widget and now-playing strip's Edit action opens this page with a
-    /// new draft made from the current listen's raw fields.
+    /// new draft made from the current listen's fields as the metadata
+    /// pipeline matches them.
     private func applyEditPrefill() {
         guard let prefill = state.takeEditPrefill() else { return }
         draft = EditDraft(prefill: prefill.match)

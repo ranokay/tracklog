@@ -23,7 +23,8 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var nowPlaying: MediaSample?
     @Published public internal(set) var status: ScrobbleStatus = .idle
     /// A pending request to open the Edits page with a new rule pre-filled
-    /// from the current listen's raw fields.
+    /// from the current listen's fields as the metadata pipeline matches
+    /// them.
     @Published public internal(set) var editPrefill: EditPrefill?
     @Published public internal(set) var feedAvailable = true
     /// Whether the database opened, and with it whether capture can run.
