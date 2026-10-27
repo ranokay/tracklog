@@ -125,6 +125,7 @@ struct HistoryRow: View {
 // MARK: - Now playing
 
 struct NowPlayingStrip: View {
+    let droplet: TracklogDroplet
     let sample: MediaSample
     let status: ScrobbleStatus
 
@@ -132,36 +133,52 @@ struct NowPlayingStrip: View {
         VStack(spacing: DroppySpacing.sm) {
             HStack(spacing: DroppySpacing.md) {
                 HistorySleeve(size: 56)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.xs) {
-                        Text(sample.track.title)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                            .lineLimit(1)
-                        if !sample.track.artist.isEmpty {
-                            Text("— \(sample.track.artist)")
-                                .font(.system(size: 13))
-                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                                .lineLimit(1)
-                        }
-                    }
-                    Text(elapsedText)
-                        .font(.system(size: 11, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                }
+                info
                 Spacer(minLength: DroppySpacing.md)
+                controls
             }
             progressLine
         }
         .padding(.horizontal, DroppySpacing.xl)
         .frame(height: 76, alignment: .bottom)
+    }
+
+    private var info: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.xs) {
+                Text(sample.track.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                    .lineLimit(1)
+                if !sample.track.artist.isEmpty {
+                    Text("— \(sample.track.artist)")
+                        .font(.system(size: 13))
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        .lineLimit(1)
+                }
+            }
+            Text(elapsedText)
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(sample.track.title)
         .accessibilityValue(elapsedText)
     }
 
+    private var controls: some View {
+        ListenControls(
+            droplet: droplet,
+            status: status,
+            transition: DroppyTransition.compactContent,
+        )
+    }
+
     private var elapsedText: String {
+        if status.isCancelled {
+            return trackingCancelledText
+        }
         let elapsed = time(sample.elapsed)
         guard sample.track.duration > 0 else { return "\(elapsed) played" }
         return "\(elapsed) of \(time(sample.track.duration))"

@@ -74,7 +74,7 @@ private struct TracklogHistory: View {
             header
             content
             if state.scrobblingEnabled, let sample = state.nowPlaying {
-                NowPlayingStrip(sample: sample, status: state.status)
+                NowPlayingStrip(droplet: droplet, sample: sample, status: state.status)
             }
         }
         .frame(

@@ -75,3 +75,7 @@ A saved metadata rule with four optional match fields and four optional replacem
 ## Block
 
 A saved cancellation rule with four fields: track, artist, album and album artist. A blank field is a wildcard, and a block with all four blank is refused. Matching is full-field, case-insensitively and trimmed, after sentinel cleanup and before any simple edit, so an edit cannot rewrite a blocked track into an allowed one. A match cancels the listen: no now playing, no history row and no delivery. Existing history keeps its rows; a block applies to future plays.
+
+## Cancelled listen
+
+The in-flight listen the user suppressed before it scrobbled. Cancel keeps the session's played time and threshold, suppresses its scrobble and history row until the track changes or restarts, and leaves an already-sent now playing alone. Undo re-enables it from the same played time. Once the threshold fires there is nothing left to cancel, so the control is hidden.

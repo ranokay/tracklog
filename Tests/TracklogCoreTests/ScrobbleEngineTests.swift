@@ -137,7 +137,7 @@ struct ScrobbleEngineTests {
             effects == [
                 .scrobble(
                     Scrobble(
-                        track: track,
+                        raw: track,
                         playedAt: base,
                         playedDuration: 30,
                     ),
@@ -160,7 +160,7 @@ struct ScrobbleEngineTests {
             effects == [
                 .scrobble(
                     Scrobble(
-                        track: track,
+                        raw: track,
                         playedAt: base.addingTimeInterval(-50),
                         playedDuration: 30,
                     ),
@@ -200,7 +200,7 @@ struct ScrobbleEngineTests {
             effects == [
                 .scrobble(
                     Scrobble(
-                        track: track,
+                        raw: track,
                         playedAt: base.addingTimeInterval(20),
                         playedDuration: 2,
                     ),
@@ -266,6 +266,18 @@ struct ScrobbleEngineTests {
         engine.setMinimumThreshold(120)
         _ = engine.ingest(sample(track, at: 2, elapsed: 2))
         #expect(engine.status.target == 30, "the user's minimum never moves the unknown-duration floor")
+    }
+
+    @Test func durationReportedLaterRetunesTheThreshold() {
+        let unknown = Track(title: "Track", duration: 0)
+        let known = Track(title: "Track", duration: 200)
+        let engine = ScrobbleEngine()
+
+        _ = engine.ingest(sample(unknown, at: 0, elapsed: 0))
+        #expect(engine.status.target == 30)
+
+        _ = engine.ingest(sample(known, at: 2, elapsed: 2))
+        #expect(abs(engine.status.target - 100) < 0.001)
     }
 
     private func shortThresholdConfiguration() -> ScrobbleEngine.Configuration {

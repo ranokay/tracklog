@@ -16,6 +16,21 @@ extension CaptureRuntime {
         } catch {
             state.failure = .edits(error: error)
         }
+        reviseCurrentSubmission()
+    }
+
+    /// Pushes the metadata the current rules would submit into the session in
+    /// flight. Called when the rules change, so an edit saved mid-track
+    /// revises the eventual scrobble without touching played time.
+    private func reviseCurrentSubmission() {
+        guard let raw = engine.currentRawTrack,
+              let processed = MetadataPipeline.process(
+                  raw,
+                  edits: state.simpleEdits,
+                  blocks: state.blocks,
+              )
+        else { return }
+        engine.reviseSubmittedTrack(raw.replacingMetadata(processed))
     }
 }
 

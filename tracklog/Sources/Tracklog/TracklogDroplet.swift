@@ -149,6 +149,30 @@ public final class TracklogDroplet: NSObject, Droplet {
         runtime?.resume()
     }
 
+    // MARK: - The listen in flight
+
+    func cancelCurrentListen() {
+        runtime?.cancelCurrentListen()
+    }
+
+    func undoCancelCurrentListen() {
+        runtime?.undoCancelCurrentListen()
+    }
+
+    /// Opens the Edits page with a new rule pre-filled from the current
+    /// track's fields as the metadata pipeline matches them.
+    func editCurrentListen() {
+        guard let runtime, let match = runtime.editMatchForCurrentListen() else { return }
+        state.requestEditPrefill(match)
+        guard host?.workspace.openSettingsPage(tracklogEditsPageID, title: "Edits") == true else {
+            // Discard the request so a refused open does not surface a draft
+            // the next time the user visits Edits by hand.
+            _ = state.takeEditPrefill()
+            host?.log.notice("Opening the Edits page was refused")
+            return
+        }
+    }
+
     // MARK: - Players
 
     public func setAppAllowed(_ bundleID: String, allowed: Bool) {

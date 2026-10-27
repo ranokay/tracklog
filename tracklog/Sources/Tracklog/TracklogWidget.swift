@@ -9,16 +9,43 @@ struct TracklogWidget: View {
     let context: ShelfWidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
+        VStack(alignment: .leading, spacing: DroppySpacing.xs) {
             header
             content
                 .contentShape(Rectangle())
                 .onTapGesture { droplet.presentHistory() }
-            Spacer(minLength: 0)
+            if showsControls {
+                statusAndControls
+            }
         }
         .padding(context.contentInsets)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityAction(named: "Open history") { droplet.presentHistory() }
+    }
+
+    private var showsControls: Bool {
+        state.scrobblingEnabled
+            && state.captureAvailable
+            && state.nowPlaying != nil
+            && state.status.track != nil
+    }
+
+    /// The status and the controls share one row: with the two-line title,
+    /// the artist, the progress bar and the header, a separate control row
+    /// does not fit the card's declared 150-point height.
+    private var statusAndControls: some View {
+        HStack(spacing: DroppySpacing.xs) {
+            Text(statusLine)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            ListenControls(
+                droplet: droplet,
+                status: state.status,
+                transition: DroppyTransition.element,
+            )
+        }
     }
 
     private var header: some View {
@@ -52,9 +79,9 @@ struct TracklogWidget: View {
             subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
         } else if let sample = state.nowPlaying {
             Text(sample.track.title)
-                .font(.system(size: context.isCompact ? 16 : 22, weight: .semibold, design: .rounded))
+                .font(.system(size: context.isPaired ? 16 : 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                .lineLimit(context.isCompact ? 1 : 2)
+                .lineLimit(context.isPaired ? 1 : 2)
                 .minimumScaleFactor(0.9)
 
             Text(artistLine(sample))
@@ -62,17 +89,12 @@ struct TracklogWidget: View {
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .lineLimit(1)
 
-            if !context.isCompact {
+            if !context.isPaired {
                 ProgressView(value: state.status.progress)
                     .progressViewStyle(.linear)
                     .tint(AdaptiveColors.notchSurfacePrimaryText)
                     .controlSize(.small)
             }
-
-            Text(statusLine)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .lineLimit(1)
         } else {
             title(state.feedAvailable ? "Nothing playing" : "Media feed unavailable")
             subtitle(
@@ -105,6 +127,9 @@ struct TracklogWidget: View {
     }
 
     private var statusLine: String {
+        if state.status.isCancelled {
+            return trackingCancelledText
+        }
         if !state.status.isPlaying {
             return "Paused"
         }

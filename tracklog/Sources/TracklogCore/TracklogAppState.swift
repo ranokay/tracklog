@@ -22,6 +22,10 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var blocksFailure: CaptureFailure?
     @Published public internal(set) var nowPlaying: MediaSample?
     @Published public internal(set) var status: ScrobbleStatus = .idle
+    /// A pending request to open the Edits page with a new rule pre-filled
+    /// from the current listen's fields as the metadata pipeline matches
+    /// them.
+    @Published public internal(set) var editPrefill: EditPrefill?
     @Published public internal(set) var feedAvailable = true
     /// Whether the database opened, and with it whether capture can run.
     @Published public internal(set) var captureAvailable = true
@@ -41,4 +45,29 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var lastListen: Listen?
 
     public init() {}
+
+    /// Queues a new-rule draft for the Edits page. Each request has a fresh
+    /// identity so tapping Edit twice with the same track still starts a new
+    /// draft.
+    public func requestEditPrefill(_ match: SimpleEditRule.Match) {
+        editPrefill = EditPrefill(match: match)
+    }
+
+    /// The Edits page takes the request once, so a later visit starts from the
+    /// list rather than re-opening the same draft.
+    public func takeEditPrefill() -> EditPrefill? {
+        defer { editPrefill = nil }
+        return editPrefill
+    }
+}
+
+/// A new edit rule requested from the widget or the now-playing strip.
+public struct EditPrefill: Equatable, Sendable {
+    public let id: UUID
+    public let match: SimpleEditRule.Match
+
+    public init(match: SimpleEditRule.Match) {
+        id = UUID()
+        self.match = match
+    }
 }

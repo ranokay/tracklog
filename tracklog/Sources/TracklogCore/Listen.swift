@@ -65,10 +65,10 @@ public struct Listen: Identifiable, Equatable, Sendable {
     /// A captured scrobble, with the metadata history will show.
     public init(scrobble: Scrobble, processed: ListenMetadata, capturedAt: Date) {
         self.init(
-            raw: ListenMetadata(scrobble.track),
+            raw: ListenMetadata(scrobble.raw),
             processed: processed,
-            bundleID: scrobble.track.bundleID,
-            duration: scrobble.track.duration,
+            bundleID: scrobble.raw.bundleID,
+            duration: scrobble.raw.duration,
             playedDuration: scrobble.playedDuration,
             startedAt: scrobble.playedAt,
             capturedAt: capturedAt,
