@@ -11,6 +11,7 @@ public final class CaptureRuntime {
     let store: (any ListenStore)?
     let allowlist: any AppAllowlistStore
     let editStore: (any SimpleEditStore)?
+    let blockStore: (any BlockStore)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     private let sendNowPlaying: (@MainActor (Track) -> Void)?
     private let engine: ScrobbleEngine
@@ -36,6 +37,7 @@ public final class CaptureRuntime {
         store: (any ListenStore)?,
         allowlist: any AppAllowlistStore,
         edits: (any SimpleEditStore)? = nil,
+        blocks: (any BlockStore)? = nil,
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
@@ -49,6 +51,7 @@ public final class CaptureRuntime {
         self.store = store
         self.allowlist = allowlist
         editStore = edits
+        blockStore = blocks
         self.persistSettings = persistSettings
         self.sendNowPlaying = sendNowPlaying
 
@@ -99,6 +102,7 @@ public final class CaptureRuntime {
             store: store,
             allowlist: allowlist,
             edits: store,
+            blocks: store,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -125,6 +129,9 @@ public final class CaptureRuntime {
         guard finishStart(generation) else { return }
 
         await loadSimpleEdits()
+        guard finishStart(generation) else { return }
+
+        await loadBlocks()
         guard finishStart(generation) else { return }
 
         if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
@@ -195,9 +202,13 @@ public final class CaptureRuntime {
         guard !Task.isCancelled, started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
         // A sample the metadata pipeline rejects (no title or artist after
-        // cleanup, edits and trimming) is not a candidate for now playing or
-        // history, and must not arm the engine.
-        guard let processed = MetadataPipeline.process(sample.track, edits: state.simpleEdits) else {
+        // cleanup, blocks, edits and trimming) is not a candidate for now
+        // playing or history, and must not arm the engine.
+        guard let processed = MetadataPipeline.process(
+            sample.track,
+            edits: state.simpleEdits,
+            blocks: state.blocks,
+        ) else {
             await consume(nil, raw: nil, into: store)
             return
         }
@@ -224,11 +235,17 @@ public final class CaptureRuntime {
         for effect in effects {
             switch effect {
             case let .nowPlaying(track):
-                // Applied at send time, not at capture: the widget still
-                // shows the track, and its listen still becomes history.
-                if state.nowPlayingEnabled {
-                    let processed = MetadataPipeline.process(track, edits: state.simpleEdits)
-                    sendNowPlaying?(processed.map(track.replacingMetadata) ?? track)
+                // The now-playing toggle is applied at send time: with it off,
+                // the widget still shows the track and the listen still
+                // becomes history. Re-evaluate the rules too, so a block or
+                // edit saved while the effect was in flight still applies.
+                if state.nowPlayingEnabled,
+                   let processed = MetadataPipeline.process(
+                       track,
+                       edits: state.simpleEdits,
+                       blocks: state.blocks,
+                   ) {
+                    sendNowPlaying?(track.replacingMetadata(processed))
                 }
             case let .scrobble(scrobble):
                 await persist(scrobble, in: store)
@@ -272,7 +289,11 @@ public final class CaptureRuntime {
     /// nothing new is admitted.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
         guard !Task.isCancelled, started, state.scrobblingEnabled,
-              let processed = MetadataPipeline.process(scrobble.track, edits: state.simpleEdits)
+              let processed = MetadataPipeline.process(
+                  scrobble.track,
+                  edits: state.simpleEdits,
+                  blocks: state.blocks,
+              )
         else { return }
         let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
 

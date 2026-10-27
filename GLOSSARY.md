@@ -71,3 +71,7 @@ The authoritative record of listens on this Mac. Global and independent of conne
 ## Simple edit
 
 A saved metadata rule with four optional match fields and four optional replacements. An inactive match field is a wildcard; every active one must equal the listen's current value, case-insensitively and trimmed. Matching rules merge replacements field by field, most specific first and then newest first. An inactive replacement leaves the field alone; an empty album or album artist replacement clears it. Local history keeps the values each listen was captured with.
+
+## Block
+
+A saved cancellation rule with four fields: track, artist, album and album artist. A blank field is a wildcard, and a block with all four blank is refused. Matching is full-field, case-insensitively and trimmed, after sentinel cleanup and before any simple edit, so an edit cannot rewrite a blocked track into an allowed one. A match cancels the listen: no now playing, no history row and no delivery. Existing history keeps its rows; a block applies to future plays.

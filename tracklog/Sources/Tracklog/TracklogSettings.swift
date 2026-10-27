@@ -70,6 +70,13 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "text.badge.checkmark")
                     }
+                    DropletSettingsPageLink(
+                        "Blocks",
+                        subtitle: "Stop a track, artist, album or album artist from being saved.",
+                        page: tracklogBlocksPageID,
+                    ) {
+                        SettingsLinkTile(systemImage: "hand.raised")
+                    }
                 }
             }
 
@@ -259,6 +266,7 @@ struct TracklogSettings: View {
         case .storage: "Write failed"
         case .history: "Read failed"
         case .edits: "Read failed"
+        case .blocks: "Read failed"
         }
     }
 }

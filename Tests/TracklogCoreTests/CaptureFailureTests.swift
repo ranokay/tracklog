@@ -122,6 +122,46 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(runtime.state.simpleEdits.isEmpty)
     }
 
+    @Test func aBlocksReadFailureIsVisibleAndLeavesCaptureAvailable() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let runtime = CaptureRuntime(
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            blocks: FailingBlockStore(),
+            settings: CaptureSettings(scrobblingEnabled: false),
+        )
+        await runtime.start()
+
+        let failure = try #require(runtime.state.failure)
+        #expect(failure.stage == .blocks)
+        #expect(failure.diagnostics.contains("read failed"))
+        #expect(runtime.state.captureAvailable)
+        #expect(runtime.state.blocks.isEmpty)
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
+    }
+
+    @Test func aBlocksFailureSurvivesALaterStorageFailure() async {
+        let clock = FakeClock(base)
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: ReplayedNowPlaying(),
+            store: FailingStore(),
+            allowlist: InMemoryAppAllowlist(),
+            blocks: FailingBlockStore(),
+            settings: CaptureSettings(scrobblingEnabled: true),
+        )
+        await runtime.start()
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
+
+        await replay(thresholdSamples(track()), on: runtime, clock: clock)
+
+        #expect(runtime.state.failure?.stage == .storage)
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
+    }
+
     @Test func aFailedHistoryRefreshIsNotAWriteFailure() async throws {
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
@@ -283,6 +323,20 @@ private actor SuspendingStore: ListenStore {
     func releaseInsert() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+private actor FailingBlockStore: BlockStore {
+    func blocks() async throws -> [BlockRule] {
+        throw DatabaseError.sqlite("read failed")
+    }
+
+    func save(_ block: BlockRule) async throws -> BlockRule {
+        block
+    }
+
+    func deleteBlock(id _: Int64) async throws {
+        // The fixture only exercises a failed read; there is nothing to delete.
     }
 }
 

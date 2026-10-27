@@ -45,6 +45,7 @@ public final class TracklogDroplet: NSObject, Droplet {
                 store: store,
                 allowlist: store,
                 edits: store,
+                blocks: store,
                 settings: CaptureSettings(scrobblingEnabled: true),
             )
         } else {
@@ -226,6 +227,18 @@ public final class TracklogDroplet: NSObject, Droplet {
         try await runtime.deleteSimpleEdit(id: id)
     }
 
+    // MARK: - Blocks
+
+    func saveBlock(_ block: BlockRule) async throws {
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
+        try await runtime.saveBlock(block)
+    }
+
+    func deleteBlock(id: Int64) async throws {
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
+        try await runtime.deleteBlock(id: id)
+    }
+
     /// The player's display name, for the widget's status line.
     public var sourceName: String? {
         guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
@@ -273,6 +286,8 @@ extension TracklogDroplet: SettingsPagesProviding {
             AnyView(TracklogAppsPage(droplet: self, state: state))
         case tracklogEditsPageID:
             AnyView(TracklogEditsPage(droplet: self, state: state))
+        case tracklogBlocksPageID:
+            AnyView(TracklogBlocksPage(droplet: self, state: state))
         default:
             nil
         }
@@ -303,6 +318,10 @@ extension TracklogDroplet: SettingsPagesProviding {
             SettingsSearchEntry(
                 title: "Edits",
                 keywords: ["edits", "metadata", "title", "artist", "album", "fix"],
+            ),
+            SettingsSearchEntry(
+                title: "Blocks",
+                keywords: ["blocks", "blocked", "hide", "podcast", "artist", "album"],
             ),
             SettingsSearchEntry(
                 title: "Services",

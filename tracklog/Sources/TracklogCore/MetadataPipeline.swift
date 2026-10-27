@@ -3,8 +3,9 @@ import Foundation
 /// Turns the player's metadata into the values history stores.
 ///
 /// The stages run in the order the metadata pipeline specifies: sentinel
-/// cleanup, simple edits, then the final trim and validity gate. A listen
-/// needs a title and an artist after trimming.
+/// cleanup, blocks, simple edits, then the final trim and validity gate. A
+/// listen needs a title and an artist after trimming. A listen a block matches
+/// is cancelled before any edit can rewrite its metadata.
 public enum MetadataPipeline {
     /// Album and album artist values the player uses when it has nothing.
     /// Plain, square-bracketed and angle-bracketed forms, matched after
@@ -21,8 +22,13 @@ public enum MetadataPipeline {
         "<unknown artist>",
     ]
 
-    public static func process(_ track: Track, edits: [SimpleEditRule] = []) -> ListenMetadata? {
+    public static func process(
+        _ track: Track,
+        edits: [SimpleEditRule] = [],
+        blocks: [BlockRule] = [],
+    ) -> ListenMetadata? {
         let cleaned = sentinelCleanup(ListenMetadata(track))
+        guard BlockRule.firstMatch(in: blocks, for: cleaned) == nil else { return nil }
         let edited = SimpleEditRule.apply(edits, to: cleaned)
         let processed = ListenMetadata(
             title: edited.title.trimmingCharacters(in: .whitespacesAndNewlines),
