@@ -134,18 +134,13 @@ struct MediaHelperPayloadTests {
     }
 }
 
-@Suite("Media helper feed")
+@Suite("Media helper reader")
 @MainActor
-struct MediaHelperFeedTests {
-    @Test func missingHelperReadsAsNothingPlaying() {
-        let feed = MediaHelperFeed(bundleURL: URL(fileURLWithPath: "/nonexistent"))
+struct MediaHelperReaderTests {
+    @Test func missingHelperReportsTheMissingExecutable() async {
+        let reader = MediaHelperReader(bundleURL: URL(fileURLWithPath: "/nonexistent"))
 
-        #expect(feed.isAvailable == false)
-
-        var received: MediaSample??
-        feed.start { received = $0 }
-
-        #expect(received == .some(nil))
-        feed.stop()
+        #expect(reader.isExecutable == false)
+        #expect(await reader.read() == .missingExecutable)
     }
 }

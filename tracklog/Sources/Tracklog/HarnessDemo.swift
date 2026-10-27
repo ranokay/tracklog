@@ -26,9 +26,13 @@ enum HarnessDemo {
 
 @MainActor
 final class HarnessDemoSource: NowPlayingSource {
-    var isAvailable = true
+    func start(
+        onSample _: @escaping @MainActor (MediaSample?) -> Void,
+        onStatus: @escaping @MainActor (MediaStatus) -> Void,
+    ) {
+        onStatus(mediaStatus)
+    }
 
-    func start(onSample _: @escaping @MainActor (MediaSample?) -> Void) {}
     func stop() {}
 }
 

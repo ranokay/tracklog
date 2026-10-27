@@ -10,7 +10,7 @@
     "minAPI": "1.18.0"
   },
   "minAppVersion": "15.3.0",
-  "capabilities": ["clipboard-write", "expanded-surface"],
+  "capabilities": ["apple-events", "clipboard-write", "expanded-surface"],
   "surfaces": [
     "shelf-widget",
     "expanded-surface",

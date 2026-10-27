@@ -137,19 +137,31 @@ final class FakeClock: Clock {
 
 @MainActor
 final class ReplayedNowPlaying: NowPlayingSource {
-    var isAvailable = true
+    var mediaStatus: MediaStatus = .legacyAvailable
     private(set) var startCount = 0
     private(set) var stopCount = 0
     private(set) var handler: ((MediaSample?) -> Void)?
+    private(set) var statusHandler: ((MediaStatus) -> Void)?
 
-    func start(onSample: @escaping @MainActor (MediaSample?) -> Void) {
+    func start(
+        onSample: @escaping @MainActor (MediaSample?) -> Void,
+        onStatus: @escaping @MainActor (MediaStatus) -> Void,
+    ) {
         startCount += 1
         handler = onSample
+        statusHandler = onStatus
+        onStatus(mediaStatus)
+    }
+
+    func emitStatus(_ status: MediaStatus) {
+        mediaStatus = status
+        statusHandler?(status)
     }
 
     func stop() {
         stopCount += 1
         handler = nil
+        statusHandler = nil
     }
 }
 

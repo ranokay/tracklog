@@ -26,7 +26,14 @@ public final class TracklogAppState: ObservableObject {
     /// from the current listen's fields as the metadata pipeline matches
     /// them.
     @Published public internal(set) var editPrefill: EditPrefill?
-    @Published public internal(set) var feedAvailable = true
+    /// Whether any media source can deliver a sample. Derived from the live
+    /// status so the two cannot drift apart.
+    public var feedAvailable: Bool {
+        mediaStatus.isAvailable
+    }
+
+    /// The live media source and the health behind the feed.
+    @Published public internal(set) var mediaStatus: MediaStatus = .unavailable
     /// Whether the database opened, and with it whether capture can run.
     @Published public internal(set) var captureAvailable = true
     @Published public internal(set) var failure: CaptureFailure?
