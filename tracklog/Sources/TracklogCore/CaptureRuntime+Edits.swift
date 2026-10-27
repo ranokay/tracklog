@@ -16,6 +16,7 @@ extension CaptureRuntime {
         } catch {
             state.failure = .edits(error: error)
         }
+        reviseCurrentSubmission()
     }
 }
 

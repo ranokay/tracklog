@@ -30,6 +30,13 @@ struct TrackTests {
         #expect(music.identity != spotify.identity)
     }
 
+    @Test func identitySeparatesAlbumArtists() {
+        let albumArtist = Track(title: "Song", artist: "Artist", album: "Album", albumArtist: "Album Artist")
+        let other = Track(title: "Song", artist: "Artist", album: "Album", albumArtist: "Other Artist")
+
+        #expect(albumArtist.identity != other.identity)
+    }
+
     @Test func blankTitleIsEmpty() {
         #expect(Track(title: "").isEmpty)
         #expect(Track(title: "   \n").isEmpty)

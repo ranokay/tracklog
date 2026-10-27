@@ -3,7 +3,7 @@ import SwiftUI
 import TracklogCore
 
 /// The Edits page id, shared by the root page's link, the host's page
-/// request and the widget's future Edit action. Stable interface value; never
+/// request and the widget's Edit action. Stable interface value; never
 /// rename it.
 let tracklogEditsPageID = "edits"
 
@@ -89,6 +89,16 @@ struct TracklogEditsPage: View {
                 }
             }
         }
+        .onAppear { applyEditPrefill() }
+        .onChange(of: state.editPrefill) { _, _ in applyEditPrefill() }
+    }
+
+    /// A widget Edit action opens this page with a new draft made from the
+    /// current listen's raw fields.
+    private func applyEditPrefill() {
+        guard let prefill = state.takeEditPrefill() else { return }
+        draft = EditDraft(prefill: prefill.match)
+        errorMessage = nil
     }
 
     // MARK: - Rows
@@ -266,6 +276,13 @@ private struct EditDraft {
     }
 
     init() {}
+
+    init(prefill: SimpleEditRule.Match) {
+        track = EditFieldDraft(match: prefill.track, replacement: nil)
+        artist = EditFieldDraft(match: prefill.artist, replacement: nil)
+        album = EditFieldDraft(match: prefill.album, replacement: nil)
+        albumArtist = EditFieldDraft(match: prefill.albumArtist, replacement: nil)
+    }
 
     init(rule: SimpleEditRule) {
         id = rule.id

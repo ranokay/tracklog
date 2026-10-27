@@ -14,7 +14,7 @@ public final class CaptureRuntime {
     let blockStore: (any BlockStore)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     private let sendNowPlaying: (@MainActor (Track) -> Void)?
-    private let engine: ScrobbleEngine
+    let engine: ScrobbleEngine
     let historyPageSize: Int
 
     var started = false
@@ -229,7 +229,7 @@ public final class CaptureRuntime {
         guard started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
         state.nowPlaying = displayed
-        let effects = engine.ingest(raw)
+        let effects = engine.ingest(raw, submitted: displayed?.track)
         state.status = engine.status
 
         for effect in effects {
@@ -237,15 +237,9 @@ public final class CaptureRuntime {
             case let .nowPlaying(track):
                 // The now-playing toggle is applied at send time: with it off,
                 // the widget still shows the track and the listen still
-                // becomes history. Re-evaluate the rules too, so a block or
-                // edit saved while the effect was in flight still applies.
-                if state.nowPlayingEnabled,
-                   let processed = MetadataPipeline.process(
-                       track,
-                       edits: state.simpleEdits,
-                       blocks: state.blocks,
-                   ) {
-                    sendNowPlaying?(track.replacingMetadata(processed))
+                // becomes history.
+                if state.nowPlayingEnabled {
+                    sendNowPlaying?(track)
                 }
             case let .scrobble(scrobble):
                 await persist(scrobble, in: store)
@@ -288,14 +282,12 @@ public final class CaptureRuntime {
     /// or switch-off may finish, but it cannot publish history after either;
     /// nothing new is admitted.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
-        guard !Task.isCancelled, started, state.scrobblingEnabled,
-              let processed = MetadataPipeline.process(
-                  scrobble.track,
-                  edits: state.simpleEdits,
-                  blocks: state.blocks,
-              )
-        else { return }
-        let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
+        guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
+        let listen = Listen(
+            scrobble: scrobble,
+            processed: ListenMetadata(scrobble.submitted),
+            capturedAt: clock.now,
+        )
 
         do {
             guard let stored = try await store.insert(listen),

@@ -166,6 +166,25 @@ public enum SimpleEditRuleValidationError: Error, Equatable, Sendable {
 
 // MARK: - Field plumbing
 
+public extension SimpleEditRule.Match {
+    /// A new rule's match fields, pre-filled from a listen's raw metadata.
+    /// A field is active only when the player supplied a value, so the Edits
+    /// form enables album and album artist only when they exist.
+    static func prefilled(from metadata: ListenMetadata) -> SimpleEditRule.Match {
+        SimpleEditRule.Match(
+            track: active(metadata.title),
+            artist: active(metadata.artist),
+            album: active(metadata.album),
+            albumArtist: active(metadata.albumArtist),
+        )
+    }
+
+    private static func active(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 extension SimpleEditRule.Match {
     func value(for field: MetadataField) -> String? {
         switch field {

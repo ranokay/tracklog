@@ -89,13 +89,22 @@ public struct MediaSample: Equatable, Sendable {
 
 /// A listen that met the threshold and should reach the services.
 public struct Scrobble: Equatable, Sendable {
+    /// The player's raw observation, kept for history and deduplication.
     public let track: Track
+    /// The metadata to submit, after any in-flight revision.
+    public let submitted: Track
     /// When the track started, not when the threshold fired.
     public let playedAt: Date
     public let playedDuration: TimeInterval
 
-    public init(track: Track, playedAt: Date, playedDuration: TimeInterval) {
+    public init(
+        track: Track,
+        submitted: Track? = nil,
+        playedAt: Date,
+        playedDuration: TimeInterval,
+    ) {
         self.track = track
+        self.submitted = submitted ?? track
         self.playedAt = playedAt
         self.playedDuration = playedDuration
     }
@@ -120,13 +129,23 @@ public struct ScrobbleStatus: Equatable, Sendable {
     public let played: TimeInterval
     public let target: TimeInterval
     public let isPlaying: Bool
+    /// Whether the current session's scrobble and history row are suppressed.
+    public let isCancelled: Bool
 
-    public init(phase: Phase, track: Track?, played: TimeInterval, target: TimeInterval, isPlaying: Bool) {
+    public init(
+        phase: Phase,
+        track: Track?,
+        played: TimeInterval,
+        target: TimeInterval,
+        isPlaying: Bool,
+        isCancelled: Bool = false,
+    ) {
         self.phase = phase
         self.track = track
         self.played = played
         self.target = target
         self.isPlaying = isPlaying
+        self.isCancelled = isCancelled
     }
 
     public static let idle = ScrobbleStatus(
@@ -136,6 +155,17 @@ public struct ScrobbleStatus: Equatable, Sendable {
         target: 0,
         isPlaying: false,
     )
+
+    /// Cancel is available until the threshold fires, and while the track has
+    /// not already been cancelled.
+    public var canCancel: Bool {
+        phase == .armed && !isCancelled
+    }
+
+    /// Undo stays available for the rest of the track, once cancelled.
+    public var canUndo: Bool {
+        phase == .armed && isCancelled
+    }
 
     public var remaining: TimeInterval {
         max(0, target - played)
