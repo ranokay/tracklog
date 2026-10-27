@@ -114,9 +114,13 @@ private actor SuspendedReadStore: ListenStore {
         listen.stored(withID: 1)
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
         await withCheckedContinuation { continuations.append($0) }
         return []
+    }
+
+    func count() async throws -> Int {
+        0
     }
 
     func releaseNextRead() {

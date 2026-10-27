@@ -99,6 +99,44 @@ struct ListenStoreTests {
         #expect(recent.map(\.id) == [newest.id, middle.id, oldest.id])
     }
 
+    @Test func pagesThroughHistoryWithoutDuplicatesAndCountsIt() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 205 {
+            _ = try await store.insert(listen(title: "Song \(index)", start: TimeInterval(index)))
+        }
+
+        let first = try await store.page(limit: 100, before: nil)
+        let firstCursor = try #require(first.last.flatMap(ListenCursor.init))
+        let second = try await store.page(limit: 100, before: firstCursor)
+        let secondCursor = try #require(second.last.flatMap(ListenCursor.init))
+        let third = try await store.page(limit: 100, before: secondCursor)
+
+        #expect(first.count == 100)
+        #expect(second.count == 100)
+        #expect(third.count == 5)
+        let paged = first + second + third
+        #expect(Set(paged.compactMap(\.id)).count == 205)
+        #expect(
+            paged.map(\.startedAt)
+                == (0 ..< 205).reversed().map { base.addingTimeInterval(TimeInterval($0)) },
+        )
+        #expect(try await store.count() == 205)
+    }
+
+    @Test func countsListensInADateRange() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        _ = try await store.insert(listen(title: "Before", start: -100))
+        _ = try await store.insert(listen(title: "First", start: 10))
+        _ = try await store.insert(listen(title: "Second", start: 90))
+        _ = try await store.insert(listen(title: "After", start: 300))
+
+        let count = try await store.count(in: base ..< base.addingTimeInterval(100))
+
+        #expect(count == 2)
+    }
+
     @Test func freshDatabaseUsesTheCurrentSchemaWithForeignKeysOn() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)

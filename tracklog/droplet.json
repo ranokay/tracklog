@@ -10,9 +10,10 @@
     "minAPI": "1.9.0"
   },
   "minAppVersion": "15.3.0",
-  "capabilities": [],
+  "capabilities": ["clipboard-write", "expanded-surface"],
   "surfaces": [
     "shelf-widget",
+    "expanded-surface",
     "settings-pane"
   ],
   "icon": "Tracklog.icon",

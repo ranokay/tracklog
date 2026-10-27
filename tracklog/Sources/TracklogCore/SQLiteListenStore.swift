@@ -82,9 +82,10 @@ public actor SQLiteListenStore: ListenStore {
         return listen.stored(withID: sqlite3_last_insert_rowid(handle))
     }
 
-    public func recent(limit: Int) async throws -> [Listen] {
+    public func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
         guard limit > 0 else { return [] }
         let handle = try database()
+        let filter = cursor == nil ? "" : "WHERE started_at < ? OR (started_at = ? AND id < ?)"
         let statement = try prepare(
             handle,
             """
@@ -92,45 +93,26 @@ public actor SQLiteListenStore: ListenStore {
                    title, artist, album, album_artist, bundle_id,
                    duration, played_duration, started_at, captured_at
             FROM listens
+            \(filter)
             ORDER BY started_at DESC, id DESC
             LIMIT ?
             """,
         )
         defer { sqlite3_finalize(statement) }
-        sqlite3_bind_int(statement, 1, Int32(limit))
 
-        var listens: [Listen] = []
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                listens.append(
-                    Listen(
-                        id: sqlite3_column_int64(statement, 0),
-                        raw: ListenMetadata(
-                            title: text(statement, 1),
-                            artist: text(statement, 2),
-                            album: text(statement, 3),
-                            albumArtist: text(statement, 4),
-                        ),
-                        processed: ListenMetadata(
-                            title: text(statement, 5),
-                            artist: text(statement, 6),
-                            album: text(statement, 7),
-                            albumArtist: text(statement, 8),
-                        ),
-                        bundleID: text(statement, 9),
-                        duration: sqlite3_column_double(statement, 10),
-                        playedDuration: sqlite3_column_double(statement, 11),
-                        startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
-                        capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
-                    ),
-                )
-            case SQLITE_DONE:
-                return listens
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
+        var index: Int32 = 1
+        if let cursor {
+            let start = cursor.startedAt.timeIntervalSince1970
+            sqlite3_bind_double(statement, index, start)
+            index += 1
+            sqlite3_bind_double(statement, index, start)
+            index += 1
+            sqlite3_bind_int64(statement, index, cursor.id)
+            index += 1
         }
+        sqlite3_bind_int(statement, index, Int32(clamping: limit))
+
+        return try readListens(statement, handle: handle)
     }
 
     // MARK: - Lifecycle
@@ -254,6 +236,41 @@ public actor SQLiteListenStore: ListenStore {
         }
     }
 
+    private func readListens(_ statement: OpaquePointer, handle: OpaquePointer) throws -> [Listen] {
+        var listens: [Listen] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                listens.append(
+                    Listen(
+                        id: sqlite3_column_int64(statement, 0),
+                        raw: ListenMetadata(
+                            title: text(statement, 1),
+                            artist: text(statement, 2),
+                            album: text(statement, 3),
+                            albumArtist: text(statement, 4),
+                        ),
+                        processed: ListenMetadata(
+                            title: text(statement, 5),
+                            artist: text(statement, 6),
+                            album: text(statement, 7),
+                            albumArtist: text(statement, 8),
+                        ),
+                        bundleID: text(statement, 9),
+                        duration: sqlite3_column_double(statement, 10),
+                        playedDuration: sqlite3_column_double(statement, 11),
+                        startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
+                        capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
+                    ),
+                )
+            case SQLITE_DONE:
+                return listens
+            default:
+                throw DatabaseError.sqlite(errorMessage(handle))
+            }
+        }
+    }
+
     private func text(_ statement: OpaquePointer, _ index: Int32) -> String {
         sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
     }
@@ -281,5 +298,28 @@ public actor SQLiteListenStore: ListenStore {
             throw DatabaseError.sqlite("no row for \(sql)")
         }
         return Int(sqlite3_column_int(statement, 0))
+    }
+}
+
+// MARK: - Counting
+
+public extension SQLiteListenStore {
+    func count() async throws -> Int {
+        try Self.intValue(database(), "SELECT COUNT(*) FROM listens")
+    }
+
+    func count(in range: Range<Date>) async throws -> Int {
+        let handle = try database()
+        let statement = try prepare(
+            handle,
+            "SELECT COUNT(*) FROM listens WHERE started_at >= ? AND started_at < ?",
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, range.lowerBound.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, range.upperBound.timeIntervalSince1970)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
+        return Int(sqlite3_column_int64(statement, 0))
     }
 }

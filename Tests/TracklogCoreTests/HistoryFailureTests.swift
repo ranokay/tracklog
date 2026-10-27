@@ -48,7 +48,11 @@ private actor FailingHistoryThenWriteStore: ListenStore {
         throw DatabaseError.sqlite("disk full")
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
+        throw DatabaseError.sqlite("read failed")
+    }
+
+    func count() async throws -> Int {
         throw DatabaseError.sqlite("read failed")
     }
 }
@@ -60,9 +64,13 @@ private actor RecoveringHistoryStore: ListenStore {
         listen.stored(withID: 1)
     }
 
-    func recent(limit _: Int) async throws -> [Listen] {
+    func page(limit _: Int, before _: ListenCursor?) async throws -> [Listen] {
         reads += 1
         guard reads > 1 else { throw DatabaseError.sqlite("read failed") }
         return []
+    }
+
+    func count() async throws -> Int {
+        0
     }
 }
