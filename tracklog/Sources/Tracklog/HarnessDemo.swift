@@ -32,14 +32,16 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore, AppAllowlistStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore {
     private let listens: [Listen]
     private var seenApps: [SeenApp]
+    private var simpleEdits: [SimpleEditRule]
 
     init() {
         listens = Self.makeListens()
         seenApps = SeededPlayers.bundleIDs.map { SeenApp(bundleID: $0, isAllowed: true) }
             + [SeenApp(bundleID: "com.apple.podcasts", isAllowed: false)]
+        simpleEdits = Self.makeSimpleEdits()
     }
 
     func insert(_: Listen) async throws -> Listen? {
@@ -79,6 +81,49 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore {
     func setAllowed(_ bundleID: String, allowed: Bool) async throws {
         guard let index = seenApps.firstIndex(where: { $0.bundleID == bundleID }) else { return }
         seenApps[index].isAllowed = allowed
+    }
+
+    func edits() async throws -> [SimpleEditRule] {
+        SimpleEditRule.sortedForApplication(simpleEdits)
+    }
+
+    @discardableResult
+    func save(_ rule: SimpleEditRule) async throws -> SimpleEditRule {
+        let id = rule.id ?? (simpleEdits.map { $0.id ?? 0 }.max() ?? 0) + 1
+        let stored = rule.stored(withID: id, savedAt: rule.savedAt)
+        if let index = simpleEdits.firstIndex(where: { $0.id == id }) {
+            simpleEdits[index] = stored
+        } else {
+            simpleEdits.append(stored)
+        }
+        return stored
+    }
+
+    func deleteEdit(id: Int64) async throws {
+        simpleEdits.removeAll { $0.id == id }
+    }
+
+    private static func makeSimpleEdits() -> [SimpleEditRule] {
+        [
+            SimpleEditRule(
+                id: 1,
+                match: .init(track: "Heart of Glass", artist: "Blondie"),
+                replacement: .init(album: "Parallel Lines"),
+                savedAt: Date(timeIntervalSince1970: 1_000_000),
+            ),
+            SimpleEditRule(
+                id: 2,
+                match: .init(album: "Unknown Album"),
+                replacement: .init(album: ""),
+                savedAt: Date(timeIntervalSince1970: 999_000),
+            ),
+            SimpleEditRule(
+                id: 3,
+                match: .init(artist: "Talking Heads"),
+                replacement: .init(album: "Remain in Light (Deluxe)"),
+                savedAt: Date(timeIntervalSince1970: 998_000),
+            ),
+        ]
     }
 
     private static func makeListens() -> [Listen] {

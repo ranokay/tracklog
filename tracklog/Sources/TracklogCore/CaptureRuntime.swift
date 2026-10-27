@@ -10,6 +10,7 @@ public final class CaptureRuntime {
     private let source: any NowPlayingSource
     let store: (any ListenStore)?
     let allowlist: any AppAllowlistStore
+    let editStore: (any SimpleEditStore)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     private let sendNowPlaying: (@MainActor (Track) -> Void)?
     private let engine: ScrobbleEngine
@@ -34,6 +35,7 @@ public final class CaptureRuntime {
         source: any NowPlayingSource,
         store: (any ListenStore)?,
         allowlist: any AppAllowlistStore,
+        edits: (any SimpleEditStore)? = nil,
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
@@ -46,6 +48,7 @@ public final class CaptureRuntime {
         self.source = source
         self.store = store
         self.allowlist = allowlist
+        editStore = edits
         self.persistSettings = persistSettings
         self.sendNowPlaying = sendNowPlaying
 
@@ -74,6 +77,7 @@ public final class CaptureRuntime {
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
+        edits: (any SimpleEditStore)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
     ) -> CaptureRuntime {
@@ -95,6 +99,7 @@ public final class CaptureRuntime {
             source: source,
             store: store,
             allowlist: allowlist,
+            edits: edits ?? store,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -118,6 +123,9 @@ public final class CaptureRuntime {
         }
 
         await loadSeenApps()
+        guard finishStart(generation) else { return }
+
+        await loadSimpleEdits()
         guard finishStart(generation) else { return }
 
         if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
@@ -189,7 +197,10 @@ public final class CaptureRuntime {
 
         // A sample without a title and artist after trimming is not a
         // candidate for now playing or history, and must not arm the engine.
-        let observation: MediaSample? = MetadataPipeline.process(sample.track) != nil ? sample : nil
+        let observation: MediaSample? = MetadataPipeline.process(
+            sample.track,
+            edits: state.simpleEdits,
+        ) != nil ? sample : nil
         await consume(observation, into: store)
     }
 
@@ -253,7 +264,7 @@ public final class CaptureRuntime {
     /// nothing new is admitted.
     private func persist(_ scrobble: Scrobble, in store: any ListenStore) async {
         guard !Task.isCancelled, started, state.scrobblingEnabled,
-              let processed = MetadataPipeline.process(scrobble.track)
+              let processed = MetadataPipeline.process(scrobble.track, edits: state.simpleEdits)
         else { return }
         let listen = Listen(scrobble: scrobble, processed: processed, capturedAt: clock.now)
 
