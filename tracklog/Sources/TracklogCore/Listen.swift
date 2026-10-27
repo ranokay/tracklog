@@ -106,6 +106,7 @@ public struct CaptureFailure: Equatable, Sendable {
         case storage
         case history
         case edits
+        case blocks
     }
 
     public let stage: Stage
@@ -155,6 +156,16 @@ public struct CaptureFailure: Equatable, Sendable {
             stage: .edits,
             message: "Edits are unavailable, so no metadata rules are applied.",
             diagnostics: "Tracklog could not read its simple-edit rules.\nError: \(error)",
+        )
+    }
+
+    /// The blocks could not be read. Capture keeps running with the set it
+    /// already has, and the failure is visible rather than silent.
+    public static func blocks(error: Error) -> CaptureFailure {
+        CaptureFailure(
+            stage: .blocks,
+            message: "Blocks could not be read. Capture continues with the blocks it already has.",
+            diagnostics: "Tracklog could not read its block rules. Capture continues with the last loaded set.\nError: \(error)",
         )
     }
 }

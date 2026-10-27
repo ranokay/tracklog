@@ -152,17 +152,8 @@ public struct SimpleEditRule: Identifiable, Equatable, Sendable {
     }
 
     /// The case-insensitive, trimmed identity of the active match fields.
-    ///
-    /// Values are length-prefixed so a value containing the separator cannot
-    /// collide with another rule's tuple.
     var matchKey: String {
-        MetadataField.allCases
-            .map { field in
-                guard let value = match.value(for: field) else { return "0" }
-                let normalized = MetadataField.normalized(value)
-                return "1:\(normalized.count):\(normalized)"
-            }
-            .joined(separator: "\u{1E}")
+        MetadataField.tupleKey(MetadataField.allCases.map { match.value(for: $0) })
     }
 }
 
@@ -174,17 +165,6 @@ public enum SimpleEditRuleValidationError: Error, Equatable, Sendable {
 }
 
 // MARK: - Field plumbing
-
-enum MetadataField: CaseIterable, Hashable, Sendable {
-    case track
-    case artist
-    case album
-    case albumArtist
-
-    static func normalized(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-}
 
 extension SimpleEditRule.Match {
     func value(for field: MetadataField) -> String? {
@@ -204,17 +184,6 @@ extension SimpleEditRule.Replacement {
         case .artist: artist
         case .album: album
         case .albumArtist: albumArtist
-        }
-    }
-}
-
-extension ListenMetadata {
-    mutating func set(_ value: String, for field: MetadataField) {
-        switch field {
-        case .track: title = value
-        case .artist: artist = value
-        case .album: album = value
-        case .albumArtist: albumArtist = value
         }
     }
 }

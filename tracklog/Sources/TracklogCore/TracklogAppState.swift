@@ -15,6 +15,8 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var seenApps: [SeenApp] = []
     /// Saved simple edits, in the order the metadata pipeline applies them.
     @Published public internal(set) var simpleEdits: [SimpleEditRule] = []
+    /// Saved blocks, in the order the metadata pipeline evaluates them.
+    @Published public internal(set) var blocks: [BlockRule] = []
     @Published public internal(set) var nowPlaying: MediaSample?
     @Published public internal(set) var status: ScrobbleStatus = .idle
     @Published public internal(set) var feedAvailable = true

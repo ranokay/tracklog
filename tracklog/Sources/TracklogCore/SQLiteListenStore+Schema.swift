@@ -79,6 +79,22 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 4) { handle in
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE blocks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        match_key TEXT NOT NULL UNIQUE,
+                        track TEXT NOT NULL DEFAULT '',
+                        artist TEXT NOT NULL DEFAULT '',
+                        album TEXT NOT NULL DEFAULT '',
+                        album_artist TEXT NOT NULL DEFAULT '',
+                        saved_at REAL NOT NULL
+                    );
+                    """,
+                )
+            },
         ]
     }
 }

@@ -32,16 +32,18 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore {
     private let listens: [Listen]
     private var seenApps: [SeenApp]
     private var simpleEdits: [SimpleEditRule]
+    private var blockRules: [BlockRule]
 
     init() {
         listens = Self.makeListens()
         seenApps = SeededPlayers.bundleIDs.map { SeenApp(bundleID: $0, isAllowed: true) }
             + [SeenApp(bundleID: "com.apple.podcasts", isAllowed: false)]
         simpleEdits = Self.makeSimpleEdits()
+        blockRules = Self.makeBlocks()
     }
 
     func insert(_: Listen) async throws -> Listen? {
@@ -125,6 +127,71 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore {
             && normalized(lhs.artist) == normalized(rhs.artist)
             && normalized(lhs.album) == normalized(rhs.album)
             && normalized(lhs.albumArtist) == normalized(rhs.albumArtist)
+    }
+
+    func blocks() async throws -> [BlockRule] {
+        BlockRule.sortedForEvaluation(blockRules)
+    }
+
+    @discardableResult
+    func save(_ block: BlockRule) async throws -> BlockRule {
+        if let error = block.validationError {
+            throw error
+        }
+        let id = block.id ?? (blockRules.map { $0.id ?? 0 }.max() ?? 0) + 1
+
+        // Editing a tuple removes the old row; the tuple itself is the block's
+        // identity, as it is in the real store.
+        if let old = blockRules.firstIndex(where: { $0.id == id }),
+           !Self.sameBlock(blockRules[old], block) {
+            blockRules.remove(at: old)
+        }
+
+        if let index = blockRules.firstIndex(where: { Self.sameBlock($0, block) }) {
+            let existingID = blockRules[index].id ?? id
+            let stored = block.stored(withID: existingID, savedAt: block.savedAt)
+            blockRules[index] = stored
+            return stored
+        }
+
+        let stored = block.stored(withID: id, savedAt: block.savedAt)
+        blockRules.append(stored)
+        return stored
+    }
+
+    func deleteBlock(id: Int64) async throws {
+        blockRules.removeAll { $0.id == id }
+    }
+
+    private static func sameBlock(_ lhs: BlockRule, _ rhs: BlockRule) -> Bool {
+        normalized(lhs.track) == normalized(rhs.track)
+            && normalized(lhs.artist) == normalized(rhs.artist)
+            && normalized(lhs.album) == normalized(rhs.album)
+            && normalized(lhs.albumArtist) == normalized(rhs.albumArtist)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func makeBlocks() -> [BlockRule] {
+        [
+            BlockRule(
+                id: 1,
+                artist: "The Daily",
+                savedAt: Date(timeIntervalSince1970: 1_000_000),
+            ),
+            BlockRule(
+                id: 2,
+                track: "Baby Shark",
+                savedAt: Date(timeIntervalSince1970: 999_500),
+            ),
+            BlockRule(
+                id: 3,
+                album: "Sleep Sounds",
+                savedAt: Date(timeIntervalSince1970: 999_000),
+            ),
+        ]
     }
 
     private static func makeSimpleEdits() -> [SimpleEditRule] {

@@ -304,3 +304,22 @@ func simpleEditRule(
 ) -> SimpleEditRule {
     SimpleEditRule(id: id, match: match, replacement: replace, savedAt: savedAt)
 }
+
+/// A block fixture shared by the metadata, store and capture suites.
+func blockRule(
+    id: Int64? = nil,
+    track: String = "",
+    artist: String = "",
+    album: String = "",
+    albumArtist: String = "",
+    savedAt: Date = Date(timeIntervalSince1970: 1_000_000),
+) -> BlockRule {
+    BlockRule(
+        id: id,
+        track: track,
+        artist: artist,
+        album: album,
+        albumArtist: albumArtist,
+        savedAt: savedAt,
+    )
+}
