@@ -295,5 +295,7 @@ private actor FailingEditStore: SimpleEditStore {
         rule
     }
 
-    func deleteEdit(id _: Int64) async throws {}
+    func deleteEdit(id _: Int64) async throws {
+        // The fixture only exercises a failed read; there is nothing to delete.
+    }
 }
