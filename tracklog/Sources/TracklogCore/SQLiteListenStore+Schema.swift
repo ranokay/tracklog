@@ -59,6 +59,26 @@ extension SQLiteListenStore {
                 // A later open never reruns it, so a denial survives.
                 try seedDefaultApps(handle)
             },
+            Migration(version: 3) { handle in
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE simple_edits (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        match_key TEXT NOT NULL UNIQUE,
+                        match_track TEXT,
+                        match_artist TEXT,
+                        match_album TEXT,
+                        match_album_artist TEXT,
+                        replacement_track TEXT,
+                        replacement_artist TEXT,
+                        replacement_album TEXT,
+                        replacement_album_artist TEXT,
+                        saved_at REAL NOT NULL
+                    );
+                    """,
+                )
+            },
         ]
     }
 }

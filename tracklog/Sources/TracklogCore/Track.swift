@@ -37,6 +37,19 @@ public struct Track: Equatable, Sendable {
     public var isEmpty: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// The same play with the pipeline's four display fields. Duration and
+    /// source stay with the observation.
+    func replacingMetadata(_ metadata: ListenMetadata) -> Track {
+        Track(
+            title: metadata.title,
+            artist: metadata.artist,
+            album: metadata.album,
+            albumArtist: metadata.albumArtist,
+            duration: duration,
+            bundleID: bundleID,
+        )
+    }
 }
 
 /// One observation of the system's now-playing feed.
@@ -61,6 +74,16 @@ public struct MediaSample: Equatable, Sendable {
         self.playbackRate = playbackRate
         self.isPlaying = isPlaying
         self.timestamp = timestamp
+    }
+
+    func replacingMetadata(_ metadata: ListenMetadata) -> MediaSample {
+        MediaSample(
+            track: track.replacingMetadata(metadata),
+            elapsed: elapsed,
+            playbackRate: playbackRate,
+            isPlaying: isPlaying,
+            timestamp: timestamp,
+        )
     }
 }
 

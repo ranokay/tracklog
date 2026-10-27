@@ -105,6 +105,7 @@ public struct CaptureFailure: Equatable, Sendable {
         case database
         case storage
         case history
+        case edits
     }
 
     public let stage: Stage
@@ -144,6 +145,16 @@ public struct CaptureFailure: Equatable, Sendable {
             stage: .history,
             message: "History could not be loaded from this Mac.",
             diagnostics: "Tracklog could not read its local history database.\nError: \(error)",
+        )
+    }
+
+    /// The simple-edit rules could not be read. Capture keeps running without
+    /// them rather than applying a stale or empty set silently.
+    public static func edits(error: Error) -> CaptureFailure {
+        CaptureFailure(
+            stage: .edits,
+            message: "Edits are unavailable, so no metadata rules are applied.",
+            diagnostics: "Tracklog could not read its simple-edit rules.\nError: \(error)",
         )
     }
 }

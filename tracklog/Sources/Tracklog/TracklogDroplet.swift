@@ -44,6 +44,7 @@ public final class TracklogDroplet: NSObject, Droplet {
                 source: HarnessDemoSource(),
                 store: store,
                 allowlist: store,
+                edits: store,
                 settings: CaptureSettings(scrobblingEnabled: true),
             )
         } else {
@@ -213,6 +214,18 @@ public final class TracklogDroplet: NSObject, Droplet {
         }
     }
 
+    // MARK: - Edits
+
+    func saveSimpleEdit(_ rule: SimpleEditRule) async throws {
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
+        try await runtime.saveSimpleEdit(rule)
+    }
+
+    func deleteSimpleEdit(id: Int64) async throws {
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
+        try await runtime.deleteSimpleEdit(id: id)
+    }
+
     /// The player's display name, for the widget's status line.
     public var sourceName: String? {
         guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
@@ -255,8 +268,14 @@ extension TracklogDroplet: SettingsPagesProviding {
     }
 
     public func makeSettingsPage(id: String, context _: SettingsPaneContext) -> AnyView? {
-        guard id == tracklogAppsPageID else { return nil }
-        return AnyView(TracklogAppsPage(droplet: self, state: state))
+        switch id {
+        case tracklogAppsPageID:
+            AnyView(TracklogAppsPage(droplet: self, state: state))
+        case tracklogEditsPageID:
+            AnyView(TracklogEditsPage(droplet: self, state: state))
+        default:
+            nil
+        }
     }
 
     public var settingsSearchEntries: [SettingsSearchEntry] {
@@ -280,6 +299,10 @@ extension TracklogDroplet: SettingsPagesProviding {
             SettingsSearchEntry(
                 title: "Apps",
                 keywords: ["apps", "players", "allow", "deny"],
+            ),
+            SettingsSearchEntry(
+                title: "Edits",
+                keywords: ["edits", "metadata", "title", "artist", "album", "fix"],
             ),
             SettingsSearchEntry(
                 title: "Services",

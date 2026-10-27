@@ -32,14 +32,16 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore, AppAllowlistStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore {
     private let listens: [Listen]
     private var seenApps: [SeenApp]
+    private var simpleEdits: [SimpleEditRule]
 
     init() {
         listens = Self.makeListens()
         seenApps = SeededPlayers.bundleIDs.map { SeenApp(bundleID: $0, isAllowed: true) }
             + [SeenApp(bundleID: "com.apple.podcasts", isAllowed: false)]
+        simpleEdits = Self.makeSimpleEdits()
     }
 
     func insert(_: Listen) async throws -> Listen? {
@@ -79,6 +81,73 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore {
     func setAllowed(_ bundleID: String, allowed: Bool) async throws {
         guard let index = seenApps.firstIndex(where: { $0.bundleID == bundleID }) else { return }
         seenApps[index].isAllowed = allowed
+    }
+
+    func edits() async throws -> [SimpleEditRule] {
+        SimpleEditRule.sortedForApplication(simpleEdits)
+    }
+
+    @discardableResult
+    func save(_ rule: SimpleEditRule) async throws -> SimpleEditRule {
+        if let error = rule.validationError {
+            throw error
+        }
+        let id = rule.id ?? (simpleEdits.map { $0.id ?? 0 }.max() ?? 0) + 1
+
+        // Editing a tuple removes the old row; the tuple itself is the rule's
+        // identity, as it is in the real store.
+        if let old = simpleEdits.firstIndex(where: { $0.id == id }),
+           !Self.sameMatch(simpleEdits[old].match, rule.match) {
+            simpleEdits.remove(at: old)
+        }
+
+        if let index = simpleEdits.firstIndex(where: { Self.sameMatch($0.match, rule.match) }) {
+            let existingID = simpleEdits[index].id ?? id
+            let stored = rule.stored(withID: existingID, savedAt: rule.savedAt)
+            simpleEdits[index] = stored
+            return stored
+        }
+
+        let stored = rule.stored(withID: id, savedAt: rule.savedAt)
+        simpleEdits.append(stored)
+        return stored
+    }
+
+    func deleteEdit(id: Int64) async throws {
+        simpleEdits.removeAll { $0.id == id }
+    }
+
+    private static func sameMatch(_ lhs: SimpleEditRule.Match, _ rhs: SimpleEditRule.Match) -> Bool {
+        func normalized(_ value: String?) -> String? {
+            value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        return normalized(lhs.track) == normalized(rhs.track)
+            && normalized(lhs.artist) == normalized(rhs.artist)
+            && normalized(lhs.album) == normalized(rhs.album)
+            && normalized(lhs.albumArtist) == normalized(rhs.albumArtist)
+    }
+
+    private static func makeSimpleEdits() -> [SimpleEditRule] {
+        [
+            SimpleEditRule(
+                id: 1,
+                match: .init(track: "Heart of Glass", artist: "Blondie"),
+                replacement: .init(album: "Parallel Lines"),
+                savedAt: Date(timeIntervalSince1970: 1_000_000),
+            ),
+            SimpleEditRule(
+                id: 2,
+                match: .init(album: "Rumours"),
+                replacement: .init(album: ""),
+                savedAt: Date(timeIntervalSince1970: 999_000),
+            ),
+            SimpleEditRule(
+                id: 3,
+                match: .init(artist: "Talking Heads"),
+                replacement: .init(album: "Remain in Light (Deluxe)"),
+                savedAt: Date(timeIntervalSince1970: 998_000),
+            ),
+        ]
     }
 
     private static func makeListens() -> [Listen] {

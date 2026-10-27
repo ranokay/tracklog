@@ -59,6 +59,20 @@ struct TracklogSettings: View {
                 }
             }
 
+            DropletSettingsSection {
+                settingsSectionHeader("Metadata")
+            } content: {
+                DropletSettingsCard {
+                    DropletSettingsPageLink(
+                        "Edits",
+                        subtitle: "Fix recurring titles, artists and albums.",
+                        page: tracklogEditsPageID,
+                    ) {
+                        SettingsLinkTile(systemImage: "text.badge.checkmark")
+                    }
+                }
+            }
+
             if let failure = state.failure {
                 DropletSettingsSection {
                     settingsSectionHeader("Storage")
@@ -244,6 +258,7 @@ struct TracklogSettings: View {
         case .database: "Unavailable"
         case .storage: "Write failed"
         case .history: "Read failed"
+        case .edits: "Read failed"
         }
     }
 }

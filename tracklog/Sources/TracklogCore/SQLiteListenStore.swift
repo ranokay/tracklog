@@ -3,6 +3,7 @@ import SQLite3
 
 public enum DatabaseError: Error, Equatable, CustomStringConvertible {
     case open(String)
+    case unavailable(String)
     case sqlite(String)
     case newerSchema(found: Int, supported: Int)
     case migrationFailed(version: Int, message: String)
@@ -11,6 +12,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
         switch self {
         case let .open(message):
             "the database could not be opened: \(message)"
+        case let .unavailable(message):
+            "the database is unavailable: \(message)"
         case let .sqlite(message):
             "SQLite reported: \(message)"
         case let .newerSchema(found, supported):
@@ -23,8 +26,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 
 /// One SQLite file in the droplet's container: local history, versioned
 /// migrations, and the durable duplicate key.
-public actor SQLiteListenStore: ListenStore, AppAllowlistStore {
-    public static let schemaVersion = 2
+public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore {
+    public static let schemaVersion = 3
 
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
