@@ -91,40 +91,42 @@ public final class AppleScriptAutomationProbe: MediaAutomationProbing {
 
     private nonisolated static func probeMusic(_ candidate: MediaAutomationCandidate) -> MediaAutomationProbe {
         guard let script = NSAppleScript(source: """
-        tell application "Music"
-            set stateText to (player state as string)
-            if stateText is not "playing" then return stateText
-            set currentTrack to current track
-            set sep to (ASCII character 31)
-            set titleText to ""
-            try
-                set titleText to (name of currentTrack) as string
-            end try
-            set artistText to ""
-            try
-                set artistText to (artist of currentTrack) as string
-            end try
-            set albumText to ""
-            try
-                set albumText to (album of currentTrack) as string
-            end try
-            set albumArtistText to ""
-            try
-                set albumArtistText to (album artist of currentTrack) as string
-            end try
-            set durationText to "0"
-            try
-                set durationText to ((duration of currentTrack) as integer) as string
-            end try
-            set positionText to "0"
-            try
-                set positionText to ((player position) as integer) as string
-            end try
-            set outputText to stateText & sep & titleText & sep & artistText
-            set outputText to outputText & sep & albumText & sep & albumArtistText
-            set outputText to outputText & sep & durationText & sep & positionText
-            return outputText
-        end tell
+        with timeout of 2 seconds
+            tell application "Music"
+                set stateText to (player state as string)
+                if stateText is not "playing" then return stateText
+                set currentTrack to current track
+                set sep to (ASCII character 31)
+                set titleText to ""
+                try
+                    set titleText to (name of currentTrack) as string
+                end try
+                set artistText to ""
+                try
+                    set artistText to (artist of currentTrack) as string
+                end try
+                set albumText to ""
+                try
+                    set albumText to (album of currentTrack) as string
+                end try
+                set albumArtistText to ""
+                try
+                    set albumArtistText to (album artist of currentTrack) as string
+                end try
+                set durationText to "0"
+                try
+                    set durationText to ((duration of currentTrack) as integer) as string
+                end try
+                set positionText to "0"
+                try
+                    set positionText to ((player position) as integer) as string
+                end try
+                set outputText to stateText & sep & titleText & sep & artistText
+                set outputText to outputText & sep & albumText & sep & albumArtistText
+                set outputText to outputText & sep & durationText & sep & positionText
+                return outputText
+            end tell
+        end timeout
         """) else {
             return .failed("Could not compile the \(candidate.displayName) script")
         }
@@ -133,40 +135,42 @@ public final class AppleScriptAutomationProbe: MediaAutomationProbing {
 
     private nonisolated static func probeSpotify(_ candidate: MediaAutomationCandidate) -> MediaAutomationProbe {
         guard let script = NSAppleScript(source: """
-        tell application "Spotify"
-            set stateText to (player state as string)
-            if stateText is not "playing" then return stateText
-            set currentTrack to current track
-            set sep to (ASCII character 31)
-            set titleText to ""
-            try
-                set titleText to (name of currentTrack) as string
-            end try
-            set artistText to ""
-            try
-                set artistText to (artist of currentTrack) as string
-            end try
-            set albumText to ""
-            try
-                set albumText to (album of currentTrack) as string
-            end try
-            set albumArtistText to ""
-            try
-                set albumArtistText to (album artist of currentTrack) as string
-            end try
-            set durationText to "0"
-            try
-                set durationText to ((duration of currentTrack) as integer) as string
-            end try
-            set positionText to "0"
-            try
-                set positionText to ((player position) as integer) as string
-            end try
-            set outputText to stateText & sep & titleText & sep & artistText
-            set outputText to outputText & sep & albumText & sep & albumArtistText
-            set outputText to outputText & sep & durationText & sep & positionText
-            return outputText
-        end tell
+        with timeout of 2 seconds
+            tell application "Spotify"
+                set stateText to (player state as string)
+                if stateText is not "playing" then return stateText
+                set currentTrack to current track
+                set sep to (ASCII character 31)
+                set titleText to ""
+                try
+                    set titleText to (name of currentTrack) as string
+                end try
+                set artistText to ""
+                try
+                    set artistText to (artist of currentTrack) as string
+                end try
+                set albumText to ""
+                try
+                    set albumText to (album of currentTrack) as string
+                end try
+                set albumArtistText to ""
+                try
+                    set albumArtistText to (album artist of currentTrack) as string
+                end try
+                set durationText to "0"
+                try
+                    set durationText to ((duration of currentTrack) as integer) as string
+                end try
+                set positionText to "0"
+                try
+                    set positionText to ((player position) as integer) as string
+                end try
+                set outputText to stateText & sep & titleText & sep & artistText
+                set outputText to outputText & sep & albumText & sep & albumArtistText
+                set outputText to outputText & sep & durationText & sep & positionText
+                return outputText
+            end tell
+        end timeout
         """) else {
             return .failed("Could not compile the \(candidate.displayName) script")
         }
