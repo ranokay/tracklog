@@ -209,15 +209,6 @@ extension SimpleEditRule.Replacement {
 }
 
 extension ListenMetadata {
-    func value(for field: MetadataField) -> String {
-        switch field {
-        case .track: title
-        case .artist: artist
-        case .album: album
-        case .albumArtist: albumArtist
-        }
-    }
-
     mutating func set(_ value: String, for field: MetadataField) {
         switch field {
         case .track: title = value

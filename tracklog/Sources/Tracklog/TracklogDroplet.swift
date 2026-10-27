@@ -217,12 +217,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     // MARK: - Edits
 
     func saveSimpleEdit(_ rule: SimpleEditRule) async throws {
-        guard let runtime else { return }
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
         try await runtime.saveSimpleEdit(rule)
     }
 
     func deleteSimpleEdit(id: Int64) async throws {
-        guard let runtime else { return }
+        guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
         try await runtime.deleteSimpleEdit(id: id)
     }
 

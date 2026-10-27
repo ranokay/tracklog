@@ -60,6 +60,10 @@ extension SQLiteListenStore {
                 replacement_album_artist, saved_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(match_key) DO UPDATE SET
+                match_track = excluded.match_track,
+                match_artist = excluded.match_artist,
+                match_album = excluded.match_album,
+                match_album_artist = excluded.match_album_artist,
                 replacement_track = excluded.replacement_track,
                 replacement_artist = excluded.replacement_artist,
                 replacement_album = excluded.replacement_album,

@@ -6,24 +6,10 @@ import Testing
 struct SimpleEditStoreTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
 
-    private func rule(
-        id: Int64? = nil,
-        match: SimpleEditRule.Match,
-        replace: SimpleEditRule.Replacement,
-        savedAt: TimeInterval = 0,
-    ) -> SimpleEditRule {
-        SimpleEditRule(
-            id: id,
-            match: match,
-            replacement: replace,
-            savedAt: base.addingTimeInterval(savedAt),
-        )
-    }
-
     @Test func savesAndReadsBackEveryField() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
-        let original = rule(
+        let original = simpleEditRule(
             match: .init(track: "Song", artist: "Artist", album: "Album", albumArtist: "Album Artist"),
             replace: .init(track: "Fixed Song", artist: "Fixed Artist", album: "", albumArtist: "Fixed Album Artist"),
         )
@@ -42,7 +28,7 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let saved = try await store.save(
-            rule(match: .init(track: "Song"), replace: .init(album: "Fixed Album")),
+            simpleEditRule(match: .init(track: "Song"), replace: .init(album: "Fixed Album")),
         )
 
         let loaded = try #require(try await store.edits().first)
@@ -60,14 +46,14 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let first = try await store.save(
-            rule(match: .init(track: "Song", artist: "Artist"), replace: .init(album: "Old Album")),
+            simpleEditRule(match: .init(track: "Song", artist: "Artist"), replace: .init(album: "Old Album")),
         )
 
         let replacement = try await store.save(
-            rule(
+            simpleEditRule(
                 match: .init(track: "  song ", artist: "ARTIST"),
                 replace: .init(artist: "Fixed Artist", album: "New Album"),
-                savedAt: 10,
+                savedAt: base.addingTimeInterval(10),
             ),
         )
 
@@ -75,6 +61,7 @@ struct SimpleEditStoreTests {
 
         #expect(loaded.count == 1)
         #expect(loaded.first?.id == first.id)
+        #expect(loaded.first?.match == replacement.match)
         #expect(loaded.first?.replacement.album == "New Album")
         #expect(loaded.first?.replacement.artist == "Fixed Artist")
         #expect(loaded.first?.savedAt == replacement.savedAt)
@@ -83,12 +70,12 @@ struct SimpleEditStoreTests {
     @Test func anInactiveFieldMakesANewMatchTuple() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
-        _ = try await store.save(rule(match: .init(track: "Song"), replace: .init(album: "One")))
+        _ = try await store.save(simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One")))
         _ = try await store.save(
-            rule(match: .init(track: "Song", artist: "Artist"), replace: .init(album: "Two")),
+            simpleEditRule(match: .init(track: "Song", artist: "Artist"), replace: .init(album: "Two")),
         )
         _ = try await store.save(
-            rule(match: .init(track: "Song", album: ""), replace: .init(album: "Three")),
+            simpleEditRule(match: .init(track: "Song", album: ""), replace: .init(album: "Three")),
         )
 
         #expect(try await store.edits().count == 3)
@@ -98,13 +85,21 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         _ = try await store.save(
-            rule(match: .init(track: "Song"), replace: .init(album: "Broad"), savedAt: 30),
+            simpleEditRule(match: .init(track: "Song"), replace: .init(album: "Broad"), savedAt: base.addingTimeInterval(30)),
         )
         _ = try await store.save(
-            rule(match: .init(track: "Song", artist: "Artist"), replace: .init(album: "Older"), savedAt: 10),
+            simpleEditRule(
+                match: .init(track: "Song", artist: "Artist"),
+                replace: .init(album: "Older"),
+                savedAt: base.addingTimeInterval(10),
+            ),
         )
         _ = try await store.save(
-            rule(match: .init(track: "Song", album: "Album"), replace: .init(album: "Newer"), savedAt: 20),
+            simpleEditRule(
+                match: .init(track: "Song", album: "Album"),
+                replace: .init(album: "Newer"),
+                savedAt: base.addingTimeInterval(20),
+            ),
         )
 
         let loaded = try await store.edits()
@@ -116,11 +111,11 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let first = try await store.save(
-            rule(match: .init(track: "Song"), replace: .init(album: "One")),
+            simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One")),
         )
 
         let edited = try await store.save(
-            rule(id: first.id, match: .init(album: "Album"), replace: .init(album: "Two")),
+            simpleEditRule(id: first.id, match: .init(album: "Album"), replace: .init(album: "Two")),
         )
         let loaded = try await store.edits()
 
@@ -133,7 +128,7 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let saved = try #require(
-            try await store.save(rule(match: .init(track: "Song"), replace: .init(album: "One"))),
+            try await store.save(simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One"))),
         )
 
         try await store.deleteEdit(id: saved.id ?? -1)
@@ -145,7 +140,7 @@ struct SimpleEditStoreTests {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let saved = try await store.save(
-            rule(match: .init(track: "Song"), replace: .init(album: "One"), savedAt: 5),
+            simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One"), savedAt: base.addingTimeInterval(5)),
         )
         await store.close()
 
@@ -188,19 +183,19 @@ struct SimpleEditStoreTests {
         let store = try SQLiteListenStore(url: database.url)
 
         await #expect(throws: SimpleEditRuleValidationError.noMatchFields) {
-            _ = try await store.save(rule(match: .init(), replace: .init(album: "One")))
+            _ = try await store.save(simpleEditRule(match: .init(), replace: .init(album: "One")))
         }
         await #expect(throws: SimpleEditRuleValidationError.noReplacements) {
-            _ = try await store.save(rule(match: .init(track: "Song"), replace: .init()))
+            _ = try await store.save(simpleEditRule(match: .init(track: "Song"), replace: .init()))
         }
         await #expect(throws: SimpleEditRuleValidationError.cannotClearTrack) {
             _ = try await store.save(
-                rule(match: .init(track: "Song"), replace: .init(track: "", artist: "Artist")),
+                simpleEditRule(match: .init(track: "Song"), replace: .init(track: "", artist: "Artist")),
             )
         }
         await #expect(throws: SimpleEditRuleValidationError.cannotClearArtist) {
             _ = try await store.save(
-                rule(match: .init(artist: "Artist"), replace: .init(artist: "  ")),
+                simpleEditRule(match: .init(artist: "Artist"), replace: .init(artist: "  ")),
             )
         }
 

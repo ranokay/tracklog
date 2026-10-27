@@ -77,7 +77,6 @@ public final class CaptureRuntime {
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
-        edits: (any SimpleEditStore)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
     ) -> CaptureRuntime {
@@ -99,7 +98,7 @@ public final class CaptureRuntime {
             source: source,
             store: store,
             allowlist: allowlist,
-            edits: edits ?? store,
+            edits: store,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -187,7 +186,7 @@ public final class CaptureRuntime {
         // playing, no history and no delivery, and its sample must not keep an
         // older allowed session alive.
         guard let sample, await isAppAllowed(sample.track.bundleID) else {
-            await consume(nil, into: store)
+            await consume(nil, raw: nil, into: store)
             return
         }
 
@@ -195,23 +194,31 @@ public final class CaptureRuntime {
         // landed in the meantime. Do not let the sample re-arm the engine.
         guard !Task.isCancelled, started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
-        // A sample without a title and artist after trimming is not a
-        // candidate for now playing or history, and must not arm the engine.
-        let observation: MediaSample? = MetadataPipeline.process(
-            sample.track,
-            edits: state.simpleEdits,
-        ) != nil ? sample : nil
-        await consume(observation, into: store)
+        // A sample the metadata pipeline rejects (no title or artist after
+        // cleanup, edits and trimming) is not a candidate for now playing or
+        // history, and must not arm the engine.
+        guard let processed = MetadataPipeline.process(sample.track, edits: state.simpleEdits) else {
+            await consume(nil, raw: nil, into: store)
+            return
+        }
+
+        // Now playing shows the processed values; the engine keeps the raw
+        // observation so its session identity stays the player's.
+        await consume(sample.replacingMetadata(processed), raw: sample, into: store)
     }
 
-    private func consume(_ observation: MediaSample?, into store: any ListenStore) async {
+    private func consume(
+        _ displayed: MediaSample?,
+        raw: MediaSample?,
+        into store: any ListenStore,
+    ) async {
         // The allowlist read can suspend, and pause or switch-off can land
         // while it is in flight. Re-check every gate so a stale sample cannot
         // re-arm a feed that was just stopped.
         guard started, state.scrobblingEnabled, state.pausedUntil == nil else { return }
 
-        state.nowPlaying = observation
-        let effects = engine.ingest(observation)
+        state.nowPlaying = displayed
+        let effects = engine.ingest(raw)
         state.status = engine.status
 
         for effect in effects {
@@ -220,7 +227,8 @@ public final class CaptureRuntime {
                 // Applied at send time, not at capture: the widget still
                 // shows the track, and its listen still becomes history.
                 if state.nowPlayingEnabled {
-                    sendNowPlaying?(track)
+                    let processed = MetadataPipeline.process(track, edits: state.simpleEdits)
+                    sendNowPlaying?(processed.map(track.replacingMetadata) ?? track)
                 }
             case let .scrobble(scrobble):
                 await persist(scrobble, in: store)

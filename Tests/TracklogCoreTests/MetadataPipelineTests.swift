@@ -4,6 +4,8 @@ import Testing
 
 @Suite("Metadata pipeline")
 struct MetadataPipelineTests {
+    private let base = Date(timeIntervalSince1970: 1_000_000)
+
     private func track(
         title: String = "Song",
         artist: String = "Artist",
@@ -13,22 +15,10 @@ struct MetadataPipelineTests {
         Track(title: title, artist: artist, album: album, albumArtist: albumArtist)
     }
 
-    private func rule(
-        match: SimpleEditRule.Match = .init(),
-        replace: SimpleEditRule.Replacement = .init(),
-        savedAt: TimeInterval = 0,
-    ) -> SimpleEditRule {
-        SimpleEditRule(
-            match: match,
-            replacement: replace,
-            savedAt: Date(timeIntervalSince1970: 1_000_000 + savedAt),
-        )
-    }
-
     // MARK: - Sentinel cleanup
 
     @Test func sentinelCleanupRunsBeforeRules() throws {
-        let cleanup = rule(
+        let cleanup = simpleEditRule(
             match: .init(album: "Unknown Album"),
             replace: .init(track: "Rule ran"),
         )
@@ -84,7 +74,7 @@ struct MetadataPipelineTests {
     // MARK: - Matching
 
     @Test func matchingIsCaseInsensitiveAndTrimsOnlyWhitespace() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(track: "  sOnG ", artist: "ARTIST"),
             replace: .init(album: "Fixed"),
         )
@@ -100,7 +90,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func internalWhitespaceStillHasToMatchExactly() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(track: "A Song"),
             replace: .init(album: "Fixed"),
         )
@@ -113,7 +103,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func anInactiveMatchFieldIsAWildcard() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(album: "Album"),
             replace: .init(artist: "Fixed Artist"),
         )
@@ -129,7 +119,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func everyActiveMatchFieldMustMatch() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(track: "Song", artist: "Someone Else"),
             replace: .init(album: "Fixed"),
         )
@@ -140,7 +130,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func anEnabledEmptyMatchFieldMatchesAnEmptyField() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(album: ""),
             replace: .init(artist: "Fixed Artist"),
         )
@@ -159,20 +149,20 @@ struct MetadataPipelineTests {
     // MARK: - Merging
 
     @Test func rulesMergePerFieldBySpecificityThenRecency() throws {
-        let broad = rule(
+        let broad = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(artist: "Broad Artist", album: "Broad Album"),
-            savedAt: 2,
+            savedAt: base.addingTimeInterval(2),
         )
-        let specific = rule(
+        let specific = simpleEditRule(
             match: .init(track: "song", artist: "artist"),
             replace: .init(artist: "Specific Artist"),
-            savedAt: 1,
+            savedAt: base.addingTimeInterval(1),
         )
-        let newest = rule(
+        let newest = simpleEditRule(
             match: .init(track: "song", artist: "artist"),
             replace: .init(artist: "Newest Artist"),
-            savedAt: 3,
+            savedAt: base.addingTimeInterval(3),
         )
 
         let processed = try #require(
@@ -184,15 +174,15 @@ struct MetadataPipelineTests {
     }
 
     @Test func theFirstRuleToClaimAFieldWins() throws {
-        let specific = rule(
+        let specific = simpleEditRule(
             match: .init(track: "song", artist: "artist"),
             replace: .init(album: "Specific Album"),
-            savedAt: 1,
+            savedAt: base.addingTimeInterval(1),
         )
-        let broad = rule(
+        let broad = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(album: "Broad Album"),
-            savedAt: 2,
+            savedAt: base.addingTimeInterval(2),
         )
 
         let processed = try #require(
@@ -203,17 +193,17 @@ struct MetadataPipelineTests {
     }
 
     @Test func everyMatchingRuleRunsWithNoChaining() throws {
-        let first = rule(
+        let first = simpleEditRule(
             match: .init(track: "song", artist: "artist"),
             replace: .init(artist: "Changed Artist"),
-            savedAt: 1,
+            savedAt: base.addingTimeInterval(1),
         )
         // The second rule matches the original artist, not the first rule's
         // output. Rule chaining would make this replacement depend on order.
-        let second = rule(
+        let second = simpleEditRule(
             match: .init(artist: "artist"),
             replace: .init(album: "Matched Original"),
-            savedAt: 2,
+            savedAt: base.addingTimeInterval(2),
         )
 
         let processed = try #require(
@@ -227,7 +217,7 @@ struct MetadataPipelineTests {
     // MARK: - Replacements
 
     @Test func aDisabledReplacementLeavesTheFieldAlone() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(track: "Fixed Title"),
         )
@@ -241,7 +231,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func anEmptyReplacementClearsAlbumAndAlbumArtist() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(artist: "artist"),
             replace: .init(album: "", albumArtist: ""),
         )
@@ -253,7 +243,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func emptyTrackAndArtistReplacementsAreIgnored() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(artist: "artist"),
             replace: .init(track: "", artist: "  ", album: "Fixed Album"),
         )
@@ -266,7 +256,7 @@ struct MetadataPipelineTests {
     }
 
     @Test func replacementWhitespaceIsTrimmedByTheFinalTrim() throws {
-        let edit = rule(
+        let edit = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(album: "  Fixed Album  "),
         )
@@ -296,7 +286,7 @@ struct MetadataPipelineTests {
 
 @Suite("Simple edit validation")
 struct SimpleEditValidationTests {
-    private func rule(
+    private func simpleEditRule(
         match: SimpleEditRule.Match = .init(),
         replace: SimpleEditRule.Replacement = .init(),
     ) -> SimpleEditRule {
@@ -304,19 +294,19 @@ struct SimpleEditValidationTests {
     }
 
     @Test func aRuleNeedsAnActiveMatchField() {
-        let invalid = rule(replace: .init(album: "Fixed"))
+        let invalid = simpleEditRule(replace: .init(album: "Fixed"))
 
         #expect(invalid.validationError == .noMatchFields)
     }
 
     @Test func aRuleNeedsAnActiveReplacement() {
-        let invalid = rule(match: .init(track: "song"))
+        let invalid = simpleEditRule(match: .init(track: "song"))
 
         #expect(invalid.validationError == .noReplacements)
     }
 
     @Test func aRuleCannotClearTheTitle() {
-        let invalid = rule(
+        let invalid = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(track: "", artist: "Fixed Artist"),
         )
@@ -325,7 +315,7 @@ struct SimpleEditValidationTests {
     }
 
     @Test func aRuleCannotClearTheArtist() {
-        let invalid = rule(
+        let invalid = simpleEditRule(
             match: .init(artist: "artist"),
             replace: .init(artist: "  "),
         )
@@ -334,7 +324,7 @@ struct SimpleEditValidationTests {
     }
 
     @Test func aValidRulePassesValidation() {
-        let valid = rule(
+        let valid = simpleEditRule(
             match: .init(album: ""),
             replace: .init(album: "", albumArtist: "Fixed Album Artist"),
         )

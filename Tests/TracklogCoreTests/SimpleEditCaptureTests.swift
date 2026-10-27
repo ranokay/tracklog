@@ -5,23 +5,11 @@ import Testing
 @Suite("Simple edits capture")
 @MainActor
 struct SimpleEditCaptureTests: CaptureTestHelpers {
-    private func rule(
-        match: SimpleEditRule.Match,
-        replace: SimpleEditRule.Replacement,
-        savedAt: TimeInterval = 0,
-    ) -> SimpleEditRule {
-        SimpleEditRule(
-            match: match,
-            replacement: replace,
-            savedAt: base.addingTimeInterval(savedAt),
-        )
-    }
-
     @Test func aSimpleEditChangesProcessedMetadataAndKeepsTheRawValues() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let edit = try await store.save(
-            rule(match: .init(track: "song"), replace: .init(artist: "Fixed Artist")),
+            simpleEditRule(match: .init(track: "song"), replace: .init(artist: "Fixed Artist")),
         )
 
         let clock = FakeClock(base)
@@ -46,6 +34,32 @@ struct SimpleEditCaptureTests: CaptureTestHelpers {
         ))
     }
 
+    @Test func aSimpleEditChangesNowPlayingMetadata() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        _ = try await store.save(
+            simpleEditRule(match: .init(track: "song"), replace: .init(artist: "Fixed Artist")),
+        )
+
+        let clock = FakeClock(base)
+        var sent: [Track] = []
+        let runtime = runtime(
+            database: database,
+            clock: clock,
+            source: ReplayedNowPlaying(),
+            sendNowPlaying: { sent.append($0) },
+        )
+        await runtime.start()
+
+        await runtime.ingest(sample(track(), at: 0, elapsed: 0))
+        await runtime.ingest(sample(track(), at: 2, elapsed: 2))
+
+        #expect(runtime.state.nowPlaying?.track.title == "Song")
+        #expect(runtime.state.nowPlaying?.track.artist == "Fixed Artist")
+        #expect(sent.map(\.artist) == ["Fixed Artist"])
+        #expect(sent.map(\.title) == ["Song"])
+    }
+
     @Test func sentinelCleanupIsPartOfTheStoredProcessedMetadata() async throws {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
@@ -67,10 +81,10 @@ struct SimpleEditCaptureTests: CaptureTestHelpers {
 
     @Test func aLaterRuleChangeDoesNotRewriteStoredHistory() async throws {
         let database = try TemporaryDatabase()
-        let firstRule = rule(
+        let firstRule = simpleEditRule(
             match: .init(track: "song"),
             replace: .init(artist: "First Artist"),
-            savedAt: 1,
+            savedAt: base.addingTimeInterval(1),
         )
         let store = try SQLiteListenStore(url: database.url)
         _ = try await store.save(firstRule)
@@ -85,10 +99,10 @@ struct SimpleEditCaptureTests: CaptureTestHelpers {
         // The same active match tuple replaces the old rule, so the next play
         // is processed by the new replacement.
         _ = try await runtime.saveSimpleEdit(
-            rule(
+            simpleEditRule(
                 match: .init(track: "song"),
                 replace: .init(artist: "Second Artist"),
-                savedAt: 2,
+                savedAt: base.addingTimeInterval(2),
             ),
         )
 
@@ -114,7 +128,7 @@ struct SimpleEditCaptureTests: CaptureTestHelpers {
         #expect(runtime.state.simpleEdits.isEmpty)
 
         let saved = try await runtime.saveSimpleEdit(
-            rule(match: .init(track: "song"), replace: .init(album: "Fixed Album")),
+            simpleEditRule(match: .init(track: "song"), replace: .init(album: "Fixed Album")),
         )
 
         #expect(saved.id != nil)

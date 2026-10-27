@@ -3,6 +3,7 @@ import SQLite3
 
 public enum DatabaseError: Error, Equatable, CustomStringConvertible {
     case open(String)
+    case unavailable(String)
     case sqlite(String)
     case newerSchema(found: Int, supported: Int)
     case migrationFailed(version: Int, message: String)
@@ -11,6 +12,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
         switch self {
         case let .open(message):
             "the database could not be opened: \(message)"
+        case let .unavailable(message):
+            "the database is unavailable: \(message)"
         case let .sqlite(message):
             "SQLite reported: \(message)"
         case let .newerSchema(found, supported):

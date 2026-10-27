@@ -102,6 +102,26 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(runtime.state.captureAvailable)
     }
 
+    @Test func anEditsReadFailureIsVisibleAndLeavesCaptureAvailable() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let runtime = CaptureRuntime(
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            edits: FailingEditStore(),
+            settings: CaptureSettings(scrobblingEnabled: false),
+        )
+        await runtime.start()
+
+        let failure = try #require(runtime.state.failure)
+        #expect(failure.stage == .edits)
+        #expect(failure.diagnostics.contains("read failed"))
+        #expect(runtime.state.captureAvailable)
+        #expect(runtime.state.simpleEdits.isEmpty)
+    }
+
     @Test func aFailedHistoryRefreshIsNotAWriteFailure() async throws {
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
@@ -264,4 +284,16 @@ private actor SuspendingStore: ListenStore {
         continuation?.resume()
         continuation = nil
     }
+}
+
+private actor FailingEditStore: SimpleEditStore {
+    func edits() async throws -> [SimpleEditRule] {
+        throw DatabaseError.sqlite("read failed")
+    }
+
+    func save(_ rule: SimpleEditRule) async throws -> SimpleEditRule {
+        rule
+    }
+
+    func deleteEdit(id _: Int64) async throws {}
 }

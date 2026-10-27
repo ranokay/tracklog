@@ -43,7 +43,8 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         #expect(listen.id != nil)
         #expect(runtime.state.listenCount == 1)
         #expect(runtime.state.lastListen?.startedAt == base)
-        #expect(runtime.state.nowPlaying?.track == rawTrack)
+        #expect(runtime.state.nowPlaying?.track.title == "Song")
+        #expect(runtime.state.nowPlaying?.track.artist == "Artist")
         #expect(runtime.state.failure == nil)
 
         let reopened = try SQLiteListenStore(url: database.url)

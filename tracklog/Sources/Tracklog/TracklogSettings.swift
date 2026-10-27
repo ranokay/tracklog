@@ -258,6 +258,7 @@ struct TracklogSettings: View {
         case .database: "Unavailable"
         case .storage: "Write failed"
         case .history: "Read failed"
+        case .edits: "Read failed"
         }
     }
 }

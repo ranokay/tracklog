@@ -294,3 +294,13 @@ extension CaptureTestHelpers {
         )
     }
 }
+
+/// A simple-edit fixture shared by the metadata, store and capture suites.
+func simpleEditRule(
+    id: Int64? = nil,
+    match: SimpleEditRule.Match = .init(),
+    replace: SimpleEditRule.Replacement = .init(),
+    savedAt: Date = Date(timeIntervalSince1970: 1_000_000),
+) -> SimpleEditRule {
+    SimpleEditRule(id: id, match: match, replacement: replace, savedAt: savedAt)
+}

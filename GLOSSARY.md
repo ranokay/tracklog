@@ -67,3 +67,7 @@ The adapter currently supplying playback observations: Droppy's media helper, or
 ## Local history
 
 The authoritative record of listens on this Mac. Global and independent of connections: every listen survives unlink, is exportable, and can exist with no delivery target.
+
+## Simple edit
+
+A saved metadata rule with four optional match fields and four optional replacements. An inactive match field is a wildcard; every active one must equal the listen's current value, case-insensitively and trimmed. Matching rules merge replacements field by field, most specific first and then newest first. An inactive replacement leaves the field alone; an empty album or album artist replacement clears it. Local history keeps the values each listen was captured with.

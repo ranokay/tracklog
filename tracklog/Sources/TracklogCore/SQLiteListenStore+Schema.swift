@@ -76,7 +76,6 @@ extension SQLiteListenStore {
                         replacement_album_artist TEXT,
                         saved_at REAL NOT NULL
                     );
-                    CREATE INDEX simple_edits_saved_at ON simple_edits (saved_at DESC, id DESC);
                     """,
                 )
             },

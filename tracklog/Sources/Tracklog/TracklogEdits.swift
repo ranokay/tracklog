@@ -56,26 +56,30 @@ struct TracklogEditsPage: View {
             DropletSettingsSection {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Your edits")
-                    Text("Applied most specific first. Album and album artist can be cleared; track and artist cannot.")
-                        .font(.body)
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                    Text(
+                        "Applied most specific first. A Match switch that is off matches anything. "
+                            + "Album and album artist can be cleared; track and artist cannot.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 }
             } content: {
                 DropletSettingsCard {
                     if state.simpleEdits.isEmpty {
                         DropletControlRow(title: "No edits yet") {
-                            Text("Add one to fix a recurring tag.")
+                            Text("Add one to correct a recurring value.")
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                         }
                     } else {
                         ForEach(state.simpleEdits) { rule in
                             ruleRow(rule)
                         }
+                        .droppyFlatGlassControls()
                     }
 
                     if draft == nil {
-                        DropletControlRow(title: "Fix another tag") {
-                            Button("Add edit") {
+                        DropletControlRow(title: "New edit") {
+                            Button("Add") {
                                 draft = EditDraft()
                                 errorMessage = nil
                             }
@@ -110,11 +114,11 @@ struct TracklogEditsPage: View {
         }
     }
 
-    private func summary(_ label: String, fields: [(String, String)]) -> some View {
+    private func summary(_ label: String, fields: [(label: String, value: String)]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.sm) {
             Text(label)
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-            Text(fields.map { "\($0.0) “\($0.1)”" }.joined(separator: ", "))
+            Text(fields.map { "\($0.label) “\($0.value)”" }.joined(separator: ", "))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -122,20 +126,20 @@ struct TracklogEditsPage: View {
     }
 
     private func ruleTitle(_ rule: SimpleEditRule) -> String {
-        let names = matchFields(rule).map(\.0)
+        let names = matchFields(rule).map(\.label)
         return names.isEmpty ? "Edit" : names.joined(separator: " + ")
     }
 
-    private func matchFields(_ rule: SimpleEditRule) -> [(String, String)] {
+    private func matchFields(_ rule: SimpleEditRule) -> [(label: String, value: String)] {
         [("Track", rule.match.track), ("Artist", rule.match.artist),
          ("Album", rule.match.album), ("Album artist", rule.match.albumArtist)]
-            .compactMap { name, value in value.map { (name, $0) } }
+            .compactMap { label, value in value.map { (label, $0) } }
     }
 
-    private func replacementFields(_ rule: SimpleEditRule) -> [(String, String)] {
+    private func replacementFields(_ rule: SimpleEditRule) -> [(label: String, value: String)] {
         [("Track", rule.replacement.track), ("Artist", rule.replacement.artist),
          ("Album", rule.replacement.album), ("Album artist", rule.replacement.albumArtist)]
-            .compactMap { name, value in value.map { (name, $0.isEmpty ? "Clear" : $0) } }
+            .compactMap { label, value in value.map { (label, $0.isEmpty ? "Clear" : $0) } }
     }
 
     // MARK: - Actions
@@ -146,7 +150,7 @@ struct TracklogEditsPage: View {
             draft = nil
             errorMessage = nil
         } catch let error as SimpleEditRuleValidationError {
-            errorMessage = validationMessage(for: error)
+            errorMessage = validationHint(for: error)
         } catch {
             errorMessage = "The edit could not be saved."
         }
@@ -164,19 +168,6 @@ struct TracklogEditsPage: View {
             } catch {
                 errorMessage = "The edit could not be deleted."
             }
-        }
-    }
-
-    private func validationMessage(for error: SimpleEditRuleValidationError) -> String {
-        switch error {
-        case .noMatchFields:
-            "Turn on at least one match field."
-        case .noReplacements:
-            "Turn on at least one replacement."
-        case .cannotClearTrack:
-            "Track cannot be cleared. Turn off Replace or enter a title."
-        case .cannotClearArtist:
-            "Artist cannot be cleared. Turn off Replace or enter an artist."
         }
     }
 }
@@ -232,11 +223,14 @@ private struct FieldEditor: View {
     @Binding var field: EditFieldDraft
 
     var body: some View {
+        // A switch and its field are one control group; the SDK's toggle rows
+        // hold a single control each.
         DropletStackedRow(title: title) {
             VStack(alignment: .leading, spacing: DroppySpacing.xs) {
                 HStack(spacing: DroppySpacing.sm) {
                     Toggle("Match", isOn: $field.matchEnabled)
                         .toggleStyle(.switch)
+                        .controlSize(.small)
                         .fixedSize()
                         .accessibilityLabel("Match \(title.lowercased())")
                     TextField("Value to match", text: $field.match)
@@ -246,6 +240,7 @@ private struct FieldEditor: View {
                 HStack(spacing: DroppySpacing.sm) {
                     Toggle("Replace", isOn: $field.replacementEnabled)
                         .toggleStyle(.switch)
+                        .controlSize(.small)
                         .fixedSize()
                         .accessibilityLabel("Replace \(title.lowercased())")
                     TextField("Replacement", text: $field.replacement)
@@ -274,29 +269,12 @@ private struct EditDraft {
 
     init(rule: SimpleEditRule) {
         id = rule.id
-        track = EditFieldDraft(
-            matchEnabled: rule.match.track != nil,
-            match: rule.match.track ?? "",
-            replacementEnabled: rule.replacement.track != nil,
-            replacement: rule.replacement.track ?? "",
-        )
-        artist = EditFieldDraft(
-            matchEnabled: rule.match.artist != nil,
-            match: rule.match.artist ?? "",
-            replacementEnabled: rule.replacement.artist != nil,
-            replacement: rule.replacement.artist ?? "",
-        )
-        album = EditFieldDraft(
-            matchEnabled: rule.match.album != nil,
-            match: rule.match.album ?? "",
-            replacementEnabled: rule.replacement.album != nil,
-            replacement: rule.replacement.album ?? "",
-        )
+        track = EditFieldDraft(match: rule.match.track, replacement: rule.replacement.track)
+        artist = EditFieldDraft(match: rule.match.artist, replacement: rule.replacement.artist)
+        album = EditFieldDraft(match: rule.match.album, replacement: rule.replacement.album)
         albumArtist = EditFieldDraft(
-            matchEnabled: rule.match.albumArtist != nil,
-            match: rule.match.albumArtist ?? "",
-            replacementEnabled: rule.replacement.albumArtist != nil,
-            replacement: rule.replacement.albumArtist ?? "",
+            match: rule.match.albumArtist,
+            replacement: rule.replacement.albumArtist,
         )
     }
 
@@ -323,13 +301,7 @@ private struct EditDraft {
     }
 
     var validationMessage: String? {
-        switch validationError {
-        case .none: nil
-        case .noMatchFields: "Turn on at least one match field."
-        case .noReplacements: "Turn on at least one replacement."
-        case .cannotClearTrack: "Track cannot be cleared. Turn off Replace or enter a title."
-        case .cannotClearArtist: "Artist cannot be cleared. Turn off Replace or enter an artist."
-        }
+        validationHint(for: validationError)
     }
 }
 
@@ -338,6 +310,15 @@ private struct EditFieldDraft {
     var match = ""
     var replacementEnabled = false
     var replacement = ""
+
+    init() {}
+
+    init(match: String?, replacement: String?) {
+        matchEnabled = match != nil
+        self.match = match ?? ""
+        replacementEnabled = replacement != nil
+        self.replacement = replacement ?? ""
+    }
 
     var matchValue: String? {
         matchEnabled ? trimmed(match) : nil
@@ -349,5 +330,15 @@ private struct EditFieldDraft {
 
     private func trimmed(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private func validationHint(for error: SimpleEditRuleValidationError?) -> String? {
+    switch error {
+    case .none: nil
+    case .noMatchFields: "Turn on at least one match field."
+    case .noReplacements: "Turn on at least one replacement."
+    case .cannotClearTrack: "Track cannot be cleared. Turn off Replace or enter a title."
+    case .cannotClearArtist: "Artist cannot be cleared. Turn off Replace or enter an artist."
     }
 }
