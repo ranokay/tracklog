@@ -123,7 +123,10 @@ public final class AppleScriptAutomationProbe: MediaAutomationProbing {
     }
 
     private nonisolated static func probeSync(_ candidate: MediaAutomationCandidate) -> MediaAutomationProbe {
-        guard let script = NSAppleScript(source: candidate.script) else {
+        // NOSONAR: the script is a fixed template for Music or Spotify; the
+        // only substituted value is the app name from a closed candidate list,
+        // never user input.
+        guard let script = NSAppleScript(source: candidate.script) else { // NOSONAR
             return .failed("Could not compile the \(candidate.displayName) script")
         }
 

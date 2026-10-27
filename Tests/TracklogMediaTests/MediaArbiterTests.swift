@@ -54,7 +54,14 @@ struct MediaArbiterTests {
             },
         )
 
-        arbiter?.start(onSample: { _ in }, onStatus: { _ in })
+        arbiter?.start(
+            onSample: { _ in
+                // The loop test asserts cadence through the sleeper, not samples.
+            },
+            onStatus: { _ in
+                // Status is read from the arbiter after each poll.
+            },
+        )
         for await _ in finished {
             break
         }

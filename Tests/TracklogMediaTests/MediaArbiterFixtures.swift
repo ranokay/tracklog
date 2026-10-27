@@ -9,7 +9,9 @@ func makeArbiter(
     gate: FakePermissionGate = FakePermissionGate(),
     running: Set<String> = [],
     now: @escaping @MainActor () -> Date = { Date(timeIntervalSince1970: 1_000) },
-    sleeper: @escaping @MainActor (Duration) async -> Void = { _ in },
+    sleeper: @escaping @MainActor (Duration) async -> Void = { _ in
+        // Tests drive polls directly and never wait on the default sleeper.
+    },
 ) -> MediaArbiter {
     MediaArbiter(
         helper: helper,
