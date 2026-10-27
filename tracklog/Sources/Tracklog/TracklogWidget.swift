@@ -79,9 +79,9 @@ struct TracklogWidget: View {
             subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
         } else if let sample = state.nowPlaying {
             Text(sample.track.title)
-                .font(.system(size: context.isCompact ? 16 : 18, weight: .semibold, design: .rounded))
+                .font(.system(size: context.isPaired ? 16 : 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                .lineLimit(context.isCompact ? 1 : 2)
+                .lineLimit(context.isPaired ? 1 : 2)
                 .minimumScaleFactor(0.9)
 
             Text(artistLine(sample))
@@ -89,7 +89,7 @@ struct TracklogWidget: View {
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .lineLimit(1)
 
-            if !context.isCompact {
+            if !context.isPaired {
                 ProgressView(value: state.status.progress)
                     .progressViewStyle(.linear)
                     .tint(AdaptiveColors.notchSurfacePrimaryText)
