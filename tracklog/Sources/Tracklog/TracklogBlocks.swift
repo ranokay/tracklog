@@ -66,7 +66,7 @@ struct TracklogBlocksPage: View {
                 }
             } content: {
                 DropletSettingsCard {
-                    if state.failure?.stage == .blocks {
+                    if state.blocksFailure != nil {
                         DropletControlRow(title: "Blocks could not be read") {
                             Text("Capture continues with the last loaded blocks.")
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
@@ -75,10 +75,10 @@ struct TracklogBlocksPage: View {
 
                     if state.blocks.isEmpty {
                         DropletControlRow(
-                            title: state.failure?.stage == .blocks ? "No blocks loaded" : "No blocks yet",
+                            title: state.blocksFailure != nil ? "No blocks loaded" : "No blocks yet",
                         ) {
                             Text(
-                                state.failure?.stage == .blocks
+                                state.blocksFailure != nil
                                     ? "Nothing is blocked until the store can be read or a block is saved."
                                     : "Add one to hide a track, artist, album or album artist.",
                             )

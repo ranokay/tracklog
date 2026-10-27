@@ -140,6 +140,26 @@ struct CaptureFailureTests: CaptureTestHelpers {
         #expect(failure.diagnostics.contains("read failed"))
         #expect(runtime.state.captureAvailable)
         #expect(runtime.state.blocks.isEmpty)
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
+    }
+
+    @Test func aBlocksFailureSurvivesALaterStorageFailure() async {
+        let clock = FakeClock(base)
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: ReplayedNowPlaying(),
+            store: FailingStore(),
+            allowlist: InMemoryAppAllowlist(),
+            blocks: FailingBlockStore(),
+            settings: CaptureSettings(scrobblingEnabled: true),
+        )
+        await runtime.start()
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
+
+        await replay(thresholdSamples(track()), on: runtime, clock: clock)
+
+        #expect(runtime.state.failure?.stage == .storage)
+        #expect(runtime.state.blocksFailure?.stage == .blocks)
     }
 
     @Test func aFailedHistoryRefreshIsNotAWriteFailure() async throws {

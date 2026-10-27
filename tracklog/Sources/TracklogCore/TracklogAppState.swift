@@ -17,6 +17,9 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var simpleEdits: [SimpleEditRule] = []
     /// Saved blocks, in the order the metadata pipeline evaluates them.
     @Published public internal(set) var blocks: [BlockRule] = []
+    /// Set until a block read succeeds, even if a later storage failure
+    /// replaces the general `failure` shown in diagnostics.
+    @Published public internal(set) var blocksFailure: CaptureFailure?
     @Published public internal(set) var nowPlaying: MediaSample?
     @Published public internal(set) var status: ScrobbleStatus = .idle
     @Published public internal(set) var feedAvailable = true

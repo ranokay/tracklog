@@ -37,50 +37,58 @@ extension SQLiteListenStore {
         let handle = try database()
         let key = block.matchKey
 
-        // Editing a block's fields means the old row must not survive beside
-        // the replacement. If the tuple already belongs to another block, that
-        // block is the one this save replaces. The write happens before the
-        // cleanup so a failed insert cannot lose the block being edited.
-        let supersededID: Int64? = if let id = block.id,
-                                      let current = try blockMatchKey(for: id, handle: handle),
-                                      current != key {
-            id
-        } else {
-            nil
-        }
+        // The upsert and the superseded-row delete are one change. If either
+        // fails, roll both back rather than committing half of the edit.
+        try Self.execute(handle, "BEGIN IMMEDIATE")
+        do {
+            // Editing a block's fields means the old row must not survive
+            // beside the replacement. If the tuple already belongs to another
+            // block, that block is the one this save replaces.
+            let supersededID: Int64? = if let id = block.id,
+                                          let current = try blockMatchKey(for: id, handle: handle),
+                                          current != key {
+                id
+            } else {
+                nil
+            }
 
-        let statement = try prepare(
-            handle,
-            """
-            INSERT INTO blocks (match_key, track, artist, album, album_artist, saved_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(match_key) DO UPDATE SET
-                track = excluded.track,
-                artist = excluded.artist,
-                album = excluded.album,
-                album_artist = excluded.album_artist,
-                saved_at = excluded.saved_at
-            """,
-        )
-        defer { sqlite3_finalize(statement) }
+            let statement = try prepare(
+                handle,
+                """
+                INSERT INTO blocks (match_key, track, artist, album, album_artist, saved_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(match_key) DO UPDATE SET
+                    track = excluded.track,
+                    artist = excluded.artist,
+                    album = excluded.album,
+                    album_artist = excluded.album_artist,
+                    saved_at = excluded.saved_at
+                """,
+            )
+            defer { sqlite3_finalize(statement) }
 
-        try bind(key, at: 1, in: statement)
-        try bind(block.track, at: 2, in: statement)
-        try bind(block.artist, at: 3, in: statement)
-        try bind(block.album, at: 4, in: statement)
-        try bind(block.albumArtist, at: 5, in: statement)
-        sqlite3_bind_double(statement, 6, block.savedAt.timeIntervalSince1970)
+            try bind(key, at: 1, in: statement)
+            try bind(block.track, at: 2, in: statement)
+            try bind(block.artist, at: 3, in: statement)
+            try bind(block.album, at: 4, in: statement)
+            try bind(block.albumArtist, at: 5, in: statement)
+            sqlite3_bind_double(statement, 6, block.savedAt.timeIntervalSince1970)
 
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw DatabaseError.sqlite(errorMessage(handle))
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw DatabaseError.sqlite(errorMessage(handle))
+            }
+            if let supersededID {
+                try deleteBlock(id: supersededID, handle: handle)
+            }
+            guard let stored = try storedBlock(matchKey: key, handle: handle) else {
+                throw DatabaseError.sqlite("the saved block could not be read back")
+            }
+            try Self.execute(handle, "COMMIT")
+            return stored
+        } catch {
+            try? Self.execute(handle, "ROLLBACK")
+            throw error
         }
-        if let supersededID {
-            try deleteBlock(id: supersededID, handle: handle)
-        }
-        guard let stored = try storedBlock(matchKey: key, handle: handle) else {
-            throw DatabaseError.sqlite("the saved block could not be read back")
-        }
-        return stored
     }
 
     public func deleteBlock(id: Int64) async throws {

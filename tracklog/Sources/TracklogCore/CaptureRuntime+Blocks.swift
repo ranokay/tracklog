@@ -10,11 +10,14 @@ extension CaptureRuntime {
         guard let blockStore else { return }
         do {
             state.blocks = try await blockStore.blocks()
+            state.blocksFailure = nil
             if state.failure?.stage == .blocks {
                 state.failure = nil
             }
         } catch {
-            state.failure = .blocks(error: error)
+            let failure = CaptureFailure.blocks(error: error)
+            state.blocksFailure = failure
+            state.failure = failure
         }
     }
 }
