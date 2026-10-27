@@ -134,17 +134,15 @@ struct BlockStoreTests {
         let versionThree = Array(SQLiteListenStore.schemaMigrations.prefix(3))
         let old = try SQLiteListenStore(url: database.url, migrations: versionThree)
         let metadata = ListenMetadata(title: "Song", artist: "Artist")
-        let storedListen = try #require(
-            try await old.insert(
-                Listen(
-                    raw: metadata,
-                    processed: metadata,
-                    bundleID: "com.apple.Music",
-                    duration: 30,
-                    playedDuration: 30,
-                    startedAt: base,
-                    capturedAt: base.addingTimeInterval(30),
-                ),
+        let storedListen = try database.insertLegacyListen(
+            Listen(
+                raw: metadata,
+                processed: metadata,
+                bundleID: "com.apple.Music",
+                duration: 30,
+                playedDuration: 30,
+                startedAt: base,
+                capturedAt: base.addingTimeInterval(30),
             ),
         )
         let storedEdit = try await old.save(

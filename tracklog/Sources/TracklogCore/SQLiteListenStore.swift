@@ -27,9 +27,9 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 /// One SQLite file in the droplet's container: local history, versioned
 /// migrations, and the durable duplicate key.
 public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore {
-    public static let schemaVersion = 4
+    public static let schemaVersion = 5
 
-    private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
     /// no other reference can reach it.
     private nonisolated(unsafe) var connection: OpaquePointer?
@@ -58,8 +58,9 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
             INSERT OR IGNORE INTO listens (
                 raw_title, raw_artist, raw_album, raw_album_artist,
                 title, artist, album, album_artist,
-                bundle_id, duration, played_duration, started_at, captured_at, dedup_key
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bundle_id, duration, played_duration, started_at, captured_at, dedup_key,
+                artwork_hash, track_identity
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
         )
         defer { sqlite3_finalize(statement) }
@@ -77,12 +78,20 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
         sqlite3_bind_double(statement, 12, listen.startedAt.timeIntervalSince1970)
         sqlite3_bind_double(statement, 13, listen.capturedAt.timeIntervalSince1970)
         try bind(listen.dedupKey, at: 14, in: statement)
+        let trackIdentity = listen.raw.identity
+        let artworkHash = try listen.artworkHash ?? existingArtworkHash(handle, forTrack: trackIdentity)
+        if let artworkHash {
+            try bind(artworkHash, at: 15, in: statement)
+        } else {
+            sqlite3_bind_null(statement, 15)
+        }
+        try bind(trackIdentity, at: 16, in: statement)
 
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw DatabaseError.sqlite(errorMessage(handle))
         }
         guard sqlite3_changes(handle) > 0 else { return nil }
-        return listen.stored(withID: sqlite3_last_insert_rowid(handle))
+        return listen.stored(withID: sqlite3_last_insert_rowid(handle)).withArtworkHash(artworkHash)
     }
 
     public func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
@@ -94,7 +103,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
             """
             SELECT id, raw_title, raw_artist, raw_album, raw_album_artist,
                    title, artist, album, album_artist, bundle_id,
-                   duration, played_duration, started_at, captured_at
+                   duration, played_duration, started_at, captured_at, artwork_hash
             FROM listens
             \(filter)
             ORDER BY started_at DESC, id DESC
@@ -257,6 +266,9 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
                         playedDuration: sqlite3_column_double(statement, 11),
                         startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
                         capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
+                        artworkHash: sqlite3_column_type(statement, 14) == SQLITE_NULL
+                            ? nil
+                            : text(statement, 14),
                     ),
                 )
             case SQLITE_DONE:

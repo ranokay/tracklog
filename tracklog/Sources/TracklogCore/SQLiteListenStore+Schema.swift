@@ -95,6 +95,34 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 5) { handle in
+                try execute(
+                    handle,
+                    """
+                    ALTER TABLE listens ADD COLUMN artwork_hash TEXT;
+                    ALTER TABLE listens ADD COLUMN track_identity TEXT NOT NULL DEFAULT '';
+                    CREATE TABLE artwork (
+                        hash TEXT PRIMARY KEY,
+                        data BLOB NOT NULL,
+                        pixel_width INTEGER NOT NULL,
+                        pixel_height INTEGER NOT NULL,
+                        stored_at REAL NOT NULL
+                    );
+                    CREATE TABLE track_artwork (
+                        track_identity TEXT PRIMARY KEY,
+                        artwork_hash TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        FOREIGN KEY (artwork_hash) REFERENCES artwork (hash)
+                    );
+                    CREATE INDEX listens_artwork_hash ON listens (artwork_hash);
+                    UPDATE listens SET track_identity =
+                        lower(trim(raw_title)) || char(31) ||
+                        lower(trim(raw_artist)) || char(31) ||
+                        lower(trim(raw_album)) || char(31) ||
+                        lower(trim(raw_album_artist));
+                    """,
+                )
+            },
         ]
     }
 }

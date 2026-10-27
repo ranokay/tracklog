@@ -57,6 +57,51 @@ final class TemporaryDatabase {
         try Data(contentsOf: url)
     }
 
+    /// Inserts a row the way a build before artwork support wrote one. The
+    /// current store's insert names artwork columns, which a v1-v4 schema does
+    /// not have; migration tests still need a pre-upgrade history row.
+    @discardableResult
+    func insertLegacyListen(_ listen: Listen) throws -> Listen {
+        try withSQLite { handle in
+            var statement: OpaquePointer?
+            let sql = """
+            INSERT INTO listens (
+                raw_title, raw_artist, raw_album, raw_album_artist,
+                title, artist, album, album_artist,
+                bundle_id, duration, played_duration, started_at, captured_at, dedup_key
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                throw DatabaseError.sqlite("could not prepare a legacy listen insert")
+            }
+            defer { sqlite3_finalize(statement) }
+
+            let fields = [
+                listen.raw.title, listen.raw.artist, listen.raw.album, listen.raw.albumArtist,
+                listen.processed.title, listen.processed.artist, listen.processed.album,
+                listen.processed.albumArtist, listen.bundleID,
+            ]
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            for (offset, value) in fields.enumerated() {
+                guard sqlite3_bind_text(statement, Int32(offset + 1), value, -1, transient) == SQLITE_OK else {
+                    throw DatabaseError.sqlite("could not bind a legacy listen value")
+                }
+            }
+            sqlite3_bind_double(statement, 10, listen.duration)
+            sqlite3_bind_double(statement, 11, listen.playedDuration)
+            sqlite3_bind_double(statement, 12, listen.startedAt.timeIntervalSince1970)
+            sqlite3_bind_double(statement, 13, listen.capturedAt.timeIntervalSince1970)
+            guard sqlite3_bind_text(statement, 14, listen.dedupKey, -1, transient) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE
+            else {
+                throw DatabaseError.sqlite("could not insert a legacy listen")
+            }
+            return listen.stored(withID: sqlite3_last_insert_rowid(handle))
+        }
+    }
+
     func write(_ data: Data) throws {
         try data.write(to: url)
     }
@@ -132,36 +177,6 @@ final class FakeClock: Clock {
     private func cancelSleeper(_ id: UUID) {
         guard let sleeper = sleepers.removeValue(forKey: id) else { return }
         sleeper.continuation.resume(throwing: CancellationError())
-    }
-}
-
-@MainActor
-final class ReplayedNowPlaying: NowPlayingSource {
-    var mediaStatus: MediaStatus = .legacyAvailable
-    private(set) var startCount = 0
-    private(set) var stopCount = 0
-    private(set) var handler: ((MediaSample?) -> Void)?
-    private(set) var statusHandler: ((MediaStatus) -> Void)?
-
-    func start(
-        onSample: @escaping @MainActor (MediaSample?) -> Void,
-        onStatus: @escaping @MainActor (MediaStatus) -> Void,
-    ) {
-        startCount += 1
-        handler = onSample
-        statusHandler = onStatus
-        onStatus(mediaStatus)
-    }
-
-    func emitStatus(_ status: MediaStatus) {
-        mediaStatus = status
-        statusHandler?(status)
-    }
-
-    func stop() {
-        stopCount += 1
-        handler = nil
-        statusHandler = nil
     }
 }
 
@@ -291,6 +306,22 @@ extension CaptureTestHelpers {
                 return
             }
             await Task.yield()
+        }
+    }
+
+    /// Waits for work that hops off the main actor, such as artwork
+    /// normalization, without sleeping for a fixed interval in every test.
+    func eventually(
+        timeout: Duration = .seconds(3),
+        _ condition: @MainActor () -> Bool,
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while clock.now < deadline {
+            if condition() {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(5))
         }
     }
 

@@ -41,6 +41,9 @@ public struct Listen: Identifiable, Equatable, Sendable {
     public let startedAt: Date
     /// When Tracklog persisted the listen.
     public let capturedAt: Date
+    /// The content hash of the cover this listen was captured with, or nil
+    /// while no artwork is known.
+    public let artworkHash: String?
 
     public init(
         id: Int64? = nil,
@@ -51,6 +54,7 @@ public struct Listen: Identifiable, Equatable, Sendable {
         playedDuration: TimeInterval,
         startedAt: Date,
         capturedAt: Date,
+        artworkHash: String? = nil,
     ) {
         self.id = id
         self.raw = raw
@@ -60,6 +64,7 @@ public struct Listen: Identifiable, Equatable, Sendable {
         self.playedDuration = playedDuration
         self.startedAt = startedAt
         self.capturedAt = capturedAt
+        self.artworkHash = artworkHash
     }
 
     /// A captured scrobble, with the metadata history will show.
@@ -95,6 +100,22 @@ public struct Listen: Identifiable, Equatable, Sendable {
             playedDuration: playedDuration,
             startedAt: startedAt,
             capturedAt: capturedAt,
+            artworkHash: artworkHash,
+        )
+    }
+
+    /// The same listen with a cover attached after the capture was saved.
+    public func withArtworkHash(_ hash: String?) -> Listen {
+        Listen(
+            id: id,
+            raw: raw,
+            processed: processed,
+            bundleID: bundleID,
+            duration: duration,
+            playedDuration: playedDuration,
+            startedAt: startedAt,
+            capturedAt: capturedAt,
+            artworkHash: hash,
         )
     }
 }

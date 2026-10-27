@@ -38,6 +38,7 @@ extension CaptureRuntime {
             state.historyHasMore = page.count == historyPageSize
             clearHistoryFailure()
             await refreshDayCounts(from: store, request: request, generation: startGeneration)
+            await loadStoredArtwork(for: page)
         } catch {
             guard isCurrentHistoryRequest(request, startGeneration: startGeneration) else { return }
             recordHistoryFailure(error)
@@ -51,6 +52,7 @@ extension CaptureRuntime {
             let total = try await store.count()
             guard applyHistoryPage(listens, total: total, request: request, generation: generation) else { return }
             await refreshDayCounts(from: store, request: request, generation: generation)
+            await loadStoredArtwork(for: listens)
         } catch {
             guard isCurrentHistoryRequest(request, startGeneration: generation) else { return }
             recordHistoryFailure(error)
@@ -88,6 +90,7 @@ extension CaptureRuntime {
                 generation: startGeneration,
                 needsScrobbling: true,
             )
+            await loadStoredArtwork(for: listens)
         } catch {
             guard isCurrentHistoryRequest(
                 request,

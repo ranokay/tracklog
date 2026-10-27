@@ -52,6 +52,8 @@ final class FakeHelper: MediaHelperReading {
     let isExecutable: Bool
     private var results: [MediaHelperRead]
     private(set) var readCount = 0
+    var artworkRead: MediaHelperArtworkRead = .unavailable
+    private(set) var artworkReadCount = 0
 
     init(
         executablePath: String = "/Applications/Droppy.app/Contents/Helpers/DroppyMediaHelper",
@@ -67,6 +69,11 @@ final class FakeHelper: MediaHelperReading {
         defer { readCount += 1 }
         guard !results.isEmpty else { return .empty }
         return results[min(readCount, results.count - 1)]
+    }
+
+    func readArtwork() async -> MediaHelperArtworkRead {
+        artworkReadCount += 1
+        return artworkRead
     }
 }
 

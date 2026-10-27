@@ -155,3 +155,63 @@ struct MediaArbiterTests {
         #expect(helperOnly.isAvailable)
     }
 }
+
+@Suite("Media arbiter artwork")
+@MainActor
+struct MediaArbiterArtworkTests {
+    @Test func artworkIsReadOnlyForTheTrackThatIsPlaying() async {
+        let sample = playingSample()
+        let bytes = Data([9, 8, 7])
+        let helper = FakeHelper(results: [.sample(sample)])
+        helper.artworkRead = .snapshot(MediaHelperSnapshot(sample: sample, artwork: bytes))
+        let arbiter = makeArbiter(helper: helper)
+
+        _ = await arbiter.pollOnce()
+
+        #expect(await arbiter.artwork(for: sample.track) == bytes)
+        #expect(helper.artworkReadCount == 1)
+        #expect(await arbiter.artwork(for: playingSample(title: "Another Song").track) == nil)
+    }
+
+    @Test func aHelperSnapshotForAnotherTrackIsNotUsed() async {
+        let sample = playingSample()
+        let helper = FakeHelper(results: [.sample(sample)])
+        helper.artworkRead = .snapshot(MediaHelperSnapshot(
+            sample: playingSample(title: "Another Song"),
+            artwork: Data([1]),
+        ))
+        let arbiter = makeArbiter(helper: helper)
+
+        _ = await arbiter.pollOnce()
+
+        #expect(await arbiter.artwork(for: sample.track) == nil)
+    }
+
+    @Test func anAutomationTrackNeverAsksTheHelperForArtwork() async {
+        let sample = playingSample(bundleID: "com.apple.Music")
+        let helper = FakeHelper(results: [.empty])
+        helper.artworkRead = .snapshot(MediaHelperSnapshot(sample: sample, artwork: Data([1])))
+        let automation = FakeAutomation(results: ["com.apple.Music": .playing(sample)])
+        let arbiter = makeArbiter(helper: helper, automation: automation, running: ["com.apple.Music"])
+
+        _ = await arbiter.pollOnce()
+        let artwork = await arbiter.artwork(for: sample.track)
+
+        #expect(arbiter.mediaStatus.source == .musicAutomation)
+        #expect(artwork == nil)
+        #expect(helper.artworkReadCount == 0)
+    }
+
+    @Test func aMissingHelperHasNoArtwork() async {
+        let sample = playingSample()
+        let helper = FakeHelper(
+            executablePath: "/nonexistent",
+            isExecutable: false,
+            results: [.missingExecutable],
+        )
+        let arbiter = makeArbiter(helper: helper)
+
+        #expect(await arbiter.artwork(for: sample.track) == nil)
+        #expect(helper.artworkReadCount == 0)
+    }
+}
