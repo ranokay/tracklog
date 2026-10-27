@@ -37,24 +37,39 @@ public final class TracklogDroplet: NSObject, Droplet {
         let isHarness = host.environment.isHarness
         let runtime: CaptureRuntime
         if isHarness {
+            let store = HarnessDemoStore()
             runtime = CaptureRuntime(
                 state: state,
                 clock: SystemClock(),
                 source: HarnessDemoSource(),
-                store: HarnessDemoStore(),
-                scrobblingEnabled: true,
+                store: store,
+                allowlist: store,
+                settings: CaptureSettings(scrobblingEnabled: true),
             )
         } else {
-            let enabled = host.preferences.value(forKey: "scrobblingEnabled", default: false)
+            let settings = CaptureSettings(
+                scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
+                nowPlayingEnabled: host.preferences.value(forKey: "nowPlayingEnabled", default: true),
+                pausedUntil: host.preferences.value(forKey: "pausedUntil", as: Date.self),
+                minimumDuration: host.preferences.value(
+                    forKey: "minimumDuration",
+                    default: CaptureSettings.defaultMinimumDuration,
+                ),
+            )
             let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
             runtime = CaptureRuntime.open(
                 state: state,
                 databaseURL: databaseURL,
                 clock: SystemClock(),
                 source: MediaHelperFeed(),
-                scrobblingEnabled: enabled,
-                persistScrobbling: { enabled in
-                    host.preferences.setValue(enabled, forKey: "scrobblingEnabled")
+                settings: settings,
+                // The delivery outbox (#39) supplies the now-playing sender;
+                // the toggle persists and the gate is ready for it.
+                persistSettings: { settings in
+                    host.preferences.setValue(settings.scrobblingEnabled, forKey: "scrobblingEnabled")
+                    host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")
+                    host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
+                    host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
                 },
             )
         }
@@ -96,6 +111,78 @@ public final class TracklogDroplet: NSObject, Droplet {
         runtime?.setScrobblingEnabled(enabled)
     }
 
+    public var nowPlayingBinding: Binding<Bool> {
+        Binding(
+            get: { self.state.nowPlayingEnabled },
+            set: { self.setNowPlayingEnabled($0) },
+        )
+    }
+
+    public func setNowPlayingEnabled(_ enabled: Bool) {
+        runtime?.setNowPlayingEnabled(enabled)
+    }
+
+    public var minimumDurationBinding: Binding<Double> {
+        Binding(
+            get: { self.state.minimumDuration },
+            set: { self.setMinimumDuration($0) },
+        )
+    }
+
+    public func setMinimumDuration(_ seconds: TimeInterval) {
+        runtime?.setMinimumDuration(seconds)
+    }
+
+    // MARK: - Pause
+
+    public func pauseCapture(for duration: TimeInterval) {
+        runtime?.pause(for: duration)
+    }
+
+    public func pauseCapture(until date: Date) {
+        runtime?.pause(until: date)
+    }
+
+    public func resumeCapture() {
+        runtime?.resume()
+    }
+
+    // MARK: - Players
+
+    public func setAppAllowed(_ bundleID: String, allowed: Bool) {
+        Task { await runtime?.setAppAllowed(bundleID, allowed: allowed) }
+    }
+
+    /// The player's name for the Apps page: the running app's, its bundle
+    /// name, the seeded name when it is no longer installed, or the
+    /// identifier itself.
+    public func appName(for bundleID: String) -> String {
+        if let name = displayName(for: bundleID) {
+            return name
+        }
+        if let name = Self.seededPlayerNames[bundleID] {
+            return name
+        }
+        return bundleID
+    }
+
+    private func displayName(for bundleID: String) -> String? {
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
+           let name = app.localizedName, !name.isEmpty {
+            return name
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let name = Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String,
+              !name.isEmpty
+        else { return nil }
+        return name
+    }
+
+    private static let seededPlayerNames = [
+        "com.apple.Music": "Music",
+        "com.spotify.client": "Spotify",
+    ]
+
     // MARK: - Presentation
 
     public func openSettings() {
@@ -129,14 +216,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The player's display name, for the widget's status line.
     public var sourceName: String? {
         guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-           let name = app.localizedName {
-            return name
-        }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return nil
-        }
-        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+        return displayName(for: bundleID)
     }
 }
 
@@ -169,16 +249,37 @@ extension TracklogDroplet: ShelfWidgetProviding {
 
 // MARK: - Settings
 
-extension TracklogDroplet: SettingsPaneProviding {
+extension TracklogDroplet: SettingsPagesProviding {
     public func makeSettingsPane(context _: SettingsPaneContext) -> AnyView {
         AnyView(TracklogSettings(droplet: self, state: state))
+    }
+
+    public func makeSettingsPage(id: String, context _: SettingsPaneContext) -> AnyView? {
+        guard id == tracklogAppsPageID else { return nil }
+        return AnyView(TracklogAppsPage(droplet: self, state: state))
     }
 
     public var settingsSearchEntries: [SettingsSearchEntry] {
         [
             SettingsSearchEntry(
                 title: "Scrobble what I play",
-                keywords: ["scrobble", "play", "now playing"],
+                keywords: ["scrobble", "capture", "play"],
+            ),
+            SettingsSearchEntry(
+                title: "Pause",
+                keywords: ["pause", "resume", "hold"],
+            ),
+            SettingsSearchEntry(
+                title: "Send now playing",
+                keywords: ["now playing", "profile"],
+            ),
+            SettingsSearchEntry(
+                title: "Minimum length",
+                keywords: ["minimum", "duration", "jingle", "snippet"],
+            ),
+            SettingsSearchEntry(
+                title: "Apps",
+                keywords: ["apps", "players", "allow", "deny"],
             ),
             SettingsSearchEntry(
                 title: "Services",

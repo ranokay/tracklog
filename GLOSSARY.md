@@ -56,6 +56,10 @@ Where a statistics view reads from: the current connection's service history, or
 
 A person whose listening the current connection makes visible, such as a Last.fm friend or a ListenBrainz follow. Friends are scoped to one connection and never merged across connections.
 
+## Player
+
+An app that owns playback and appears in the media feed, identified by its bundle identifier. Music and Spotify are allowed at first run; every other player is denied until the user allows it on the Apps page. A player is not a media source: one media source observes whichever player is active.
+
 ## Media source
 
 The adapter currently supplying playback observations: Droppy's media helper, or Automation for Music or Spotify when the helper cannot see the player. One source speaks at a time, and the helper is authoritative wherever it does.

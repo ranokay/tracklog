@@ -83,13 +83,13 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        var persisted: [Bool] = []
+        var persisted: [CaptureSettings] = []
         let runtime = runtime(
             database: database,
             clock: clock,
             source: source,
             enabled: false,
-            persistScrobbling: { persisted.append($0) },
+            persistSettings: { persisted.append($0) },
         )
         await runtime.start()
 
@@ -105,7 +105,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         runtime.setScrobblingEnabled(true)
         #expect(runtime.state.scrobblingEnabled)
         #expect(source.startCount == 1)
-        #expect(persisted == [true])
+        #expect(persisted.map(\.scrobblingEnabled) == [true])
 
         runtime.setScrobblingEnabled(false)
         #expect(runtime.state.scrobblingEnabled == false)
@@ -113,7 +113,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
         #expect(source.handler == nil)
         #expect(runtime.state.nowPlaying == nil)
         #expect(runtime.state.status == .idle)
-        #expect(persisted == [true, false])
+        #expect(persisted.map(\.scrobblingEnabled) == [true, false])
     }
 
     @Test func aCancelledStartDoesNotArmTheFeed() async throws {
@@ -170,7 +170,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: store,
-            scrobblingEnabled: false,
+            allowlist: InMemoryAppAllowlist(), settings: CaptureSettings(scrobblingEnabled: false),
             historyPageSize: 2,
         )
         await runtime.start()
@@ -190,7 +190,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
             clock: FakeClock(base),
             source: ReplayedNowPlaying(),
             store: store,
-            scrobblingEnabled: false,
+            allowlist: InMemoryAppAllowlist(), settings: CaptureSettings(scrobblingEnabled: false),
             historyPageSize: 2,
         )
         await runtime.start()
@@ -215,7 +215,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
             clock: FakeClock(base),
             source: ReplayedNowPlaying(),
             store: store,
-            scrobblingEnabled: false,
+            allowlist: InMemoryAppAllowlist(), settings: CaptureSettings(scrobblingEnabled: false),
             historyPageSize: 2,
         )
         await runtime.start()
@@ -287,7 +287,7 @@ struct CaptureRuntimeTests: CaptureTestHelpers {
             databaseURL: database.url,
             clock: clock,
             source: source,
-            scrobblingEnabled: true,
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 

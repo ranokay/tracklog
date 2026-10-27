@@ -12,7 +12,8 @@ struct HistoryFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: FailingHistoryThenWriteStore(),
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
 
@@ -30,7 +31,8 @@ struct HistoryFailureTests: CaptureTestHelpers {
             clock: clock,
             source: source,
             store: RecoveringHistoryStore(),
-            scrobblingEnabled: true,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
         )
         await runtime.start()
         #expect(runtime.state.historyFailure != nil)

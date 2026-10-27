@@ -32,11 +32,14 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore {
     private let listens: [Listen]
+    private var seenApps: [SeenApp]
 
     init() {
         listens = Self.makeListens()
+        seenApps = SeededPlayers.bundleIDs.map { SeenApp(bundleID: $0, isAllowed: true) }
+            + [SeenApp(bundleID: "com.apple.podcasts", isAllowed: false)]
     }
 
     func insert(_: Listen) async throws -> Listen? {
@@ -51,6 +54,31 @@ actor HarnessDemoStore: ListenStore {
 
     func count() async throws -> Int {
         listens.count
+    }
+
+    func apps() async throws -> [SeenApp] {
+        seenApps
+    }
+
+    func isAllowed(_ bundleID: String) async throws -> Bool {
+        seenApps.first { $0.bundleID == bundleID }?.isAllowed ?? false
+    }
+
+    @discardableResult
+    func recordSeen(_ bundleID: String) async throws -> SeenApp? {
+        let normalized = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        if let existing = seenApps.first(where: { $0.bundleID == normalized }) {
+            return existing
+        }
+        let app = SeenApp(bundleID: normalized, isAllowed: false)
+        seenApps.append(app)
+        return app
+    }
+
+    func setAllowed(_ bundleID: String, allowed: Bool) async throws {
+        guard let index = seenApps.firstIndex(where: { $0.bundleID == bundleID }) else { return }
+        seenApps[index].isAllowed = allowed
     }
 
     private static func makeListens() -> [Listen] {

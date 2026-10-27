@@ -152,16 +152,16 @@ struct ListenStoreTests {
         await store.close()
 
         let migrations = SQLiteListenStore.schemaMigrations + [
-            SQLiteListenStore.Migration(version: 2) { handle in
+            SQLiteListenStore.Migration(version: 3) { handle in
                 try SQLiteListenStore.execute(handle, "ALTER TABLE listens ADD COLUMN note TEXT NOT NULL DEFAULT ''")
             },
         ]
         let migrated = try SQLiteListenStore(url: database.url, migrations: migrations)
 
-        #expect(try await migrated.userVersion() == 2)
+        #expect(try await migrated.userVersion() == 3)
         #expect(try await migrated.recent(limit: 10) == [stored])
         #expect(database.backupCount() == 1)
-        #expect(try database.userVersion() == 2)
+        #expect(try database.userVersion() == 3)
     }
 
     @Test func failedMigrationRollsBackAndKeepsTheOriginal() async throws {
@@ -171,10 +171,10 @@ struct ListenStoreTests {
         await store.close()
 
         let migrations = SQLiteListenStore.schemaMigrations + [
-            SQLiteListenStore.Migration(version: 2) { handle in
+            SQLiteListenStore.Migration(version: 3) { handle in
                 try SQLiteListenStore.execute(handle, "ALTER TABLE listens ADD COLUMN note TEXT NOT NULL DEFAULT ''")
             },
-            SQLiteListenStore.Migration(version: 3) { handle in
+            SQLiteListenStore.Migration(version: 4) { handle in
                 try SQLiteListenStore.execute(handle, "ALTER TABLE listens ADD COLUMN broken")
                 throw DatabaseError.sqlite("simulated migration failure")
             },

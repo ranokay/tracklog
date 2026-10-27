@@ -7,7 +7,7 @@
   "category": "media",
   "kit": {
     "abi": 1,
-    "minAPI": "1.9.0"
+    "minAPI": "1.18.0"
   },
   "minAppVersion": "15.3.0",
   "capabilities": ["clipboard-write", "expanded-surface"],
