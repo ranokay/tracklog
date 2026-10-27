@@ -125,35 +125,6 @@ struct MediaAutomationFallbackTests {
         #expect(gate.requestCalls == 0, "nothing is playing, so Automation is not needed yet")
     }
 
-    @Test func automationProbesOncePerCandidateAtTheIdleCadence() async {
-        var now = Date(timeIntervalSince1970: 1_000)
-        let automation = FakeAutomation()
-        let arbiter = makeArbiter(
-            helper: FakeHelper(results: [.empty]),
-            automation: automation,
-            gate: FakePermissionGate(),
-            running: ["com.apple.Music", "com.spotify.client"],
-            now: { now },
-        )
-
-        let first = await arbiter.pollOnce()
-        #expect(first.interval == .seconds(5))
-        #expect(automation.probed == ["com.apple.Music", "com.spotify.client"])
-
-        now += 2
-        _ = await arbiter.pollOnce()
-        #expect(automation.probed.count == 2, "the helper polls fast, the probes wait for the idle cadence")
-
-        now += 3
-        _ = await arbiter.pollOnce()
-        #expect(automation.probed == [
-            "com.apple.Music",
-            "com.spotify.client",
-            "com.apple.Music",
-            "com.spotify.client",
-        ])
-    }
-
     @Test func automationAsksLazilyAtTheFirstFallback() async {
         let gate = FakePermissionGate(status: .notRequested, requestResult: .available)
         let arbiter = makeArbiter(

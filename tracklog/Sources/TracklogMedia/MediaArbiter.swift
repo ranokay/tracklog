@@ -34,6 +34,10 @@ public final class MediaArbiter: NowPlayingSource {
     public static let idleInterval: Duration = .seconds(5)
     /// One Automation probe per candidate at the idle cadence.
     public static let automationProbeInterval: TimeInterval = 5
+    /// While Automation is the playing source, its next sample must land
+    /// inside the engine's five-second sample gap, so probe at the playing
+    /// cadence.
+    private static let automationPlayingProbeInterval: TimeInterval = 2
 
     public private(set) var mediaStatus: MediaStatus
 
@@ -336,7 +340,10 @@ private extension MediaArbiter {
 
     var isAutomationProbeDue: Bool {
         guard let lastAutomationProbe else { return true }
-        return now().timeIntervalSince(lastAutomationProbe) >= Self.automationProbeInterval
+        let interval = activeCandidateIsPlaying
+            ? Self.automationPlayingProbeInterval
+            : Self.automationProbeInterval
+        return now().timeIntervalSince(lastAutomationProbe) >= interval
     }
 
     func ensureAutomationReady() async -> Bool {
