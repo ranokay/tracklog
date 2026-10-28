@@ -209,6 +209,36 @@ struct DeliveryStoreTests {
         #expect(updated.abandonedReason == "Deleted from the pending list.")
     }
 
+    @Test func deliveryIDsAreReadInBatchesBelowTheSQLiteVariableLimit() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let target = try await connection(store)
+        let id = target.id ?? -1
+        let first = try #require(try await store.insert(listen(title: "One", start: 1), targets: [id]))
+        let second = try #require(try await store.insert(listen(title: "Two", start: 2), targets: [id]))
+        let third = try #require(try await store.insert(listen(title: "Three", start: 3), targets: [id]))
+
+        let deliveries = try await store.deliveries(
+            forListenIDs: [third.id ?? -1, first.id ?? -1, second.id ?? -1],
+        )
+
+        #expect(deliveries.count == 3)
+        #expect(deliveries.map(\.listenID) == [first.id, second.id, third.id])
+    }
+
+    @Test func listenIDsSplitAtTheVariableLimit() {
+        #expect(
+            SQLiteListenStore.listenIDBatches([1, 2, 3, 4, 5], limit: 2)
+                == [[1, 2], [3, 4], [5]],
+        )
+        #expect(SQLiteListenStore.listenIDBatches([], limit: 2).isEmpty)
+        #expect(
+            SQLiteListenStore.listenIDBatches([1, 2], limit: 0)
+                == [[1], [2]],
+            "an invalid limit still produces bindable batches",
+        )
+    }
+
     @Test func markingDueMovesPendingRowsWithoutTouchingAttempts() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)

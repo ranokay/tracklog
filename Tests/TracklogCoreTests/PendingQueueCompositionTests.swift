@@ -283,12 +283,13 @@ struct DeliveryReloadRaceTests: CaptureTestHelpers {
         await runtime.start()
         let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
         await settleOutbox()
+        await runtime.deliveryRefreshTask?.value
         let id = connection.id ?? -1
 
         _ = try await store.insert(deliveryListen(title: "First", base: base), targets: [id])
         await store.pauseNextPendingRead()
         let stale = Task { await runtime.reloadDeliveryState() }
-        await store.waitUntilPaused()
+        #expect(await store.waitUntilPaused())
 
         _ = try await store.insert(deliveryListen(title: "Second", base: base, start: 10), targets: [id])
         await runtime.reloadDeliveryState()

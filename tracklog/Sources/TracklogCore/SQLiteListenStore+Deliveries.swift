@@ -117,41 +117,6 @@ public extension SQLiteListenStore {
         return try readQueuedDeliveries(statement, handle: handle)
     }
 
-    func deliveries(for listenID: Int64) async throws -> [Delivery] {
-        try await deliveries(forListenIDs: [listenID])
-    }
-
-    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery] {
-        guard !listenIDs.isEmpty else { return [] }
-        let handle = try database()
-        let placeholders = Array(repeating: "?", count: listenIDs.count).joined(separator: ", ")
-        let statement = try prepare(
-            handle,
-            """
-            SELECT \(Self.deliveryColumns)
-            FROM deliveries d
-            WHERE d.listen_id IN (\(placeholders))
-            ORDER BY d.listen_id ASC, d.connection_id ASC, d.id ASC
-            """,
-        )
-        defer { sqlite3_finalize(statement) }
-        for (offset, listenID) in listenIDs.enumerated() {
-            sqlite3_bind_int64(statement, Int32(offset + 1), listenID)
-        }
-
-        var deliveries: [Delivery] = []
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                try deliveries.append(readDelivery(statement, offset: 0))
-            case SQLITE_DONE:
-                return deliveries
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-        }
-    }
-
     func pendingDeliveries() async throws -> [QueuedDelivery] {
         let handle = try database()
         let statement = try prepare(
@@ -368,7 +333,7 @@ extension SQLiteListenStore {
         }
     }
 
-    private func readDelivery(_ statement: OpaquePointer, offset: Int32) throws -> Delivery {
+    func readDelivery(_ statement: OpaquePointer, offset: Int32) throws -> Delivery {
         guard let state = DeliveryState(rawValue: text(statement, offset + 3)) else {
             throw DatabaseError.sqlite("a stored delivery has an unknown state")
         }

@@ -60,10 +60,14 @@ actor ControllableDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         pauseNextPending = true
     }
 
-    func waitUntilPaused() async {
+    func waitUntilPaused(timeout: Duration = .seconds(3)) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
         while !isPaused {
-            await Task.yield()
+            guard clock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(5))
         }
+        return true
     }
 
     func releasePendingRead() {
