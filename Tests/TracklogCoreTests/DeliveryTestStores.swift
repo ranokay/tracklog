@@ -128,9 +128,12 @@ actor ControllableDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
     }
 
     func pendingDeliveries() async throws -> [QueuedDelivery] {
+        // Reserve the pause before the read, so an overlapping refresh that
+        // started earlier cannot consume it after the await.
+        let shouldPause = pauseNextPending
+        pauseNextPending = false
         let rows = try await base.pendingDeliveries()
-        if pauseNextPending {
-            pauseNextPending = false
+        if shouldPause {
             isPaused = true
             await withCheckedContinuation { pendingContinuation = $0 }
         }
