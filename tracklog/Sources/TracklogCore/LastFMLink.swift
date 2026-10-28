@@ -35,6 +35,9 @@ public final class LastFMLinkModel: ObservableObject {
     /// Invalidates a late token, session or completion result after the page
     /// leaves.
     private var lifecycle = 0
+    /// A server hint that the next automatic poll must wait longer than the
+    /// regular cadence, set by a rate-limited session check.
+    private var nextPollDelay: TimeInterval?
 
     private static let browserOpenFailureNotice =
         "The browser could not be opened. Choose Open Last.fm again to retry."
@@ -67,6 +70,7 @@ public final class LastFMLinkModel: ObservableObject {
         let generation = lifecycle
         phase = .starting
         notice = nil
+        nextPollDelay = nil
         task?.cancel()
         checkTask?.cancel()
         checkTask = nil
@@ -108,6 +112,7 @@ public final class LastFMLinkModel: ObservableObject {
         checkTask = nil
         isChecking = false
         notice = nil
+        nextPollDelay = nil
         if case .linked = phase {
             return
         }
@@ -131,11 +136,13 @@ public final class LastFMLinkModel: ObservableObject {
 
     private func poll(_ challenge: LastFMLinkChallenge, generation: Int) async {
         while isCurrent(generation) {
+            let delay = nextPollDelay ?? pollInterval
             do {
-                try await clock.sleep(until: clock.now.addingTimeInterval(pollInterval))
+                try await clock.sleep(until: clock.now.addingTimeInterval(delay))
             } catch {
                 return
             }
+            nextPollDelay = nil
             guard isCurrent(generation), case .waiting = phase else { return }
             await check(challenge, generation: generation, manual: false)
         }
@@ -155,6 +162,7 @@ public final class LastFMLinkModel: ObservableObject {
             guard isCurrent(generation) else { return }
             let connection = try await complete(session)
             guard isCurrent(generation) else { return }
+            nextPollDelay = nil
             phase = .linked(connection)
             task?.cancel()
             task = nil
@@ -180,10 +188,12 @@ public final class LastFMLinkModel: ObservableObject {
         }
         switch lastFM.serviceFailure {
         case .retryable:
+            nextPollDelay = nil
             if manual {
                 notice = "Last.fm is temporarily unavailable. Tracklog will keep checking."
             }
-        case .rateLimited:
+        case let .rateLimited(retryAfter):
+            nextPollDelay = max(pollInterval, retryAfter ?? pollInterval)
             if manual {
                 notice = "Last.fm is rate limiting requests. Tracklog will keep checking."
             }

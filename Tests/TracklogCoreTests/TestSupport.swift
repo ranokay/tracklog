@@ -150,6 +150,12 @@ final class FakeClock: Clock {
         now = max(now, date)
     }
 
+    /// The tasks currently waiting on this clock. Tests use it to advance only
+    /// after the code under test has registered its next sleep.
+    var sleeperCount: Int {
+        sleepers.count
+    }
+
     func sleep(until date: Date) async throws {
         guard date > now else { return }
         let id = UUID()

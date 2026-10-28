@@ -79,6 +79,18 @@ private func waitForSessionRequests(
     return requests
 }
 
+@MainActor
+private func waitForSleeper(
+    _ clock: FakeClock,
+    timeout: Duration = .seconds(3),
+) async -> Bool {
+    let deadline = ContinuousClock().now + timeout
+    while clock.sleeperCount == 0, ContinuousClock().now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return clock.sleeperCount > 0
+}
+
 @Suite("Last.fm link")
 @MainActor
 struct LastFMLinkTests {
@@ -192,12 +204,11 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test(arguments: [LastFMError.transport, .http(statusCode: 429, retryAfter: 12)])
-    func aTransientSessionFailureKeepsPolling(error: LastFMError) async {
+    @Test func aRetryableSessionFailureKeepsPolling() async {
         let clock = FakeClock(base)
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
-            sessionAnswers: [.failure(error), .session(session)],
+            sessionAnswers: [.failure(.transport), .session(session)],
         )
         let model = makeModel(client: client, clock: clock)
 
@@ -207,6 +218,7 @@ struct LastFMLinkTests {
         clock.advance(to: clock.now.addingTimeInterval(3))
         #expect(await waitForSessionRequests(client, count: 1) == 1)
         #expect(model.phase == .waiting(challenge))
+        #expect(await waitForSleeper(clock))
 
         clock.advance(to: clock.now.addingTimeInterval(3))
         let phase = await waitForLinkPhase(model) {
@@ -216,6 +228,46 @@ struct LastFMLinkTests {
             return false
         }
         #expect(phase == .linked(connection(session)))
+        #expect(await client.sessionRequests == 2)
+
+        model.cancel()
+    }
+
+    @Test func aRateLimitedSessionFailureHonorsTheRetryAfterHint() async {
+        let retryAfter: TimeInterval = 12
+        let clock = FakeClock(base)
+        let client = ScriptedLinkClient(
+            tokenAnswers: [.challenge(challenge)],
+            sessionAnswers: [
+                .failure(.http(statusCode: 429, retryAfter: retryAfter)),
+                .session(session),
+            ],
+        )
+        let model = makeModel(client: client, clock: clock)
+
+        model.start()
+        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+
+        clock.advance(to: clock.now.addingTimeInterval(3))
+        #expect(await waitForSessionRequests(client, count: 1) == 1)
+        #expect(model.phase == .waiting(challenge))
+        #expect(await waitForSleeper(clock))
+
+        // The next automatic check must wait for the server hint, not the
+        // regular three-second cadence.
+        clock.advance(to: clock.now.addingTimeInterval(retryAfter - 1))
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await client.sessionRequests == 1)
+
+        clock.advance(to: clock.now.addingTimeInterval(1))
+        let phase = await waitForLinkPhase(model) {
+            if case .linked = $0 {
+                return true
+            }
+            return false
+        }
+        #expect(phase == .linked(connection(session)))
+        #expect(await client.sessionRequests == 2)
 
         model.cancel()
     }
