@@ -88,7 +88,8 @@ public enum LastFMError: Error, Equatable, Sendable {
 public struct LastFMClient: LastFMLinkClient {
     /// The protocol's hard limit for one `track.scrobble` request.
     public static let maximumScrobblesPerBatch = 50
-    public static let authorizationRoot = "https://www.last.fm/api/auth/"
+    /// The URL path is named "auth"; this is an endpoint, not a credential.
+    public static let authorizationRoot = "https://www.last.fm/api/auth/" // NOSONAR
 
     public let appCredentials: LastFMAppCredentials
     public let endpoint: ServiceEndpoint
@@ -257,15 +258,13 @@ public struct LastFMClient: LastFMLinkClient {
             throw LastFMError.service(code: code, message: trimmed(payload.message))
         }
 
-        switch response.statusCode {
-        case 200 ..< 300:
+        if (200 ..< 300).contains(response.statusCode) {
             return response.body
-        default:
-            throw LastFMError.http(
-                statusCode: response.statusCode,
-                retryAfter: retryAfter(from: response),
-            )
         }
+        throw LastFMError.http(
+            statusCode: response.statusCode,
+            retryAfter: retryAfter(from: response),
+        )
     }
 
     private func makeRequest(

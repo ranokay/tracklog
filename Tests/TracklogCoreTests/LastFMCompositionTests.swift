@@ -18,8 +18,8 @@ struct LastFMCompositionTests {
 
     private func makeHarness(
         transport: any HTTPTransport,
-        connectionLog: @escaping @MainActor (ConnectionEvent) -> Void = { _ in },
-        deliveryLog: @escaping @MainActor (DeliveryEvent) -> Void = { _ in },
+        connectionLog: @escaping @MainActor (ConnectionEvent) -> Void = { _ in /* No connection log is asserted by default. */ },
+        deliveryLog: @escaping @MainActor (DeliveryEvent) -> Void = { _ in /* No delivery log is asserted by default. */ },
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
     ) async throws -> Harness {

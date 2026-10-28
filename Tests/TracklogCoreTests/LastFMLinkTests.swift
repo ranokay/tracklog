@@ -85,7 +85,8 @@ struct LastFMLinkTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
     private let challenge = LastFMLinkChallenge(
         token: "request-token",
-        authorizationURL: URL(string: "https://www.last.fm/api/auth/?api_key=xxxxxxxxxx&token=request-token")!,
+        // A fixture URL for the browser flow; not a production endpoint.
+        authorizationURL: URL(string: "https://www.last.fm/api/auth/?api_key=xxxxxxxxxx&token=request-token")!, // NOSONAR
     )
     private let session = LastFMSession(name: "listener", key: "session-key")
 
@@ -103,8 +104,8 @@ struct LastFMLinkTests {
         client: ScriptedLinkClient,
         clock: FakeClock? = nil,
         opened: @escaping @MainActor (URL) -> Bool = { _ in true },
-        completed: @escaping @MainActor (LastFMSession) -> Void = { _ in },
-        onProblem: @escaping @MainActor (AppCredentialProblem) -> Void = { _ in },
+        completed: @escaping @MainActor (LastFMSession) -> Void = { _ in /* No completion is asserted by default. */ },
+        onProblem: @escaping @MainActor (AppCredentialProblem) -> Void = { _ in /* No problem is asserted by default. */ },
     ) -> LastFMLinkModel {
         LastFMLinkModel(
             client: client,
