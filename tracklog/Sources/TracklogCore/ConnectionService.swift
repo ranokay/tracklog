@@ -53,7 +53,35 @@ public final class ConnectionService {
     }
 
     public func load() async throws {
-        let loaded = try await store.connections()
+        var loaded: [Connection] = []
+        for connection in try await store.connections() {
+            guard let id = connection.id else {
+                loaded.append(connection)
+                continue
+            }
+            let credential: String?
+            do {
+                credential = try await credentials.credential(forConnection: id)
+            } catch {
+                // An unreadable credential is not proof it is missing.
+                loaded.append(connection)
+                continue
+            }
+            guard credential == nil else {
+                loaded.append(connection)
+                continue
+            }
+            do {
+                // A row left by a failed credential save has no usable secret
+                // and would block a new link to its endpoint.
+                try await store.deleteConnection(id: id)
+            } catch {
+                var orphan = connection
+                orphan.authState = .needsSignIn
+                loaded.append(orphan)
+            }
+        }
+
         let persistedCurrent = try await store.currentConnectionID()
         connections = loaded
         guard let persistedCurrent, loaded.contains(where: { $0.id == persistedCurrent }) else {
@@ -117,10 +145,35 @@ public final class ConnectionService {
             throw ConnectionError.unavailable
         }
 
+        try await persistCredentialAndCursor(
+            credential: credential,
+            connection: stored,
+            id: id,
+            kind: kind,
+        )
+        currentID = id
+        connections.append(stored)
+        log(.linked(kind: kind, identity: identity.name))
+        return stored
+    }
+
+    /// Saves the credential and sets the cursor as one link. If either step
+    /// fails, the half-made connection is removed or kept visible for repair.
+    private func persistCredentialAndCursor(
+        credential: String,
+        connection: Connection,
+        id: Int64,
+        kind: ServiceKind,
+    ) async throws {
         do {
             try await credentials.saveCredential(credential, forConnection: id)
         } catch {
-            try? await store.deleteConnection(id: id)
+            do {
+                try await store.deleteConnection(id: id)
+            } catch {
+                // The row has no usable credential. load() repairs it on the
+                // next activation so it cannot block a relink.
+            }
             log(.linkFailed(kind: kind, reason: "credential storage failed"))
             throw ConnectionError.credentialStorage
         }
@@ -130,15 +183,17 @@ public final class ConnectionService {
         do {
             try await store.setCurrentConnectionID(id)
         } catch {
-            try? await credentials.deleteCredential(forConnection: id)
-            try? await store.deleteConnection(id: id)
+            do {
+                try await store.deleteConnection(id: id)
+                try? await credentials.deleteCredential(forConnection: id)
+            } catch {
+                // The row and credential are usable; keep the connection
+                // visible so its cursor can be set from the Services page.
+                connections.append(connection)
+            }
             log(.linkFailed(kind: kind, reason: "current connection could not be saved"))
             throw ConnectionError.currentCursor
         }
-        currentID = id
-        connections.append(stored)
-        log(.linked(kind: kind, identity: identity.name))
-        return stored
     }
 
     public func setEnabled(id: Int64, enabled: Bool) async throws {

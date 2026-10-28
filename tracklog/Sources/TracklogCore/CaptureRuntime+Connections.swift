@@ -36,14 +36,21 @@ public extension CaptureRuntime {
     }
 
     /// Validates a credential, stores the connection and its Keychain
-    /// credential, and makes the new connection current. A failure leaves the
-    /// published state untouched.
+    /// credential, and makes the new connection current. A failed link may
+    /// still publish a kept connection when its cleanup could not complete.
     @discardableResult
     func link(kind: ServiceKind, credential: String) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
-        let connection = try await connectionService.link(kind: kind, credential: credential)
-        applyConnectionSnapshot()
-        return connection
+        do {
+            let connection = try await connectionService.link(kind: kind, credential: credential)
+            applyConnectionSnapshot()
+            return connection
+        } catch {
+            // A failed link may still have kept a recoverable connection when
+            // its cleanup could not complete; publish what the service holds.
+            applyConnectionSnapshot()
+            throw error
+        }
     }
 
     func setConnectionEnabled(id: Int64, enabled: Bool) async throws {

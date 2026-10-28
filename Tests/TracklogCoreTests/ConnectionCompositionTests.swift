@@ -88,6 +88,36 @@ struct ConnectionCompositionTests {
         #expect(state.currentConnection?.kind == .lastFM)
     }
 
+    @Test func aFailedLinkStillPublishesARecoverableConnection() async throws {
+        let database = try TemporaryDatabase()
+        let baseStore = try SQLiteListenStore(url: database.url)
+        let store = RecoveryFailingStore(baseStore, currentWritesToFail: 1, deletesToFail: 1)
+        let state = TracklogAppState()
+        let runtime = CaptureRuntime(
+            state: state,
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            credentials: MemoryCredentialStore(),
+            serviceAdapters: [
+                ListenBrainzAdapter(transport: ScriptedTransport([listenBrainzValidResponse()])),
+            ],
+            settings: CaptureSettings(scrobblingEnabled: false),
+        )
+        await runtime.start()
+
+        await #expect(throws: ConnectionError.currentCursor) {
+            _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        }
+
+        let kept = try #require(state.connections.first)
+        #expect(state.currentConnectionID == nil)
+
+        try await runtime.setCurrentConnection(kept.id)
+        #expect(state.currentConnectionID == kept.id)
+    }
+
     @Test func withoutACredentialStoreLinkingIsUnavailable() async throws {
         let database = try TemporaryDatabase()
         let state = TracklogAppState()

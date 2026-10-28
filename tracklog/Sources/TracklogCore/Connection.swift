@@ -109,7 +109,7 @@ public enum ConnectionError: Error, Equatable, Sendable, LocalizedError {
         case .credentialStorage:
             "The token could not be saved in the Keychain."
         case .currentCursor:
-            "The connection could not be made current. Try again."
+            "The connection could not be made current. Check the Services page or try again."
         }
     }
 }

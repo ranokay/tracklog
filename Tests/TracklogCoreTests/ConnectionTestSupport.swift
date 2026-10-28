@@ -103,3 +103,97 @@ actor CursorFailingStore: ConnectionStore {
         throw DatabaseError.unavailable("simulated current-cursor failure")
     }
 }
+
+/// A real store whose deletion fails a fixed number of times, to exercise the
+/// repair of a credentialless row left by a failed link.
+actor CleanupFailingStore: ConnectionStore {
+    private let base: SQLiteListenStore
+    private var deletesToFail: Int
+
+    init(_ base: SQLiteListenStore, deletesToFail: Int = 1) {
+        self.base = base
+        self.deletesToFail = deletesToFail
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        guard deletesToFail == 0 else {
+            deletesToFail -= 1
+            throw DatabaseError.unavailable("simulated cleanup failure")
+        }
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
+        try await base.setCurrentConnectionID(id)
+    }
+}
+
+/// A real store whose current-cursor write and connection deletion both fail
+/// once, to exercise the recovery path that keeps a saved connection visible.
+actor RecoveryFailingStore: ConnectionStore, ListenStore {
+    private let base: SQLiteListenStore
+    private var currentWritesToFail: Int
+    private var deletesToFail: Int
+
+    init(
+        _ base: SQLiteListenStore,
+        currentWritesToFail: Int = 1,
+        deletesToFail: Int = 1,
+    ) {
+        self.base = base
+        self.currentWritesToFail = currentWritesToFail
+        self.deletesToFail = deletesToFail
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await base.insert(listen)
+    }
+
+    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try await base.page(limit: limit, before: cursor)
+    }
+
+    func count() async throws -> Int {
+        try await base.count()
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        guard deletesToFail == 0 else {
+            deletesToFail -= 1
+            throw DatabaseError.unavailable("simulated cleanup failure")
+        }
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
+        guard currentWritesToFail == 0 else {
+            currentWritesToFail -= 1
+            throw DatabaseError.unavailable("simulated current-cursor failure")
+        }
+        try await base.setCurrentConnectionID(id)
+    }
+}
