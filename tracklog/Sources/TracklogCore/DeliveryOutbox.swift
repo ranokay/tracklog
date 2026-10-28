@@ -39,7 +39,9 @@ public final class DeliveryOutbox {
         adapters: [any DeliveryAdapter],
         clock: any Clock,
         retry: DeliveryRetrySchedule = .standard,
-        log: @escaping @MainActor (DeliveryEvent) -> Void = { _ in },
+        log: @escaping @MainActor (DeliveryEvent) -> Void = { _ in
+            // The outbox is silent until the composition root supplies a log.
+        },
     ) {
         self.store = store
         lookup = DeliveryConnectionLookup(
@@ -73,10 +75,7 @@ public final class DeliveryOutbox {
         guard isActive else { return }
         isActive = false
         scheduler.cancel()
-        for worker in workers.values {
-            worker.task?.cancel()
-            worker.resetForDeactivation()
-        }
+        workers.values.forEach { $0.stop() }
         lastRequestAt.removeAll()
     }
 
@@ -337,7 +336,8 @@ private final class ConnectionWorker {
     var runAgain = false
     var nowPlaying: Track?
 
-    func resetForDeactivation() {
+    func stop() {
+        task?.cancel()
         nowPlaying = nil
         runAgain = false
         drainRequested = false

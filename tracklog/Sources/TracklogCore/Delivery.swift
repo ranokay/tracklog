@@ -30,32 +30,6 @@ public struct Delivery: Identifiable, Equatable, Sendable {
     /// A service reference kept for a later operation, such as the
     /// ListenBrainz recording MSID a now playing returned.
     public let serviceReference: String?
-
-    public init(
-        id: Int64,
-        listenID: Int64,
-        connectionID: Int64,
-        state: DeliveryState,
-        attempts: Int = 0,
-        lastAttemptAt: Date? = nil,
-        nextAttemptAt: Date? = nil,
-        lastError: String? = nil,
-        abandonedReason: String? = nil,
-        deliveredAt: Date? = nil,
-        serviceReference: String? = nil,
-    ) {
-        self.id = id
-        self.listenID = listenID
-        self.connectionID = connectionID
-        self.state = state
-        self.attempts = attempts
-        self.lastAttemptAt = lastAttemptAt
-        self.nextAttemptAt = nextAttemptAt
-        self.lastError = lastError
-        self.abandonedReason = abandonedReason
-        self.deliveredAt = deliveredAt
-        self.serviceReference = serviceReference
-    }
 }
 
 /// A due delivery together with the listen it carries.

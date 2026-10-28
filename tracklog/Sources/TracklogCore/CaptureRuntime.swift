@@ -86,7 +86,9 @@ public final class CaptureRuntime {
                 credentials: credentials,
                 adapters: serviceAdapters.compactMap { $0 as? any DeliveryAdapter },
                 clock: clock,
-                log: deliveryLog ?? { _ in },
+                log: deliveryLog ?? { _ in
+                    // A runtime without a delivery log stays silent.
+                },
             )
         } else {
             deliveryOutbox = nil

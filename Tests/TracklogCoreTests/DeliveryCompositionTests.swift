@@ -246,7 +246,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
 
         let requests = await awaitRequests(transport, count: 2)
         let nowPlaying = try #require(requests.last)
-        #expect(nowPlaying.url.absoluteString == "https://api.listenbrainz.org/1/submit-listens?return_msid=true")
+        #expect(nowPlaying.url.absoluteString == "\(ServiceEndpoint.listenBrainz)/1/submit-listens?return_msid=true")
         let body = try #require(nowPlaying.body)
         let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
         #expect(json["listen_type"] as? String == "playing_now")

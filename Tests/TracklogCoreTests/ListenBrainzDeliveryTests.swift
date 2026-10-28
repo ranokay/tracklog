@@ -24,6 +24,10 @@ struct ListenBrainzDeliveryTests {
         ListenBrainzAdapter(transport: transport)
     }
 
+    private var submitURL: String {
+        "\(ServiceEndpoint.listenBrainz)/1/submit-listens"
+    }
+
     private func listen(
         title: String = "Song",
         start: TimeInterval = 10.6,
@@ -57,7 +61,7 @@ struct ListenBrainzDeliveryTests {
         #expect(results == [.delivered(reference: nil)])
         let request = try #require(await transport.requests.first)
         #expect(request.method == .post)
-        #expect(request.url.absoluteString == "https://api.listenbrainz.org/1/submit-listens")
+        #expect(request.url.absoluteString == submitURL)
         #expect(request.headers["Authorization"] == "Token token")
         #expect(request.headers["Content-Type"] == "application/json")
         #expect(request.headers["User-Agent"] == TracklogHTTP.userAgent)
@@ -99,7 +103,7 @@ struct ListenBrainzDeliveryTests {
 
         #expect(reference == "msid-1")
         let request = try #require(await transport.requests.first)
-        #expect(request.url.absoluteString == "https://api.listenbrainz.org/1/submit-listens?return_msid=true")
+        #expect(request.url.absoluteString == submitURL + "?return_msid=true")
         let body = try json(request)
         #expect(body["listen_type"] as? String == "playing_now")
         let payload = try #require(body["payload"] as? [[String: Any]])
