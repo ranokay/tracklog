@@ -158,13 +158,30 @@ struct DeliveryStoreTests {
         let stored = try #require(try await store.insert(listen(), targets: [id]))
         let delivery = try #require(try await store.deliveries(for: stored.id ?? -1).first)
 
-        try await store.abandon(delivery.id, attempts: 1, at: base, reason: "The service rejected it.")
+        try await store.abandon(delivery.id, attempts: 1, lastAttemptAt: base, reason: "The service rejected it.")
 
         let updated = try #require(try await store.deliveries(for: stored.id ?? -1).first)
         #expect(updated.state == .abandoned)
         #expect(updated.abandonedReason == "The service rejected it.")
         #expect(updated.lastError == "The service rejected it.")
         #expect(try await store.recent(limit: 1).count == 1)
+    }
+
+    @Test func aCompletedDeliveryCannotBeAbandoned() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let target = try await connection(store)
+        let id = target.id ?? -1
+        let stored = try #require(try await store.insert(listen(), targets: [id]))
+        let delivery = try #require(try await store.deliveries(for: stored.id ?? -1).first)
+
+        try await store.markDelivered(delivery.id, at: base, reference: "msid-1")
+        try await store.abandon(delivery.id, attempts: 1, lastAttemptAt: base, reason: "Deleted from the pending list.")
+
+        let updated = try #require(try await store.deliveries(for: stored.id ?? -1).first)
+        #expect(updated.state == .delivered)
+        #expect(updated.deliveredAt == base)
+        #expect(updated.abandonedReason == nil)
     }
 
     @Test func aWriteAfterAbandonmentDoesNotResurrectTheDelivery() async throws {
@@ -175,7 +192,7 @@ struct DeliveryStoreTests {
         let stored = try #require(try await store.insert(listen(), targets: [id]))
         let delivery = try #require(try await store.deliveries(for: stored.id ?? -1).first)
 
-        try await store.abandon(delivery.id, attempts: 1, at: base, reason: "Deleted from the pending list.")
+        try await store.abandon(delivery.id, attempts: 1, lastAttemptAt: base, reason: "Deleted from the pending list.")
         try await store.markDelivered(delivery.id, at: base.addingTimeInterval(5), reference: nil)
         try await store.markFailed(
             delivery.id,

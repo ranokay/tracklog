@@ -121,11 +121,12 @@ public protocol DeliveryStore: Sendable {
         error: String,
     ) async throws
 
-    /// Drops one delivery for good. The listen stays in local history.
+    /// Drops one delivery for good. The listen stays in local history. A
+    /// delivery that already reached a final state is left alone.
     func abandon(
         _ deliveryID: Int64,
         attempts: Int,
-        at date: Date,
+        lastAttemptAt: Date?,
         reason: String,
     ) async throws
 

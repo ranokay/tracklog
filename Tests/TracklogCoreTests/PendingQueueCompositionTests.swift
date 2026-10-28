@@ -36,7 +36,7 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
 
         await runtime.reloadHistory()
 
-        #expect(state.deliveryAggregate(for: listen) == .pending)
+        #expect(DeliveryAggregate(state.deliveries(for: listen)) == .pending)
         let value = DeliverySummary(state.deliveries(for: listen))
             .accessibilityValue(connections: state.connections)
         #expect(value.contains("Last.fm"))
@@ -49,10 +49,10 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
             Issue.record("a waiting row did not raise the pending banner")
         }
 
-        try await store.abandon(lastFMDelivery.id, attempts: 1, at: base, reason: "Rejected.")
+        try await store.abandon(lastFMDelivery.id, attempts: 1, lastAttemptAt: base, reason: "Rejected.")
         await runtime.reloadDeliveryState()
 
-        #expect(state.deliveryAggregate(for: listen) == .notDelivered)
+        #expect(DeliveryAggregate(state.deliveries(for: listen)) == .notDelivered)
         #expect(state.pendingQueue.isEmpty)
         #expect(state.pendingBanner == nil)
     }
@@ -205,8 +205,9 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
         let updated = try #require(try await store.deliveries(for: listen.id ?? -1).first)
         #expect(updated.state == .abandoned)
         #expect(updated.abandonedReason == CaptureRuntime.deletedDeliveryReason)
+        #expect(updated.lastAttemptAt == nil, "a deleted waiting row never fakes an attempt")
         #expect(state.pendingQueue.isEmpty)
-        #expect(state.deliveryAggregate(for: listen) == .notDelivered)
+        #expect(DeliveryAggregate(state.deliveries(for: listen)) == .notDelivered)
         #expect(try await store.recent(limit: 10).contains { $0.id == listen.id })
         #expect(state.listens.contains { $0.id == listen.id })
         #expect(await adapter.batches.isEmpty)

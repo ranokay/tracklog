@@ -71,9 +71,7 @@ struct DeliverySummaryTests {
 }
 
 @Suite("Pending queue")
-struct PendingQueueTests {
-    private let base = Date(timeIntervalSince1970: 1_000_000)
-
+struct PendingQueueTests: CaptureTestHelpers {
     private func connection(_ id: Int64, kind: ServiceKind, needsSignIn: Bool = false) -> Connection {
         Connection(
             id: id,
@@ -103,19 +101,6 @@ struct PendingQueueTests {
                 lastError: lastError,
             ),
             listen: listen(title: title, start: start),
-        )
-    }
-
-    private func listen(title: String, start: TimeInterval) -> Listen {
-        Listen(
-            id: Int64(start) + 100,
-            raw: ListenMetadata(title: title, artist: "Artist"),
-            processed: ListenMetadata(title: title, artist: "Artist"),
-            bundleID: "com.apple.Music",
-            duration: 200,
-            playedDuration: 100,
-            startedAt: base.addingTimeInterval(start),
-            capturedAt: base.addingTimeInterval(start),
         )
     }
 

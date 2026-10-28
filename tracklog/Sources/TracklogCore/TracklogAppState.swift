@@ -105,10 +105,6 @@ public final class TracklogAppState: ObservableObject {
         return deliveriesByListen[id] ?? []
     }
 
-    public func deliveryAggregate(for listen: Listen) -> DeliveryAggregate {
-        DeliveryAggregate(deliveries(for: listen))
-    }
-
     public func setPendingListExpanded(_ expanded: Bool) {
         pendingListExpanded = expanded
     }

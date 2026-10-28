@@ -234,7 +234,7 @@ public extension SQLiteListenStore {
     func abandon(
         _ deliveryID: Int64,
         attempts: Int,
-        at date: Date,
+        lastAttemptAt: Date?,
         reason: String,
     ) async throws {
         let handle = try database()
@@ -248,12 +248,16 @@ public extension SQLiteListenStore {
                 next_attempt_at = NULL,
                 last_error = ?,
                 abandoned_reason = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_int(statement, 1, Int32(clamping: attempts))
-        sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+        if let lastAttemptAt {
+            sqlite3_bind_double(statement, 2, lastAttemptAt.timeIntervalSince1970)
+        } else {
+            sqlite3_bind_null(statement, 2)
+        }
         try bind(reason, at: 3, in: statement)
         try bind(reason, at: 4, in: statement)
         sqlite3_bind_int64(statement, 5, deliveryID)

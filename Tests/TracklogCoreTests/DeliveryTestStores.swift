@@ -136,8 +136,8 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         )
     }
 
-    func abandon(_ deliveryID: Int64, attempts: Int, at date: Date, reason: String) async throws {
-        try await base.abandon(deliveryID, attempts: attempts, at: date, reason: reason)
+    func abandon(_ deliveryID: Int64, attempts: Int, lastAttemptAt: Date?, reason: String) async throws {
+        try await base.abandon(deliveryID, attempts: attempts, lastAttemptAt: lastAttemptAt, reason: reason)
     }
 
     func markDue(for connectionID: Int64, at date: Date) async throws {

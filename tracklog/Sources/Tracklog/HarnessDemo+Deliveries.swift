@@ -94,7 +94,7 @@ extension HarnessDemoStore {
         }
     }
 
-    func abandon(_ deliveryID: Int64, attempts: Int, at date: Date, reason: String) async throws {
+    func abandon(_ deliveryID: Int64, attempts: Int, lastAttemptAt: Date?, reason: String) async throws {
         updateDelivery(deliveryID) { delivery in
             Delivery(
                 id: delivery.id,
@@ -102,7 +102,7 @@ extension HarnessDemoStore {
                 connectionID: delivery.connectionID,
                 state: .abandoned,
                 attempts: attempts,
-                lastAttemptAt: date,
+                lastAttemptAt: lastAttemptAt,
                 nextAttemptAt: nil,
                 lastError: reason,
                 abandonedReason: reason,
