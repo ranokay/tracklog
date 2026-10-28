@@ -125,12 +125,17 @@ public final class ConnectionService {
             throw ConnectionError.credentialStorage
         }
 
-        // The link stands even if the read cursor cannot be saved; the cursor
-        // is a convenience, not part of the connection's identity.
+        // A connection that cannot be made current is not a usable link:
+        // remove the half-made row and its credential, then report failure.
         do {
             try await store.setCurrentConnectionID(id)
-            currentID = id
-        } catch {}
+        } catch {
+            try? await credentials.deleteCredential(forConnection: id)
+            try? await store.deleteConnection(id: id)
+            log(.linkFailed(kind: kind, reason: "current connection could not be saved"))
+            throw ConnectionError.currentCursor
+        }
+        currentID = id
         connections.append(stored)
         log(.linked(kind: kind, identity: identity.name))
         return stored

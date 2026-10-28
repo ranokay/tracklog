@@ -94,6 +94,7 @@ public enum ConnectionError: Error, Equatable, Sendable, LocalizedError {
     case duplicateEndpoint(kind: ServiceKind, endpoint: ServiceEndpoint)
     case unknownConnection(id: Int64)
     case credentialStorage
+    case currentCursor
 
     public var errorDescription: String? {
         switch self {
@@ -107,6 +108,8 @@ public enum ConnectionError: Error, Equatable, Sendable, LocalizedError {
             "That connection is no longer available."
         case .credentialStorage:
             "The token could not be saved in the Keychain."
+        case .currentCursor:
+            "The connection could not be made current. Try again."
         }
     }
 }

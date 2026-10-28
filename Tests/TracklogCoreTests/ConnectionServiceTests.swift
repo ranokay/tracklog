@@ -174,6 +174,34 @@ struct ConnectionServiceTests {
         #expect(service.currentID == nil)
     }
 
+    @Test func aCursorThatCannotBeSavedRollsTheLinkBack() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        var events: [ConnectionEvent] = []
+        let service = ConnectionService(
+            store: CursorFailingStore(store),
+            credentials: credentials,
+            adapters: [ListenBrainzAdapter(transport: ScriptedTransport([listenBrainzValidResponse()]))],
+            clock: FakeClock(base),
+            log: { events.append($0) },
+        )
+
+        await #expect(throws: ConnectionError.currentCursor) {
+            _ = try await service.link(kind: .listenBrainz, credential: "token")
+        }
+
+        #expect(try await store.connections().isEmpty)
+        #expect(try await store.currentConnectionID() == nil)
+        #expect(service.connections.isEmpty)
+        #expect(service.currentID == nil)
+        #expect(
+            events == [
+                .linkFailed(kind: .listenBrainz, reason: "current connection could not be saved"),
+            ],
+        )
+    }
+
     @Test func anUnsupportedServiceIsRefusedBeforeTheNetwork() async throws {
         let database = try TemporaryDatabase()
         let transport = ScriptedTransport([])

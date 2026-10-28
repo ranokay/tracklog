@@ -74,3 +74,32 @@ struct StubAdapter: ServiceAdapter {
         identity
     }
 }
+
+/// A real store whose current-cursor write fails, to exercise link rollback.
+actor CursorFailingStore: ConnectionStore {
+    private let base: SQLiteListenStore
+
+    init(_ base: SQLiteListenStore) {
+        self.base = base
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_: Int64?) async throws {
+        throw DatabaseError.unavailable("simulated current-cursor failure")
+    }
+}
