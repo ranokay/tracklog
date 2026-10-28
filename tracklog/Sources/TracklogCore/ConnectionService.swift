@@ -192,6 +192,10 @@ public final class ConnectionService {
             throw failure
         }
 
+        // A page that leaves while the token is being exchanged cancels its
+        // task. Do not start a link the caller no longer wants.
+        try Task.checkCancellation()
+
         let now = clock.now
         let candidate = Connection(
             kind: kind,
@@ -220,6 +224,13 @@ public final class ConnectionService {
             id: id,
             kind: kind,
         )
+        // Cancellation may have landed after the row was written. Remove the
+        // half-made link rather than keeping a connection the page abandoned.
+        if Task.isCancelled {
+            try? await credentials.deleteCredential(forConnection: id)
+            try? await store.deleteConnection(id: id)
+            throw CancellationError()
+        }
         currentID = id
         connections.append(stored)
         log(.linked(kind: kind, identity: identity.name))

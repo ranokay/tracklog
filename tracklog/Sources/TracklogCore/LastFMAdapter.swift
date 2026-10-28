@@ -7,7 +7,7 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
     public let kind = ServiceKind.lastFM
     public let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
-        maximumBatchSize: 50,
+        maximumBatchSize: LastFMClient.maximumScrobblesPerBatch,
         supportsLove: true,
         supportsHate: false,
         supportsDelete: false,
@@ -17,16 +17,16 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
 
     public let client: LastFMClient
 
+    /// Last.fm's endpoint is fixed; only the transport and the app credentials
+    /// are injected.
     public init(
         transport: any HTTPTransport,
         appCredentials: LastFMAppCredentials,
-        endpoint: ServiceEndpoint = .lastFM,
         userAgent: String = TracklogHTTP.userAgent,
     ) {
         client = LastFMClient(
             transport: transport,
             appCredentials: appCredentials,
-            endpoint: endpoint,
             userAgent: userAgent,
         )
     }
@@ -59,7 +59,9 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
         credential: String,
     ) async throws -> [DeliveryResult] {
         guard !listens.isEmpty, listens.count <= capabilities.maximumBatchSize else {
-            throw ServiceFailure.rejected("Last.fm accepts up to 50 scrobbles per request.")
+            throw ServiceFailure.rejected(
+                "Last.fm accepts up to \(LastFMClient.maximumScrobblesPerBatch) scrobbles per request.",
+            )
         }
         do {
             let results = try await client.scrobble(listens, sessionKey: credential)
@@ -108,8 +110,6 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
             .delivered(reference: nil)
         case let .ignored(code):
             switch code {
-            case 0:
-                .delivered(reference: nil)
             case 1 ... 4:
                 .rejected(reason: "Last.fm ignored this scrobble (code \(code)).")
             case 5:

@@ -17,6 +17,7 @@ public final class CaptureRuntime {
     let deliveryStore: (any DeliveryStore)?
     let deliveryOutbox: DeliveryOutbox?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
+    let persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)?
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
     let historyPageSize: Int
@@ -55,6 +56,8 @@ public final class CaptureRuntime {
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
+        appCredentialProblem: AppCredentialProblem? = nil,
+        persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -98,6 +101,7 @@ public final class CaptureRuntime {
             deliveryOutbox = nil
         }
         self.persistSettings = persistSettings
+        self.persistAppCredentialProblem = persistAppCredentialProblem
         self.sendNowPlaying = sendNowPlaying
 
         var engineConfiguration = configuration
@@ -111,16 +115,10 @@ public final class CaptureRuntime {
         state.minimumDuration = settings.minimumDuration
         state.captureAvailable = store != nil
         state.failure = failure
+        state.lastFMAppCredentialProblem = appCredentialProblem
         state.mediaStatus = source.mediaStatus
 
-        deliveryOutbox?.onConnectionsChanged = { [weak self] in self?.applyConnectionSnapshot() }
-        deliveryOutbox?.onDeliveryStateChanged = { [weak self] in self?.scheduleDeliveryRefresh() }
-        deliveryOutbox?.onAppCredentialProblem = { [weak self] kind, problem in
-            self?.noteAppCredentialProblem(problem, for: kind)
-        }
-        deliveryOutbox?.onDeliverySucceeded = { [weak self] kind in
-            self?.clearAppCredentialProblem(for: kind)
-        }
+        wireOutboxCallbacks()
     }
 
     /// Opens the real database in the droplet's container. A database that
@@ -137,6 +135,8 @@ public final class CaptureRuntime {
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
+        appCredentialProblem: AppCredentialProblem? = nil,
+        persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -168,6 +168,8 @@ public final class CaptureRuntime {
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
+            appCredentialProblem: appCredentialProblem,
+            persistAppCredentialProblem: persistAppCredentialProblem,
             sendNowPlaying: sendNowPlaying,
             configuration: configuration,
             historyPageSize: historyPageSize,
@@ -277,11 +279,6 @@ public final class CaptureRuntime {
         )
     }
 
-    private func applyMediaStatus(_ status: MediaStatus) {
-        guard status != state.mediaStatus else { return }
-        state.mediaStatus = status
-    }
-
     func stopFeed() {
         if feedRunning {
             feedRunning = false
@@ -295,6 +292,28 @@ public final class CaptureRuntime {
         clearArtwork()
         state.nowPlaying = nil
         state.status = .idle
+    }
+}
+
+private extension CaptureRuntime {
+    /// Connects the outbox's UI-facing signals. Kept out of `init` so the
+    /// composition setup stays one call per concern.
+    func wireOutboxCallbacks() {
+        deliveryOutbox?.onConnectionsChanged = { [weak self] in self?.applyConnectionSnapshot() }
+        deliveryOutbox?.onDeliveryStateChanged = { [weak self] in self?.scheduleDeliveryRefresh() }
+        deliveryOutbox?.onAppCredentialProblem = { [weak self] kind, problem in
+            guard kind == .lastFM else { return }
+            self?.noteLastFMAppCredentialProblem(problem)
+        }
+        deliveryOutbox?.onDeliverySucceeded = { [weak self] kind in
+            guard kind == .lastFM else { return }
+            self?.clearLastFMAppCredentialProblem()
+        }
+    }
+
+    func applyMediaStatus(_ status: MediaStatus) {
+        guard status != state.mediaStatus else { return }
+        state.mediaStatus = status
     }
 }
 

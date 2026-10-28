@@ -75,6 +75,21 @@ struct LastFMErrorTests {
         #expect(await timeout.1.requests.isEmpty)
     }
 
+    @Test func a5xxStaysRetryableEvenWithAnErrorBody() async throws {
+        for (status, code) in [(503, 10), (500, 6), (502, 13)] {
+            let (adapter, _) = adapter([
+                lastFMErrorResponse(code: code, statusCode: status),
+            ])
+            await #expect(throws: ServiceFailure.retryable) {
+                _ = try await adapter.submit(
+                    [lastFMTestListen()],
+                    connection: lastFMTestConnection(),
+                    credential: "session-key",
+                )
+            }
+        }
+    }
+
     @Test func anHTTPRateLimitKeepsTheRetryAfterHintEvenWithAnErrorBody() async throws {
         let body = lastFMErrorResponse(code: 29).body
         let (adapter, _) = adapter([

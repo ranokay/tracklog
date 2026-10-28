@@ -20,6 +20,8 @@ struct LastFMCompositionTests {
         transport: any HTTPTransport,
         connectionLog: @escaping @MainActor (ConnectionEvent) -> Void = { _ in },
         deliveryLog: @escaping @MainActor (DeliveryEvent) -> Void = { _ in },
+        appCredentialProblem: AppCredentialProblem? = nil,
+        persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
     ) async throws -> Harness {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
@@ -41,6 +43,8 @@ struct LastFMCompositionTests {
             connectionLog: connectionLog,
             deliveryLog: deliveryLog,
             settings: CaptureSettings(scrobblingEnabled: false),
+            appCredentialProblem: appCredentialProblem,
+            persistAppCredentialProblem: persistAppCredentialProblem,
         )
         await runtime.start()
         return Harness(
@@ -152,7 +156,11 @@ struct LastFMCompositionTests {
 
     @Test func anAppCredentialRejectionSurfacesOnTheServicesState() async throws {
         let transport = ScriptedTransport([lastFMErrorResponse(code: 26)])
-        let harness = try await makeHarness(transport: transport)
+        var persisted: [AppCredentialProblem?] = []
+        let harness = try await makeHarness(
+            transport: transport,
+            persistAppCredentialProblem: { persisted.append($0) },
+        )
         let connection = try await linked(harness)
         let listen = try #require(
             try await harness.store.insert(
@@ -169,6 +177,34 @@ struct LastFMCompositionTests {
         #expect(failed.first?.state == .retrying)
         #expect(harness.state.lastFMAppCredentialProblem == .suspendedKey)
         #expect(harness.state.connections.first?.authState == .needsSignIn)
+        #expect(persisted == [.suspendedKey])
+    }
+
+    @Test func aPersistedAppCredentialProblemRestoresAndClearsAfterDelivery() async throws {
+        var persisted: [AppCredentialProblem?] = []
+        let transport = ScriptedTransport([lastFMScrobbleResponse(codes: [0])])
+        let harness = try await makeHarness(
+            transport: transport,
+            appCredentialProblem: .suspendedKey,
+            persistAppCredentialProblem: { persisted.append($0) },
+        )
+        #expect(harness.state.lastFMAppCredentialProblem == .suspendedKey)
+
+        let connection = try await linked(harness)
+        let listen = try #require(
+            try await harness.store.insert(
+                lastFMTestListen(),
+                targets: [connection.id ?? -1],
+            ),
+        )
+        harness.runtime.deliveryOutbox?.drain(connectionIDs: [connection.id ?? -1])
+        let delivered = await awaitDeliveries(harness.store, listen: listen) {
+            $0.allSatisfy { $0.state == .delivered }
+        }
+        #expect(delivered.map(\.state) == [.delivered])
+        #expect(harness.state.lastFMAppCredentialProblem == nil)
+        #expect(persisted.count == 1)
+        #expect(persisted[0] == nil)
     }
 
     @Test func theSessionKeyNeverReachesALogTheDatabaseOrPublishedState() async throws {

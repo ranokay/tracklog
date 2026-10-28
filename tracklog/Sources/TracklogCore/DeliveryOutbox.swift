@@ -251,7 +251,7 @@ public final class DeliveryOutbox {
             }
             return outcome.continueDraining
         } catch {
-            if case let .appCredentialAuth(problem) = DeliveryFailure.from(error) {
+            if let problem = DeliveryFailure.from(error).appCredentialProblem {
                 onAppCredentialProblem?(connection.kind, problem)
             }
             let outcome = await writer.handleFailure(
@@ -342,7 +342,7 @@ private extension DeliveryOutbox {
             if failure.isAuthentication {
                 await markNeedsSignIn(id: id)
             }
-            if case let .appCredentialAuth(problem) = failure {
+            if let problem = failure.appCredentialProblem {
                 onAppCredentialProblem?(connection.kind, problem)
             }
             writer.log(.failed(kind: connection.kind, reason: DeliveryFailure.message(for: failure)))

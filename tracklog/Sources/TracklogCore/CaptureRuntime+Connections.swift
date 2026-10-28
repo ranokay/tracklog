@@ -42,8 +42,51 @@ public extension CaptureRuntime {
     @discardableResult
     func link(kind: ServiceKind, credential: String) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
+        return try await publishLinkedConnection {
+            try await connectionService.link(kind: kind, credential: credential)
+        }
+    }
+
+    /// Stores a credential the caller already verified, such as the Last.fm
+    /// session key from the browser flow. The connection still starts enabled
+    /// and current, and the outbox resumes it.
+    @discardableResult
+    func linkVerified(
+        kind: ServiceKind,
+        credential: String,
+        identity: ServiceIdentity,
+    ) async throws -> Connection {
+        guard let connectionService else { throw ConnectionError.unavailable }
+        return try await publishLinkedConnection {
+            try await connectionService.linkVerified(
+                kind: kind,
+                credential: credential,
+                identity: identity,
+            )
+        }
+    }
+
+    /// Records why Last.fm rejected the project's own app credentials. The
+    /// reason survives a relaunch so Services can still explain a held queue.
+    func noteLastFMAppCredentialProblem(_ problem: AppCredentialProblem) {
+        state.lastFMAppCredentialProblem = problem
+        persistAppCredentialProblem?(problem)
+    }
+
+    /// Clears the app-credential warning after a successful link or delivery.
+    func clearLastFMAppCredentialProblem() {
+        state.lastFMAppCredentialProblem = nil
+        persistAppCredentialProblem?(nil)
+    }
+
+    /// Publishes a linked connection, refreshes the delivery state and triggers
+    /// its first drain. A failed link still publishes a recoverable connection
+    /// when its cleanup could not complete.
+    private func publishLinkedConnection(
+        _ operation: @MainActor () async throws -> Connection,
+    ) async throws -> Connection {
         do {
-            let connection = try await connectionService.link(kind: kind, credential: credential)
+            let connection = try await operation()
             applyConnectionSnapshot()
             await reloadDeliveryState()
             // A new credential is a delivery trigger. A new connection has no
@@ -58,47 +101,6 @@ public extension CaptureRuntime {
             applyConnectionSnapshot()
             throw error
         }
-    }
-
-    /// Stores a credential the caller already verified, such as the Last.fm
-    /// session key from the browser flow. The connection still starts enabled
-    /// and current, and the outbox resumes it.
-    @discardableResult
-    func linkVerified(
-        kind: ServiceKind,
-        credential: String,
-        identity: ServiceIdentity,
-    ) async throws -> Connection {
-        guard let connectionService else { throw ConnectionError.unavailable }
-        do {
-            let connection = try await connectionService.linkVerified(
-                kind: kind,
-                credential: credential,
-                identity: identity,
-            )
-            applyConnectionSnapshot()
-            await reloadDeliveryState()
-            if let id = connection.id {
-                deliveryOutbox?.resume(connectionID: id)
-            }
-            return connection
-        } catch {
-            applyConnectionSnapshot()
-            throw error
-        }
-    }
-
-    /// Records why a service rejected the app's own credentials. Only Last.fm
-    /// has an app credential in this milestone.
-    func noteAppCredentialProblem(_ problem: AppCredentialProblem, for kind: ServiceKind) {
-        guard kind == .lastFM else { return }
-        state.lastFMAppCredentialProblem = problem
-    }
-
-    /// Clears the app-credential warning after a successful link or delivery.
-    func clearAppCredentialProblem(for kind: ServiceKind) {
-        guard kind == .lastFM else { return }
-        state.lastFMAppCredentialProblem = nil
     }
 
     func setConnectionEnabled(id: Int64, enabled: Bool) async throws {

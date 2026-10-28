@@ -30,9 +30,14 @@ public final class LastFMLinkModel: ObservableObject {
     private let complete: @MainActor (LastFMSession) async throws -> Connection
     private let onAppCredentialProblem: (@MainActor (AppCredentialProblem) -> Void)?
     private var task: Task<Void, Never>?
+    /// The in-flight manual check. `cancel()` stops it as well as the poll.
+    private var checkTask: Task<Void, Never>?
     /// Invalidates a late token, session or completion result after the page
     /// leaves.
     private var lifecycle = 0
+
+    private static let browserOpenFailureNotice =
+        "The browser could not be opened. Choose Open Last.fm again to retry."
 
     public init(
         client: any LastFMLinkClient,
@@ -63,6 +68,8 @@ public final class LastFMLinkModel: ObservableObject {
         phase = .starting
         notice = nil
         task?.cancel()
+        checkTask?.cancel()
+        checkTask = nil
         task = Task { [weak self] in
             await self?.begin(generation: generation)
         }
@@ -70,15 +77,24 @@ public final class LastFMLinkModel: ObservableObject {
 
     /// The manual "Check again" beside the poll.
     public func checkNow() async {
-        guard case let .waiting(challenge) = phase else { return }
-        await check(challenge, generation: lifecycle, manual: true)
+        guard checkTask == nil, case let .waiting(challenge) = phase else { return }
+        let generation = lifecycle
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await check(challenge, generation: generation, manual: true)
+        }
+        checkTask = task
+        await task.value
+        if checkTask == task {
+            checkTask = nil
+        }
     }
 
     /// Reopens the authorization page without asking for a new token.
     public func openAuthorizationPage() {
         guard case let .waiting(challenge) = phase else { return }
         if !openAuthorization(challenge.authorizationURL) {
-            notice = "The browser could not be opened. Choose Open Last.fm again to retry."
+            notice = Self.browserOpenFailureNotice
         }
     }
 
@@ -88,6 +104,8 @@ public final class LastFMLinkModel: ObservableObject {
         lifecycle += 1
         task?.cancel()
         task = nil
+        checkTask?.cancel()
+        checkTask = nil
         isChecking = false
         notice = nil
         if case .linked = phase {
@@ -102,7 +120,7 @@ public final class LastFMLinkModel: ObservableObject {
             guard isCurrent(generation) else { return }
             phase = .waiting(challenge)
             if !openAuthorization(challenge.authorizationURL) {
-                notice = "The browser could not be opened. Choose Open Last.fm again to retry."
+                notice = Self.browserOpenFailureNotice
             }
             await poll(challenge, generation: generation)
         } catch {
@@ -154,16 +172,13 @@ public final class LastFMLinkModel: ObservableObject {
 
     private func fail(_ error: any Error, generation: Int) {
         guard isCurrent(generation) else { return }
+        let serviceFailure = (error as? LastFMError)?.serviceFailure ?? (error as? ServiceFailure)
+        if let problem = serviceFailure?.appCredentialProblem {
+            onAppCredentialProblem?(problem)
+        }
         if let lastFM = error as? LastFMError {
-            if case let .appCredentialAuth(problem) = lastFM.serviceFailure {
-                onAppCredentialProblem?(problem)
-            }
             phase = .failed(lastFM.serviceFailure.errorDescription ?? "Last.fm sign-in failed.")
         } else {
-            if let failure = error as? ServiceFailure,
-               case let .appCredentialAuth(problem) = failure {
-                onAppCredentialProblem?(problem)
-            }
             phase = .failed(error.localizedDescription)
         }
         task?.cancel()

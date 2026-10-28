@@ -33,6 +33,9 @@ extension TracklogDroplet {
         let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
         let gate = HostAutomationPermissionGate(host: host)
         automationGate = gate
+        let appCredentialProblem = AppCredentialProblem(
+            rawValue: host.preferences.value(forKey: "lastFMAppCredentialProblem", default: ""),
+        )
         return CaptureRuntime.open(
             state: state,
             databaseURL: databaseURL,
@@ -66,6 +69,13 @@ extension TracklogDroplet {
                 host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
                 host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
             },
+            appCredentialProblem: appCredentialProblem,
+            persistAppCredentialProblem: { problem in
+                host.preferences.setValue(
+                    problem?.rawValue ?? "",
+                    forKey: "lastFMAppCredentialProblem",
+                )
+            },
         )
     }
 
@@ -86,11 +96,11 @@ extension TracklogDroplet {
                     credential: session.key,
                     identity: ServiceIdentity(name: session.name),
                 )
-                runtime.clearAppCredentialProblem(for: .lastFM)
+                runtime.clearLastFMAppCredentialProblem()
                 return connection
             },
             onAppCredentialProblem: { [weak self] problem in
-                self?.runtime?.noteAppCredentialProblem(problem, for: .lastFM)
+                self?.runtime?.noteLastFMAppCredentialProblem(problem)
             },
         )
     }

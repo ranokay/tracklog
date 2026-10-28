@@ -86,7 +86,8 @@ public enum LastFMError: Error, Equatable, Sendable {
 /// endpoint; the signature covers every parameter except `format` and
 /// `callback`.
 public struct LastFMClient: LastFMLinkClient {
-    public static let apiRoot = "https://ws.audioscrobbler.com/2.0/"
+    /// The protocol's hard limit for one `track.scrobble` request.
+    public static let maximumScrobblesPerBatch = 50
     public static let authorizationRoot = "https://www.last.fm/api/auth/"
 
     public let appCredentials: LastFMAppCredentials
@@ -95,6 +96,9 @@ public struct LastFMClient: LastFMLinkClient {
 
     private let transport: any HTTPTransport
 
+    /// `endpoint` is fixed to ``ServiceEndpoint/lastFM`` in production. It
+    /// stays injectable for fixtures and for the shared Last.fm-protocol
+    /// dialect Libre.fm will use.
     public init(
         transport: any HTTPTransport,
         appCredentials: LastFMAppCredentials,
@@ -146,6 +150,9 @@ public struct LastFMClient: LastFMLinkClient {
 
     // MARK: - Delivery
 
+    /// Sends `track.updateNowPlaying` for one track. The artist and title must
+    /// be non-empty; a missing pair throws a rejected service failure. Now
+    /// playing is never queued or retried by the caller.
     public func updateNowPlaying(_ track: Track, sessionKey: String) async throws {
         let parameters = try metadataParameters(
             title: track.title,
@@ -161,12 +168,19 @@ public struct LastFMClient: LastFMLinkClient {
         )
     }
 
+    /// Sends `track.scrobble` for one to ``maximumScrobblesPerBatch`` listens,
+    /// oldest first, in one form post. The response is read per item; a
+    /// missing, unreadable or count-mismatched item throws a retryable failure
+    /// so no scrobble is marked delivered on a partial answer.
     public func scrobble(
         _ listens: [Listen],
         sessionKey: String,
     ) async throws -> [LastFMScrobbleResult] {
-        guard !listens.isEmpty, listens.count <= 50 else {
-            throw LastFMError.service(code: 6, message: "A batch must contain 1 to 50 scrobbles.")
+        guard !listens.isEmpty, listens.count <= Self.maximumScrobblesPerBatch else {
+            throw LastFMError.service(
+                code: 6,
+                message: "A batch must contain 1 to \(Self.maximumScrobblesPerBatch) scrobbles.",
+            )
         }
         var parameters: [String: String] = [:]
         for (index, listen) in listens.enumerated() {
@@ -207,7 +221,7 @@ public struct LastFMClient: LastFMLinkClient {
 
     // MARK: - Requests
 
-    private func perform(
+    func perform(
         method: String,
         parameters: [String: String] = [:],
         sessionKey: String? = nil,
@@ -224,6 +238,16 @@ public struct LastFMClient: LastFMLinkClient {
         // and its Retry-After header is the hint the outbox needs.
         if response.statusCode == 429 {
             throw LastFMError.http(statusCode: 429, retryAfter: retryAfter(from: response))
+        }
+
+        // A 5xx is a server failure even when the body names a service error.
+        // The body's code must not turn a retryable outage into an auth or
+        // rejection decision.
+        if (500 ..< 600).contains(response.statusCode) {
+            throw LastFMError.http(
+                statusCode: response.statusCode,
+                retryAfter: retryAfter(from: response),
+            )
         }
 
         // Last.fm can answer HTTP 200 with an error document. Inspect the body
@@ -249,15 +273,15 @@ public struct LastFMClient: LastFMLinkClient {
         parameters: [String: String],
         sessionKey: String?,
     ) throws -> HTTPRequest {
-        let apiKey = apiKey
-        let secret = sharedSecret
-        guard !apiKey.isEmpty, !secret.isEmpty else {
+        guard appCredentials.isConfigured else {
             throw LastFMError.missingAppCredentials
         }
+        let appKey = apiKey
+        let secret = sharedSecret
 
         var form = parameters
         form["method"] = method
-        form["api_key"] = apiKey
+        form["api_key"] = appKey
         if let sessionKey {
             let key = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { throw LastFMError.missingSessionKey }
@@ -298,6 +322,15 @@ public struct LastFMClient: LastFMLinkClient {
         return components?.url
     }
 
+    func identityParameters(title: String, artist: String) throws -> [String: String] {
+        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !artist.isEmpty, !title.isEmpty else {
+            throw LastFMError.service(code: 6, message: "Artist and track are required.")
+        }
+        return ["artist": artist, "track": title]
+    }
+
     private func metadataParameters(
         title: String,
         artist: String,
@@ -305,13 +338,7 @@ public struct LastFMClient: LastFMLinkClient {
         albumArtist: String,
         duration: TimeInterval?,
     ) throws -> [String: String] {
-        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !artist.isEmpty, !title.isEmpty else {
-            throw LastFMError.service(code: 6, message: "Artist and track are required.")
-        }
-
-        var parameters = ["artist": artist, "track": title]
+        var parameters = try identityParameters(title: title, artist: artist)
         let album = album.trimmingCharacters(in: .whitespacesAndNewlines)
         if !album.isEmpty {
             parameters["album"] = album
@@ -361,28 +388,4 @@ public struct LastFMClient: LastFMLinkClient {
     private static let formAllowed = CharacterSet(
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~",
     )
-}
-
-public extension LastFMClient {
-    func love(_ track: Track, sessionKey: String) async throws {
-        let parameters = try metadataParameters(
-            title: track.title,
-            artist: track.artist,
-            album: "",
-            albumArtist: "",
-            duration: nil,
-        )
-        _ = try await perform(method: "track.love", parameters: parameters, sessionKey: sessionKey)
-    }
-
-    func unlove(_ track: Track, sessionKey: String) async throws {
-        let parameters = try metadataParameters(
-            title: track.title,
-            artist: track.artist,
-            album: "",
-            albumArtist: "",
-            duration: nil,
-        )
-        _ = try await perform(method: "track.unlove", parameters: parameters, sessionKey: sessionKey)
-    }
 }

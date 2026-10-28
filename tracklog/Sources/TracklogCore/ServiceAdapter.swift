@@ -104,6 +104,13 @@ public enum ServiceFailure: Error, Equatable, Sendable, LocalizedError {
         }
     }
 
+    /// The app-credential problem when this is one. The delivery and link
+    /// paths share one pattern match instead of repeating it.
+    var appCredentialProblem: AppCredentialProblem? {
+        guard case let .appCredentialAuth(problem) = self else { return nil }
+        return problem
+    }
+
     public var errorDescription: String? {
         switch self {
         case .auth:
