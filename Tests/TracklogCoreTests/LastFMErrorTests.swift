@@ -19,12 +19,12 @@ struct LastFMErrorTests {
             (10, .appCredentialAuth(.invalidKey)),
             (26, .appCredentialAuth(.suspendedKey)),
             (13, .appCredentialAuth(.invalidSignature)),
+            (8, .retryable),
             (11, .retryable),
             (16, .retryable),
             (29, .rateLimited(retryAfter: nil)),
             (6, .rejected("The service rejected the request.")),
             (7, .rejected("The service rejected the request.")),
-            (8, .rejected("The service rejected the request.")),
         ]
 
         for (code, expected) in cases {

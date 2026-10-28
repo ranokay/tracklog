@@ -158,14 +158,36 @@ public final class LastFMLinkModel: ObservableObject {
             phase = .linked(connection)
             task?.cancel()
             task = nil
-        } catch let error as LastFMError where error.isUnauthorizedToken {
-            guard isCurrent(generation) else { return }
+        } catch {
+            handleSessionFailure(error, generation: generation, manual: manual)
+        }
+    }
+
+    /// Keeps the poll alive for transient Last.fm failures. A rejected token,
+    /// an expired token or an app-credential failure still ends the link inline.
+    private func handleSessionFailure(_ error: any Error, generation: Int, manual: Bool) {
+        guard isCurrent(generation) else { return }
+        guard let lastFM = error as? LastFMError else {
+            fail(error, generation: generation)
+            return
+        }
+        if lastFM.isUnauthorizedToken {
             if manual {
                 notice = "Last.fm has not confirmed the sign-in yet. "
                     + "Authorize Tracklog in your browser, then choose Check again."
             }
-        } catch {
-            guard isCurrent(generation) else { return }
+            return
+        }
+        switch lastFM.serviceFailure {
+        case .retryable:
+            if manual {
+                notice = "Last.fm is temporarily unavailable. Tracklog will keep checking."
+            }
+        case .rateLimited:
+            if manual {
+                notice = "Last.fm is rate limiting requests. Tracklog will keep checking."
+            }
+        default:
             fail(error, generation: generation)
         }
     }

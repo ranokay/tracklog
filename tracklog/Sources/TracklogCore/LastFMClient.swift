@@ -71,7 +71,7 @@ public enum LastFMError: Error, Equatable, Sendable {
             case 10: .appCredentialAuth(.invalidKey)
             case 13: .appCredentialAuth(.invalidSignature)
             case 26: .appCredentialAuth(.suspendedKey)
-            case 11, 16: .retryable
+            case 8, 11, 16: .retryable
             case 29: .rateLimited(retryAfter: nil)
             case 6, 7: .rejected(message)
             default: .rejected(message)

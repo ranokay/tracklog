@@ -192,6 +192,50 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
+    @Test(arguments: [LastFMError.transport, .http(statusCode: 429, retryAfter: 12)])
+    func aTransientSessionFailureKeepsPolling(error: LastFMError) async {
+        let clock = FakeClock(base)
+        let client = ScriptedLinkClient(
+            tokenAnswers: [.challenge(challenge)],
+            sessionAnswers: [.failure(error), .session(session)],
+        )
+        let model = makeModel(client: client, clock: clock)
+
+        model.start()
+        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+
+        clock.advance(to: clock.now.addingTimeInterval(3))
+        #expect(await waitForSessionRequests(client, count: 1) == 1)
+        #expect(model.phase == .waiting(challenge))
+
+        clock.advance(to: clock.now.addingTimeInterval(3))
+        let phase = await waitForLinkPhase(model) {
+            if case .linked = $0 {
+                return true
+            }
+            return false
+        }
+        #expect(phase == .linked(connection(session)))
+
+        model.cancel()
+    }
+
+    @Test func aManualCheckExplainsATransientFailure() async {
+        let client = ScriptedLinkClient(
+            tokenAnswers: [.challenge(challenge)],
+            sessionAnswers: [.failure(.transport)],
+        )
+        let model = makeModel(client: client)
+
+        model.start()
+        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        await model.checkNow()
+
+        #expect(model.phase == .waiting(challenge))
+        #expect(model.notice?.contains("temporarily unavailable") == true)
+        model.cancel()
+    }
+
     @Test func aManualCheckExplainsThatAuthorizationIsStillPending() async {
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],

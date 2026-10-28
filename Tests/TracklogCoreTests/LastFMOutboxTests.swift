@@ -38,6 +38,9 @@ struct LastFMOutboxTests {
             $0.allSatisfy { $0.state == .delivered }
         }
         #expect(delivered.map(\.state) == [.delivered])
+        _ = await awaitDeliveries(harness.store, listen: limited) {
+            $0.allSatisfy { $0.attempts == 1 }
+        }
         let limitedDelivery = try #require(try await harness.deliveries(for: limited).first)
         #expect(limitedDelivery.state == .retrying)
         #expect(limitedDelivery.attempts == 1)
