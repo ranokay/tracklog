@@ -1,5 +1,13 @@
 import Foundation
 
+/// The result of applying one batch's per-item outcomes.
+struct DeliveryApplyOutcome {
+    /// False when a daily limit says the next batch would be refused too.
+    let continueDraining: Bool
+    /// False when a local row could not record its outcome.
+    let persisted: Bool
+}
+
 /// Drains durable deliveries, one task per connection, oldest listen first.
 ///
 /// A trigger while a connection is draining sets a run-again flag instead of
@@ -33,6 +41,12 @@ public final class DeliveryOutbox {
     var onConnectionsChanged: (@MainActor () -> Void)?
     /// Called when a drain ends and the durable delivery rows may have moved.
     var onDeliveryStateChanged: (@MainActor () -> Void)?
+    /// The service rejected the application's own credentials. The Services
+    /// page shows the reason; this is not a per-account sign-in problem.
+    var onAppCredentialProblem: (@MainActor (ServiceKind, AppCredentialProblem) -> Void)?
+    /// One item reached its service, so a stale app-credential warning can
+    /// clear.
+    var onDeliverySucceeded: (@MainActor (ServiceKind) -> Void)?
 
     public init(
         store: any DeliveryStore,
@@ -231,12 +245,15 @@ public final class DeliveryOutbox {
                 credential: token,
             )
             guard results.count == due.count else { throw ServiceFailure.retryable }
-            guard await apply(results, to: due, connection: connection) else {
+            let outcome = await apply(results, to: due, connection: connection)
+            if !outcome.persisted {
                 blockedUntil[id] = clock.now.addingTimeInterval(30)
-                return false
             }
-            return true
+            return outcome.continueDraining
         } catch {
+            if case let .appCredentialAuth(problem) = DeliveryFailure.from(error) {
+                onAppCredentialProblem?(connection.kind, problem)
+            }
             let outcome = await writer.handleFailure(
                 error,
                 due: due,
@@ -275,20 +292,33 @@ public final class DeliveryOutbox {
             return nil
         }
     }
+}
 
-    private func apply(
+private extension DeliveryOutbox {
+    func apply(
         _ results: [DeliveryResult],
         to due: [QueuedDelivery],
         connection: Connection,
-    ) async -> Bool {
+    ) async -> DeliveryApplyOutcome {
         var persisted = true
+        var continueDraining = true
         for (queued, result) in zip(due, results) {
-            persisted = await writer.apply(result, to: queued, connection: connection) && persisted
+            if case .rateLimited = result {
+                // A daily-limit answer will repeat for the next batch too; stop
+                // after recording this one instead of burning a request per
+                // batch.
+                continueDraining = false
+            }
+            let written = await writer.apply(result, to: queued, connection: connection)
+            if written, case .delivered = result {
+                onDeliverySucceeded?(connection.kind)
+            }
+            persisted = written && persisted
         }
-        return persisted
+        return DeliveryApplyOutcome(continueDraining: continueDraining, persisted: persisted)
     }
 
-    private func sendNowPlaying(_ track: Track, connectionID id: Int64) async {
+    func sendNowPlaying(_ track: Track, connectionID id: Int64) async {
         guard let connection = lookup.connection(id: id),
               let adapter = lookup.adapters[connection.kind],
               adapter.capabilities.supportsNowPlaying,
@@ -309,8 +339,11 @@ public final class DeliveryOutbox {
         } catch let failure as ServiceFailure {
             // Now playing is never retried, but a rejected credential still
             // changes the connection so deliveries stop retrying it.
-            if case .auth = failure {
+            if failure.isAuthentication {
                 await markNeedsSignIn(id: id)
+            }
+            if case let .appCredentialAuth(problem) = failure {
+                onAppCredentialProblem?(connection.kind, problem)
             }
             writer.log(.failed(kind: connection.kind, reason: DeliveryFailure.message(for: failure)))
         } catch {
@@ -318,12 +351,12 @@ public final class DeliveryOutbox {
         }
     }
 
-    private func markNeedsSignIn(id: Int64) async {
+    func markNeedsSignIn(id: Int64) async {
         guard await (try? lookup.connections.markNeedsSignIn(id: id)) != nil else { return }
         onConnectionsChanged?()
     }
 
-    private func waitForSpacing(id: Int64, interval: TimeInterval) async {
+    func waitForSpacing(id: Int64, interval: TimeInterval) async {
         guard interval > 0, let last = lastRequestAt[id] else { return }
         let due = last.addingTimeInterval(interval)
         guard due > clock.now else { return }

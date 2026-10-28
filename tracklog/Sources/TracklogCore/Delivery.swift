@@ -79,10 +79,12 @@ public struct QueuedDelivery: Equatable, Sendable {
 }
 
 /// One item's outcome in a submitted batch. A rejection abandons only that
-/// item; a thrown failure backs off the whole batch.
+/// item; a rate limit backs off only that item; a thrown failure backs off the
+/// whole batch.
 public enum DeliveryResult: Equatable, Sendable {
     case delivered(reference: String?)
     case rejected(reason: String?)
+    case rateLimited(retryAfter: TimeInterval?)
 }
 
 /// Durable deliveries. The SQLite store is the production implementation;

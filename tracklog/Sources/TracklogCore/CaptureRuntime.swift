@@ -113,11 +113,13 @@ public final class CaptureRuntime {
         state.failure = failure
         state.mediaStatus = source.mediaStatus
 
-        deliveryOutbox?.onConnectionsChanged = { [weak self] in
-            self?.applyConnectionSnapshot()
+        deliveryOutbox?.onConnectionsChanged = { [weak self] in self?.applyConnectionSnapshot() }
+        deliveryOutbox?.onDeliveryStateChanged = { [weak self] in self?.scheduleDeliveryRefresh() }
+        deliveryOutbox?.onAppCredentialProblem = { [weak self] kind, problem in
+            self?.noteAppCredentialProblem(problem, for: kind)
         }
-        deliveryOutbox?.onDeliveryStateChanged = { [weak self] in
-            self?.scheduleDeliveryRefresh()
+        deliveryOutbox?.onDeliverySucceeded = { [weak self] kind in
+            self?.clearAppCredentialProblem(for: kind)
         }
     }
 

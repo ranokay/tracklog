@@ -20,6 +20,8 @@ extension TracklogDroplet: SettingsPagesProviding {
             AnyView(TracklogServicesPage(droplet: self, state: state))
         case tracklogAddServicePageID:
             AnyView(TracklogAddServicePage(droplet: self, state: state))
+        case tracklogLastFMLinkPageID:
+            AnyView(TracklogLastFMLinkPage(droplet: self, state: state))
         default:
             if let connectionID = tracklogConnectionID(fromPage: id) {
                 AnyView(

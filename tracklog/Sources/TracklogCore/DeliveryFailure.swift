@@ -15,6 +15,8 @@ enum DeliveryFailure {
         switch failure {
         case .auth:
             "The service did not accept the credential."
+        case let .appCredentialAuth(problem):
+            "\(problem.title). Last.fm will not accept this listen until the app credentials are fixed."
         case .rateLimited:
             rateLimitedMessage
         case .retryable:

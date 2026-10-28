@@ -60,6 +60,47 @@ public extension CaptureRuntime {
         }
     }
 
+    /// Stores a credential the caller already verified, such as the Last.fm
+    /// session key from the browser flow. The connection still starts enabled
+    /// and current, and the outbox resumes it.
+    @discardableResult
+    func linkVerified(
+        kind: ServiceKind,
+        credential: String,
+        identity: ServiceIdentity,
+    ) async throws -> Connection {
+        guard let connectionService else { throw ConnectionError.unavailable }
+        do {
+            let connection = try await connectionService.linkVerified(
+                kind: kind,
+                credential: credential,
+                identity: identity,
+            )
+            applyConnectionSnapshot()
+            await reloadDeliveryState()
+            if let id = connection.id {
+                deliveryOutbox?.resume(connectionID: id)
+            }
+            return connection
+        } catch {
+            applyConnectionSnapshot()
+            throw error
+        }
+    }
+
+    /// Records why a service rejected the app's own credentials. Only Last.fm
+    /// has an app credential in this milestone.
+    func noteAppCredentialProblem(_ problem: AppCredentialProblem, for kind: ServiceKind) {
+        guard kind == .lastFM else { return }
+        state.lastFMAppCredentialProblem = problem
+    }
+
+    /// Clears the app-credential warning after a successful link or delivery.
+    func clearAppCredentialProblem(for kind: ServiceKind) {
+        guard kind == .lastFM else { return }
+        state.lastFMAppCredentialProblem = nil
+    }
+
     func setConnectionEnabled(id: Int64, enabled: Bool) async throws {
         guard let connectionService else { throw ConnectionError.unavailable }
         try await connectionService.setEnabled(id: id, enabled: enabled)

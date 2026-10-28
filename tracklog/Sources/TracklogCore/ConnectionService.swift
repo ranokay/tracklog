@@ -145,7 +145,25 @@ public final class ConnectionService {
         }
     }
 
-    private func linkConnection(kind: ServiceKind, credential rawCredential: String) async throws -> Connection {
+    /// Stores a credential whose identity the caller already verified, such as
+    /// the session key Last.fm returns from `auth.getSession`. The adapter must
+    /// still exist for the kind; this only skips the duplicate validation call.
+    @discardableResult
+    public func linkVerified(
+        kind: ServiceKind,
+        credential: String,
+        identity: ServiceIdentity,
+    ) async throws -> Connection {
+        try await withGate {
+            try await linkConnection(kind: kind, credential: credential, identity: identity)
+        }
+    }
+
+    private func linkConnection(
+        kind: ServiceKind,
+        credential rawCredential: String,
+        identity verifiedIdentity: ServiceIdentity? = nil,
+    ) async throws -> Connection {
         let credential = rawCredential.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !credential.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
         guard let adapter = adapters[kind] else {
@@ -153,14 +171,18 @@ public final class ConnectionService {
         }
 
         let identity: ServiceIdentity
-        do {
-            identity = try await adapter.validate(credential)
-        } catch let failure as ServiceFailure {
-            log(.linkFailed(kind: kind, reason: Self.reason(for: failure)))
-            throw failure
-        } catch {
-            log(.linkFailed(kind: kind, reason: "unreadable response"))
-            throw ServiceFailure.retryable
+        if let verifiedIdentity {
+            identity = verifiedIdentity
+        } else {
+            do {
+                identity = try await adapter.validate(credential)
+            } catch let failure as ServiceFailure {
+                log(.linkFailed(kind: kind, reason: connectionFailureReason(failure)))
+                throw failure
+            } catch {
+                log(.linkFailed(kind: kind, reason: "unreadable response"))
+                throw ServiceFailure.retryable
+            }
         }
 
         let endpoint = kind.defaultEndpoint
@@ -321,13 +343,15 @@ public final class ConnectionService {
             throw error
         }
     }
+}
 
-    private static func reason(for failure: ServiceFailure) -> String {
-        switch failure {
-        case .auth: "authentication failed"
-        case .rateLimited: "rate limited"
-        case .retryable: "retryable failure"
-        case .rejected: "rejected"
-        }
+/// A link log line's reason. It names the failure class, never a credential.
+private func connectionFailureReason(_ failure: ServiceFailure) -> String {
+    switch failure {
+    case .auth: "authentication failed"
+    case .appCredentialAuth: "app credentials rejected"
+    case .rateLimited: "rate limited"
+    case .retryable: "retryable failure"
+    case .rejected: "rejected"
     }
 }

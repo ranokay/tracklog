@@ -34,6 +34,12 @@ struct DeliveryOutboxWriter {
             }
         case let .rejected(message):
             return await abandon(queued, reason: DeliveryFailure.message(for: .rejected(message)), kind: connection.kind)
+        case let .rateLimited(retryAfter):
+            return await backOff(
+                [queued],
+                connection: connection,
+                failure: .rateLimited(retryAfter: retryAfter),
+            )
         }
     }
 
@@ -46,7 +52,7 @@ struct DeliveryOutboxWriter {
         markNeedsSignIn: @MainActor (Int64) async -> Void,
     ) async -> DeliveryFailureOutcome {
         let failure = DeliveryFailure.from(error)
-        if case .auth = failure, let id = due.first?.delivery.connectionID {
+        if failure.isAuthentication, let id = due.first?.delivery.connectionID {
             await markNeedsSignIn(id)
         }
         if case .rejected = failure {
