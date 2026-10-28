@@ -13,6 +13,9 @@ public protocol NowPlayingSource: AnyObject {
         onStatus: @escaping @MainActor (MediaStatus) -> Void,
     )
     func stop()
+    /// One one-shot art read for a track identity change. The capture runtime
+    /// calls this at most once per change, never on the poll cadence.
+    func artwork(for track: Track) async -> Data?
 }
 
 public extension NowPlayingSource {
@@ -20,5 +23,11 @@ public extension NowPlayingSource {
     /// status is still the one stream the runtime reads.
     var mediaStatus: MediaStatus {
         .legacyAvailable
+    }
+
+    /// A source that cannot supply artwork returns nil, and the caller draws
+    /// the neutral sleeve.
+    func artwork(for _: Track) async -> Data? {
+        nil
     }
 }

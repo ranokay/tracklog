@@ -78,22 +78,31 @@ struct TracklogWidget: View {
             title("History unavailable")
             subtitle(context.isCompact ? "See Settings" : "Tracklog cannot save listens. See Tracklog settings.")
         } else if let sample = state.nowPlaying {
-            Text(sample.track.title)
-                .font(.system(size: context.isPaired ? 16 : 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                .lineLimit(context.isPaired ? 1 : 2)
-                .minimumScaleFactor(0.9)
+            HStack(alignment: .top, spacing: DroppySpacing.md) {
+                ArtworkSleeve(
+                    size: context.isPaired ? 40 : 64,
+                    artwork: state.nowPlayingArtwork,
+                    identity: state.nowPlayingArtworkIdentity ?? sample.track.identity,
+                )
+                VStack(alignment: .leading, spacing: DroppySpacing.xs) {
+                    Text(sample.track.title)
+                        .font(.system(size: context.isPaired ? 16 : 18, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                        .lineLimit(context.isPaired ? 1 : 2)
+                        .minimumScaleFactor(0.9)
 
-            Text(artistLine(sample))
-                .font(.system(size: 13))
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .lineLimit(1)
+                    Text(artistLine(sample))
+                        .font(.system(size: 13))
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        .lineLimit(1)
 
-            if !context.isPaired {
-                ProgressView(value: state.status.progress)
-                    .progressViewStyle(.linear)
-                    .tint(AdaptiveColors.notchSurfacePrimaryText)
-                    .controlSize(.small)
+                    if !context.isPaired {
+                        ProgressView(value: state.status.progress)
+                            .progressViewStyle(.linear)
+                            .tint(AdaptiveColors.notchSurfacePrimaryText)
+                            .controlSize(.small)
+                    }
+                }
             }
         } else {
             title(state.feedAvailable ? "Nothing playing" : "Media feed unavailable")

@@ -79,3 +79,11 @@ A saved cancellation rule with four fields: track, artist, album and album artis
 ## Cancelled listen
 
 The in-flight listen the user suppressed before it scrobbled. Cancel keeps the session's played time and threshold, suppresses its scrobble and history row until the track changes or restarts, and leaves an already-sent now playing alone. Undo re-enables it from the same played time. Once the threshold fires there is nothing left to cancel, so the control is hidden.
+
+## Artwork
+
+The cover shown with the current track and with each listen in History. It comes from the bytes the media helper embeds in its now-playing answer; Tracklog never searches a network for it. One lookup happens when the track identity changes, the image is downscaled on its long edge, and the result is named by a content hash so the same cover is stored once and reused by later listens and launches. Artwork is best effort: a lookup, decode or write failure never delays a scrobble.
+
+## Neutral sleeve
+
+The stand-in drawn when a listen has no artwork, the lookup failed, or the track came through Automation. Its note glyph and weight are derived from the track identity, so the same track always gets the same sleeve and two tracks do not look accidentally identical.

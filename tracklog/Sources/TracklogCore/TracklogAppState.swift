@@ -50,6 +50,13 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var historyDayCounts: [Date: Int] = [:]
     @Published public internal(set) var listenCount = 0
     @Published public internal(set) var lastListen: Listen?
+    /// The current track's cover, ready for the widget and now-playing strip.
+    @Published public internal(set) var nowPlayingArtwork: Data?
+    /// The raw track identity the cover and neutral sleeve are keyed on, so
+    /// History, the widget and the strip draw the same sleeve for one track.
+    @Published public internal(set) var nowPlayingArtworkIdentity: String?
+    /// Covers already loaded from the store, by content hash.
+    @Published public internal(set) var artworkByHash: [String: Data] = [:]
 
     public init() {}
 

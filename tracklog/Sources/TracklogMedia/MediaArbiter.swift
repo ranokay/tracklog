@@ -41,7 +41,7 @@ public final class MediaArbiter: NowPlayingSource {
 
     public private(set) var mediaStatus: MediaStatus
 
-    private let helper: any MediaHelperReading
+    let helper: any MediaHelperReading
     private let automation: any MediaAutomationProbing
     private let candidates: [MediaAutomationCandidate]
     private let playerIsRunning: MediaPlayerRunningCheck

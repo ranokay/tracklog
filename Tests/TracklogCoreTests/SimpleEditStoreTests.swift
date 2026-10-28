@@ -154,17 +154,15 @@ struct SimpleEditStoreTests {
         let versionTwo = Array(SQLiteListenStore.schemaMigrations.prefix(2))
         let old = try SQLiteListenStore(url: database.url, migrations: versionTwo)
         let metadata = ListenMetadata(title: "Song", artist: "Artist")
-        let stored = try #require(
-            try await old.insert(
-                Listen(
-                    raw: metadata,
-                    processed: metadata,
-                    bundleID: "com.apple.Music",
-                    duration: 30,
-                    playedDuration: 30,
-                    startedAt: base,
-                    capturedAt: base.addingTimeInterval(30),
-                ),
+        let stored = try database.insertLegacyListen(
+            Listen(
+                raw: metadata,
+                processed: metadata,
+                bundleID: "com.apple.Music",
+                duration: 30,
+                playedDuration: 30,
+                startedAt: base,
+                capturedAt: base.addingTimeInterval(30),
             ),
         )
         await old.close()

@@ -201,7 +201,7 @@ private struct TracklogHistory: View {
         case let .day(day):
             HistoryDayHeader(day: day, count: state.historyDayCounts[day.date] ?? day.count)
         case let .listen(listen):
-            HistoryRow(listen: listen, droplet: droplet)
+            HistoryRow(listen: listen, droplet: droplet, artwork: droplet.artworkData(for: listen))
         }
     }
 

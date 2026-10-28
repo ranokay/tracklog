@@ -240,6 +240,11 @@ public final class TracklogDroplet: NSObject, Droplet {
         await runtime?.loadMoreHistory()
     }
 
+    func artworkData(for listen: Listen) -> Data? {
+        guard let hash = listen.artworkHash else { return nil }
+        return state.artworkByHash[hash]
+    }
+
     func copyMetadata(for listen: Listen) {
         guard let host else { return }
         if !host.workspace.copyToPasteboard(listen.processed.copyText) {

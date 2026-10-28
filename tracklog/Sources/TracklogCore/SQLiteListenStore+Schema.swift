@@ -95,7 +95,101 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 5) { handle in
+                try execute(
+                    handle,
+                    """
+                    ALTER TABLE listens ADD COLUMN artwork_hash TEXT;
+                    ALTER TABLE listens ADD COLUMN track_identity TEXT NOT NULL DEFAULT '';
+                    CREATE TABLE artwork (
+                        hash TEXT PRIMARY KEY,
+                        data BLOB NOT NULL,
+                        pixel_width INTEGER NOT NULL,
+                        pixel_height INTEGER NOT NULL,
+                        stored_at REAL NOT NULL
+                    );
+                    CREATE TABLE track_artwork (
+                        track_identity TEXT PRIMARY KEY,
+                        artwork_hash TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        FOREIGN KEY (artwork_hash) REFERENCES artwork (hash)
+                    );
+                    CREATE INDEX listens_artwork_hash ON listens (artwork_hash);
+                    """,
+                )
+                try backfillTrackIdentities(handle)
+            },
         ]
+    }
+
+    /// Legacy rows are keyed with the same Swift normalization the live
+    /// artwork lookup uses, so non-ASCII case and tab/newline boundaries match.
+    private static func backfillTrackIdentities(_ handle: OpaquePointer) throws {
+        let rows = try readLegacyTrackIdentities(handle)
+        guard !rows.isEmpty else { return }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(
+            handle,
+            "UPDATE listens SET track_identity = ? WHERE id = ?",
+            -1,
+            &statement,
+            nil,
+        ) == SQLITE_OK, let statement
+        else {
+            throw DatabaseError.sqlite("could not prepare the track identity backfill")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        for (id, identity) in rows {
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            guard sqlite3_bind_text(statement, 1, identity, -1, Self.transient) == SQLITE_OK,
+                  sqlite3_bind_int64(statement, 2, id) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE
+            else {
+                throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(handle)))
+            }
+        }
+    }
+
+    private static func readLegacyTrackIdentities(
+        _ handle: OpaquePointer,
+    ) throws -> [(id: Int64, identity: String)] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(
+            handle,
+            "SELECT id, raw_title, raw_artist, raw_album, raw_album_artist FROM listens",
+            -1,
+            &statement,
+            nil,
+        ) == SQLITE_OK, let statement
+        else {
+            throw DatabaseError.sqlite("could not prepare the track identity read")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var rows: [(Int64, String)] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let metadata = ListenMetadata(
+                    title: columnText(statement, 1),
+                    artist: columnText(statement, 2),
+                    album: columnText(statement, 3),
+                    albumArtist: columnText(statement, 4),
+                )
+                rows.append((sqlite3_column_int64(statement, 0), metadata.identity))
+            case SQLITE_DONE:
+                return rows
+            default:
+                throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(handle)))
+            }
+        }
+    }
+
+    private static func columnText(_ statement: OpaquePointer, _ index: Int32) -> String {
+        sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
     }
 }
 

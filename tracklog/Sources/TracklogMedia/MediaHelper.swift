@@ -35,6 +35,24 @@ public enum MediaHelperRead: Equatable, Sendable {
     }
 }
 
+/// One sample plus the artwork bytes the helper embedded in the same answer.
+public struct MediaHelperSnapshot: Equatable, Sendable {
+    public let sample: MediaSample
+    public let artwork: Data?
+
+    public init(sample: MediaSample, artwork: Data?) {
+        self.sample = sample
+        self.artwork = artwork
+    }
+}
+
+/// One artwork read: a snapshot when the helper answered, unavailable when it
+/// could not run. Artwork failing is never an error the caller shows.
+public enum MediaHelperArtworkRead: Equatable, Sendable {
+    case unavailable
+    case snapshot(MediaHelperSnapshot)
+}
+
 /// One poll of the helper. Production spawns Droppy's bundled executable;
 /// tests replay the outcomes.
 @MainActor
@@ -44,6 +62,16 @@ public protocol MediaHelperReading: AnyObject {
     /// Whether the executable exists now.
     var isExecutable: Bool { get }
     func read() async -> MediaHelperRead
+    /// One `get --now` that keeps the embedded artwork. Called only when the
+    /// track identity changes, never on the poll cadence.
+    func readArtwork() async -> MediaHelperArtworkRead
+}
+
+public extension MediaHelperReading {
+    /// A test double that does not model artwork reads has none.
+    func readArtwork() async -> MediaHelperArtworkRead {
+        .unavailable
+    }
 }
 
 /// Reads Droppy's bundled media helper.
@@ -82,14 +110,53 @@ public final class MediaHelperReader: MediaHelperReading {
         }
     }
 
+    public func readArtwork() async -> MediaHelperArtworkRead {
+        let url = executableURL
+        guard isExecutable else { return .unavailable }
+        return await withCheckedContinuation { continuation in
+            Self.queue.async {
+                continuation.resume(returning: Self.readArtworkSync(helperURL: url))
+            }
+        }
+    }
+
     private nonisolated static func readSync(helperURL: URL) -> MediaHelperRead {
+        switch run(helperURL: helperURL, arguments: ["get", "--now", "--no-artwork"]) {
+        case .missingExecutable:
+            .missingExecutable
+        case let .spawnFailed(message):
+            .spawnFailed(message)
+        case let .exitedNonZero(code):
+            .exitedNonZero(code)
+        case let .data(data):
+            MediaHelperPayload.decode(data).map(MediaHelperRead.sample) ?? .empty
+        }
+    }
+
+    private nonisolated static func readArtworkSync(helperURL: URL) -> MediaHelperArtworkRead {
+        guard case let .data(data) = run(helperURL: helperURL, arguments: ["get", "--now"]),
+              let snapshot = MediaHelperPayload.decodeSnapshot(data)
+        else {
+            return .unavailable
+        }
+        return .snapshot(snapshot)
+    }
+
+    private enum RunResult {
+        case missingExecutable
+        case spawnFailed(String)
+        case exitedNonZero(Int32)
+        case data(Data)
+    }
+
+    private nonisolated static func run(helperURL: URL, arguments: [String]) -> RunResult {
         guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
             return .missingExecutable
         }
 
         let process = Process()
         process.executableURL = helperURL
-        process.arguments = ["get", "--now", "--no-artwork"]
+        process.arguments = arguments
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -106,20 +173,24 @@ public final class MediaHelperReader: MediaHelperReading {
         guard process.terminationStatus == 0 else {
             return .exitedNonZero(process.terminationStatus)
         }
-        guard let sample = MediaHelperPayload.decode(data) else {
-            return .empty
-        }
-        return .sample(sample)
+        return .data(data)
     }
 }
 
-/// The helper's `get --now --no-artwork` JSON, decoded.
+/// The helper's `get --now` JSON, with or without `--no-artwork`, decoded.
 ///
 /// Public so the sibling test package can exercise the payload shapes without
 /// launching the helper. Everything is optional by design: Droppy's helper is
 /// undocumented, and a changed payload reads as "nothing playing".
 public enum MediaHelperPayload {
     public static func decode(_ data: Data) -> MediaSample? {
+        decodeSnapshot(data)?.sample
+    }
+
+    /// The payload includes the cover bytes (`artworkData`). The separate
+    /// `artworkIdentifier` URL is intentionally ignored: Tracklog never makes
+    /// a network request for artwork.
+    public static func decodeSnapshot(_ data: Data) -> MediaHelperSnapshot? {
         guard
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let payload = object["payload"] as? [String: Any],
@@ -140,20 +211,26 @@ public enum MediaHelperPayload {
             ?? payload["bundleIdentifier"] as? String
             ?? ""
         let timestamp = timestamp(from: payload["timestamp"] as? String) ?? Date()
+        let artwork = (payload["artworkData"] as? String)
+            .flatMap { Data(base64Encoded: $0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
 
-        return MediaSample(
-            track: Track(
-                title: title,
-                artist: artist,
-                album: album,
-                albumArtist: albumArtist,
-                duration: duration,
-                bundleID: bundleID,
+        return MediaHelperSnapshot(
+            sample: MediaSample(
+                track: Track(
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    albumArtist: albumArtist,
+                    duration: duration,
+                    bundleID: bundleID,
+                ),
+                elapsed: elapsed,
+                playbackRate: playbackRate,
+                isPlaying: playing,
+                timestamp: timestamp,
             ),
-            elapsed: elapsed,
-            playbackRate: playbackRate,
-            isPlaying: playing,
-            timestamp: timestamp,
+            artwork: artwork,
         )
     }
 

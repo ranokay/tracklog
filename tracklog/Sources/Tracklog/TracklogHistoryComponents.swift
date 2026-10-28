@@ -37,13 +37,18 @@ struct HistoryDayHeader: View {
 struct HistoryRow: View {
     let listen: Listen
     let droplet: TracklogDroplet
+    let artwork: Data?
 
     @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: DroppySpacing.md) {
-                HistorySleeve(size: 52)
+                ArtworkSleeve(
+                    size: 52,
+                    artwork: artwork,
+                    identity: listen.raw.identity,
+                )
                 VStack(alignment: .leading, spacing: 1) {
                     Text(listen.processed.title)
                         .font(.system(size: 15, weight: .semibold))
@@ -132,7 +137,11 @@ struct NowPlayingStrip: View {
     var body: some View {
         VStack(spacing: DroppySpacing.sm) {
             HStack(spacing: DroppySpacing.md) {
-                HistorySleeve(size: 56)
+                ArtworkSleeve(
+                    size: 56,
+                    artwork: droplet.state.nowPlayingArtwork,
+                    identity: droplet.state.nowPlayingArtworkIdentity ?? sample.track.identity,
+                )
                 info
                 Spacer(minLength: DroppySpacing.md)
                 controls
@@ -207,23 +216,5 @@ struct NowPlayingStrip: View {
     private func time(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-// MARK: - Sleeve
-
-struct HistorySleeve: View {
-    let size: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
-            .fill(AdaptiveColors.notchSurfaceCardFill)
-            .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "music.note")
-                    .font(.system(size: size * 0.32, weight: .medium))
-                    .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-            }
-            .accessibilityHidden(true)
     }
 }

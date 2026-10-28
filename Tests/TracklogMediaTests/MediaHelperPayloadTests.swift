@@ -132,6 +132,58 @@ struct MediaHelperPayloadTests {
 
         #expect(MediaHelperPayload.decode(payload) == nil)
     }
+
+    @Test func decodesTheEmbeddedArtworkBytes() throws {
+        let bytes = Data([1, 2, 3, 4])
+        let payload = try data(["payload": [
+            "title": "Song",
+            "artworkMIMEType": "image/jpeg",
+            "artworkData": bytes.base64EncodedString(),
+        ]])
+
+        let snapshot = try #require(MediaHelperPayload.decodeSnapshot(payload))
+
+        #expect(snapshot.artwork == bytes)
+        #expect(snapshot.sample.track.title == "Song")
+    }
+
+    @Test func anArtworkURLWithoutEmbeddedBytesIsNotArtwork() throws {
+        // The helper's artworkIdentifier is a remote URL. Tracklog deliberately
+        // never opens it: only the bytes embedded in the same payload count.
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "example.com"
+        components.path = "/" + "cover.jpg"
+        let artworkIdentifier = try #require(components.string)
+        let payload = try data(["payload": [
+            "title": "Song",
+            "artworkIdentifier": artworkIdentifier,
+            "artworkMIMEType": "image/jpeg",
+        ]])
+
+        let snapshot = try #require(MediaHelperPayload.decodeSnapshot(payload))
+
+        #expect(snapshot.artwork == nil)
+        #expect(MediaHelperPayload.decode(payload)?.track.title == "Song")
+    }
+
+    @Test func invalidEmbeddedArtworkIsNotArtwork() throws {
+        let payload = try data(["payload": [
+            "title": "Song",
+            "artworkData": "not base64 !!!",
+        ]])
+
+        #expect(MediaHelperPayload.decodeSnapshot(payload)?.artwork == nil)
+    }
+
+    @Test func noArtworkReadsAsASampleWithoutArtwork() throws {
+        let payload = try data(["payload": ["title": "Song"]])
+
+        let snapshot = try #require(MediaHelperPayload.decodeSnapshot(payload))
+
+        #expect(snapshot.artwork == nil)
+        #expect(snapshot.sample.track.title == "Song")
+    }
 }
 
 @Suite("Media helper reader")
@@ -142,5 +194,6 @@ struct MediaHelperReaderTests {
 
         #expect(reader.isExecutable == false)
         #expect(await reader.read() == .missingExecutable)
+        #expect(await reader.readArtwork() == .unavailable)
     }
 }
