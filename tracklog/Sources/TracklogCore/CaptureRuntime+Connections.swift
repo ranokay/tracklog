@@ -15,6 +15,7 @@ extension CaptureRuntime {
             if state.failure?.stage == .connections {
                 state.failure = nil
             }
+            await reloadDeliveryState()
         } catch {
             let failure = CaptureFailure.connections(error: error)
             state.connectionsFailure = failure
@@ -44,6 +45,7 @@ public extension CaptureRuntime {
         do {
             let connection = try await connectionService.link(kind: kind, credential: credential)
             applyConnectionSnapshot()
+            await reloadDeliveryState()
             // A new credential is a delivery trigger. A new connection has no
             // earlier targets, so this never backfills older listens.
             if let id = connection.id {
@@ -62,6 +64,7 @@ public extension CaptureRuntime {
         guard let connectionService else { throw ConnectionError.unavailable }
         try await connectionService.setEnabled(id: id, enabled: enabled)
         applyConnectionSnapshot()
+        await reloadDeliveryState()
         if enabled {
             // Re-enabling resumes rows that were already targeted; it does not
             // create targets for listens captured while the switch was off.

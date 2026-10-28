@@ -252,8 +252,11 @@ public final class TracklogDroplet: NSObject, Droplet {
         host?.workspace.openSettings()
     }
 
-    public func presentHistory() {
+    public func presentHistory(expandingPending: Bool = false) {
         guard let host else { return }
+        if expandingPending {
+            state.setPendingListExpanded(true)
+        }
         host.notchSurface.presentExpandedSurface(
             ExpandedSurfacePresentationRequest(surfaceID: tracklogHistorySurfaceID),
         )

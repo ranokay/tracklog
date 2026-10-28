@@ -41,7 +41,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
     @Test func aPersistFailureSendsNothing() async throws {
         let database = try TemporaryDatabase()
         let baseStore = try SQLiteListenStore(url: database.url)
-        let store = FailingDeliveryStore(baseStore)
+        let store = ControllableDeliveryStore(baseStore)
         let adapter = RecordingDeliveryAdapter()
         let clock = FakeClock(base)
         let state = TracklogAppState()

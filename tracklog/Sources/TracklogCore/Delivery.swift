@@ -30,6 +30,41 @@ public struct Delivery: Identifiable, Equatable, Sendable {
     /// A service reference kept for a later operation, such as the
     /// ListenBrainz recording MSID a now playing returned.
     public let serviceReference: String?
+
+    public init(
+        id: Int64,
+        listenID: Int64,
+        connectionID: Int64,
+        state: DeliveryState,
+        attempts: Int,
+        lastAttemptAt: Date? = nil,
+        nextAttemptAt: Date? = nil,
+        lastError: String? = nil,
+        abandonedReason: String? = nil,
+        deliveredAt: Date? = nil,
+        serviceReference: String? = nil,
+    ) {
+        self.id = id
+        self.listenID = listenID
+        self.connectionID = connectionID
+        self.state = state
+        self.attempts = attempts
+        self.lastAttemptAt = lastAttemptAt
+        self.nextAttemptAt = nextAttemptAt
+        self.lastError = lastError
+        self.abandonedReason = abandonedReason
+        self.deliveredAt = deliveredAt
+        self.serviceReference = serviceReference
+    }
+}
+
+public extension Delivery {
+    /// Whether the last failed attempt backed off because the service was
+    /// rate limiting. The stored text is written by ``DeliveryFailure`` and is
+    /// never user input, so it can carry this meaning.
+    var isRateLimited: Bool {
+        state.isPending && lastError == DeliveryFailure.rateLimitedMessage
+    }
 }
 
 /// A due delivery together with the listen it carries.
@@ -68,6 +103,13 @@ public protocol DeliveryStore: Sendable {
     /// Every delivery carrying one listen, in connection order.
     func deliveries(for listenID: Int64) async throws -> [Delivery]
 
+    /// Every delivery for the given listens, in listen then connection order.
+    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery]
+
+    /// Every pending delivery with its listen, oldest listen first. Future
+    /// retries are included; the pending list is not only the due set.
+    func pendingDeliveries() async throws -> [QueuedDelivery]
+
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws
 
     /// Records one failed attempt and when the next one is due.
@@ -79,11 +121,12 @@ public protocol DeliveryStore: Sendable {
         error: String,
     ) async throws
 
-    /// Drops one delivery for good. The listen stays in local history.
+    /// Drops one delivery for good. The listen stays in local history. A
+    /// delivery that already reached a final state is left alone.
     func abandon(
         _ deliveryID: Int64,
         attempts: Int,
-        at date: Date,
+        lastAttemptAt: Date?,
         reason: String,
     ) async throws
 

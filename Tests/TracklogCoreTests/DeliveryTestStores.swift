@@ -36,12 +36,15 @@ actor DeliveryGate {
     }
 }
 
-/// A real store whose combined listen-and-delivery write fails, to prove that
-/// a persist failure never reaches the network.
-actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
+/// A real store whose inserts, state writes or next pending read can be held,
+/// so the composition tests can prove persistence failure and snapshot races.
+actor ControllableDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
     private let base: SQLiteListenStore
     private let failInsert: Bool
     private var deliveredWritesToFail: Int
+    private var pauseNextPending = false
+    private var isPaused = false
+    private var pendingContinuation: CheckedContinuation<Void, Never>?
 
     init(
         _ base: SQLiteListenStore,
@@ -51,6 +54,26 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         self.base = base
         self.failInsert = failInsert
         self.deliveredWritesToFail = deliveredWritesToFail
+    }
+
+    func pauseNextPendingRead() {
+        pauseNextPending = true
+    }
+
+    func waitUntilPaused(timeout: Duration = .seconds(3)) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while !isPaused {
+            guard clock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return true
+    }
+
+    func releasePendingRead() {
+        isPaused = false
+        pendingContinuation?.resume()
+        pendingContinuation = nil
     }
 
     func insert(_ listen: Listen) async throws -> Listen? {
@@ -104,6 +127,23 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         try await base.deliveries(for: listenID)
     }
 
+    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery] {
+        try await base.deliveries(forListenIDs: listenIDs)
+    }
+
+    func pendingDeliveries() async throws -> [QueuedDelivery] {
+        // Reserve the pause before the read, so an overlapping refresh that
+        // started earlier cannot consume it after the await.
+        let shouldPause = pauseNextPending
+        pauseNextPending = false
+        let rows = try await base.pendingDeliveries()
+        if shouldPause {
+            isPaused = true
+            await withCheckedContinuation { pendingContinuation = $0 }
+        }
+        return rows
+    }
+
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
         guard deliveredWritesToFail == 0 else {
             deliveredWritesToFail -= 1
@@ -128,8 +168,8 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         )
     }
 
-    func abandon(_ deliveryID: Int64, attempts: Int, at date: Date, reason: String) async throws {
-        try await base.abandon(deliveryID, attempts: attempts, at: date, reason: reason)
+    func abandon(_ deliveryID: Int64, attempts: Int, lastAttemptAt: Date?, reason: String) async throws {
+        try await base.abandon(deliveryID, attempts: attempts, lastAttemptAt: lastAttemptAt, reason: reason)
     }
 
     func markDue(for connectionID: Int64, at date: Date) async throws {

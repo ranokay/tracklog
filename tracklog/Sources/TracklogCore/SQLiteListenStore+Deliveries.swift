@@ -114,49 +114,26 @@ public extension SQLiteListenStore {
         sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
         sqlite3_bind_int(statement, 3, Int32(clamping: limit))
 
-        var queued: [QueuedDelivery] = []
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                try queued.append(
-                    QueuedDelivery(
-                        delivery: readDelivery(statement, offset: 0),
-                        listen: readListen(statement, offset: Int32(Self.deliveryColumnCount)),
-                    ),
-                )
-            case SQLITE_DONE:
-                return queued
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-        }
+        return try readQueuedDeliveries(statement, handle: handle)
     }
 
-    func deliveries(for listenID: Int64) async throws -> [Delivery] {
+    func pendingDeliveries() async throws -> [QueuedDelivery] {
         let handle = try database()
         let statement = try prepare(
             handle,
             """
-            SELECT \(Self.deliveryColumns)
+            SELECT \(Self.deliveryColumns),
+                   l.id, l.raw_title, l.raw_artist, l.raw_album, l.raw_album_artist,
+                   l.title, l.artist, l.album, l.album_artist, l.bundle_id,
+                   l.duration, l.played_duration, l.started_at, l.captured_at, l.artwork_hash
             FROM deliveries d
-            WHERE d.listen_id = ?
-            ORDER BY d.connection_id ASC, d.id ASC
+            JOIN listens l ON l.id = d.listen_id
+            WHERE d.state IN ('waiting', 'retrying')
+            ORDER BY l.started_at ASC, l.id ASC, d.connection_id ASC, d.id ASC
             """,
         )
         defer { sqlite3_finalize(statement) }
-        sqlite3_bind_int64(statement, 1, listenID)
-
-        var deliveries: [Delivery] = []
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                try deliveries.append(readDelivery(statement, offset: 0))
-            case SQLITE_DONE:
-                return deliveries
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-        }
+        return try readQueuedDeliveries(statement, handle: handle)
     }
 
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
@@ -171,7 +148,7 @@ public extension SQLiteListenStore {
                 last_error = NULL,
                 delivered_at = ?,
                 service_reference = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }
@@ -205,7 +182,7 @@ public extension SQLiteListenStore {
                 last_attempt_at = ?,
                 next_attempt_at = ?,
                 last_error = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }
@@ -222,7 +199,7 @@ public extension SQLiteListenStore {
     func abandon(
         _ deliveryID: Int64,
         attempts: Int,
-        at date: Date,
+        lastAttemptAt: Date?,
         reason: String,
     ) async throws {
         let handle = try database()
@@ -236,12 +213,16 @@ public extension SQLiteListenStore {
                 next_attempt_at = NULL,
                 last_error = ?,
                 abandoned_reason = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_int(statement, 1, Int32(clamping: attempts))
-        sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+        if let lastAttemptAt {
+            sqlite3_bind_double(statement, 2, lastAttemptAt.timeIntervalSince1970)
+        } else {
+            sqlite3_bind_null(statement, 2)
+        }
         try bind(reason, at: 3, in: statement)
         try bind(reason, at: 4, in: statement)
         sqlite3_bind_int64(statement, 5, deliveryID)
@@ -303,6 +284,28 @@ extension SQLiteListenStore {
     d.next_attempt_at, d.last_error, d.abandoned_reason, d.delivered_at, d.service_reference
     """
 
+    private func readQueuedDeliveries(
+        _ statement: OpaquePointer,
+        handle: OpaquePointer,
+    ) throws -> [QueuedDelivery] {
+        var queued: [QueuedDelivery] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                try queued.append(
+                    QueuedDelivery(
+                        delivery: readDelivery(statement, offset: 0),
+                        listen: readListen(statement, offset: Int32(Self.deliveryColumnCount)),
+                    ),
+                )
+            case SQLITE_DONE:
+                return queued
+            default:
+                throw DatabaseError.sqlite(errorMessage(handle))
+            }
+        }
+    }
+
     func insertDeliveryRow(
         listenID: Int64,
         connectionID: Int64,
@@ -330,7 +333,7 @@ extension SQLiteListenStore {
         }
     }
 
-    private func readDelivery(_ statement: OpaquePointer, offset: Int32) throws -> Delivery {
+    func readDelivery(_ statement: OpaquePointer, offset: Int32) throws -> Delivery {
         guard let state = DeliveryState(rawValue: text(statement, offset + 3)) else {
             throw DatabaseError.sqlite("a stored delivery has an unknown state")
         }

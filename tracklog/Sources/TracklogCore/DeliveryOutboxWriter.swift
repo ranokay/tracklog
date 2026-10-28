@@ -73,7 +73,7 @@ struct DeliveryOutboxWriter {
             try await store.abandon(
                 item.delivery.id,
                 attempts: item.delivery.attempts + 1,
-                at: clock.now,
+                lastAttemptAt: clock.now,
                 reason: reason,
             )
             log(.abandoned(kind: kind, reason: reason))

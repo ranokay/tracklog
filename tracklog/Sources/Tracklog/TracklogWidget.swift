@@ -55,6 +55,9 @@ struct TracklogWidget: View {
             Text("Tracklog")
                 .font(.system(size: 12, weight: .semibold))
             Spacer(minLength: 0)
+            if state.pendingCount > 0 {
+                queueBadge
+            }
             if !context.isCompact {
                 Button {
                     droplet.openSettings()
@@ -67,6 +70,26 @@ struct TracklogWidget: View {
             }
         }
         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+    }
+
+    /// The queue badge is the shortcut to the pending list. It opens History
+    /// with the list expanded even when a higher-priority banner owns the
+    /// inline slot.
+    private var queueBadge: some View {
+        Button {
+            droplet.presentHistory(expandingPending: true)
+        } label: {
+            HStack(spacing: 2) {
+                Image(systemName: "tray.full")
+                Text("\(state.pendingCount)")
+                    .monospacedDigit()
+            }
+            .font(.system(size: 11, weight: .semibold))
+        }
+        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+        .help("Pending scrobbles")
+        .accessibilityLabel("\(state.pendingCount) \(state.pendingCount == 1 ? "scrobble" : "scrobbles") waiting")
+        .accessibilityHint("Opens History with the pending list")
     }
 
     @ViewBuilder

@@ -72,6 +72,12 @@ private struct TracklogHistory: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let banner = state.pendingBanner {
+                HistoryBannerView(banner: banner, droplet: droplet, state: state)
+            }
+            if state.pendingListExpanded, !state.pendingQueue.isEmpty {
+                PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
+            }
             content
             if state.scrobblingEnabled, let sample = state.nowPlaying {
                 NowPlayingStrip(droplet: droplet, sample: sample, status: state.status)
@@ -83,6 +89,7 @@ private struct TracklogHistory: View {
             alignment: .topLeading,
         )
         .task { await droplet.reloadHistory() }
+        .onDisappear { state.setPendingListExpanded(false) }
     }
 
     // MARK: Header
@@ -201,7 +208,13 @@ private struct TracklogHistory: View {
         case let .day(day):
             HistoryDayHeader(day: day, count: state.historyDayCounts[day.date] ?? day.count)
         case let .listen(listen):
-            HistoryRow(listen: listen, droplet: droplet, artwork: droplet.artworkData(for: listen))
+            HistoryRow(
+                listen: listen,
+                droplet: droplet,
+                artwork: droplet.artworkData(for: listen),
+                deliveries: state.deliveries(for: listen),
+                connections: state.connections,
+            )
         }
     }
 

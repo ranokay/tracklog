@@ -107,7 +107,7 @@ struct DeliveryBackoffTests {
     @Test func aFailedStateWriteDoesNotResubmitInTheSameDrain() async throws {
         let database = try TemporaryDatabase()
         let baseStore = try SQLiteListenStore(url: database.url)
-        let store = FailingDeliveryStore(baseStore, failInsert: false, deliveredWritesToFail: 1)
+        let store = ControllableDeliveryStore(baseStore, failInsert: false, deliveredWritesToFail: 1)
         let credentials = MemoryCredentialStore()
         let adapter = RecordingDeliveryAdapter()
         let clock = FakeClock(Date(timeIntervalSince1970: 1_000_000))

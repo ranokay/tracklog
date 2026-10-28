@@ -31,6 +31,8 @@ public final class DeliveryOutbox {
     /// The composition root publishes the connection list after an auth
     /// failure changes it.
     var onConnectionsChanged: (@MainActor () -> Void)?
+    /// Called when a drain ends and the durable delivery rows may have moved.
+    var onDeliveryStateChanged: (@MainActor () -> Void)?
 
     public init(
         store: any DeliveryStore,
@@ -179,6 +181,7 @@ public final class DeliveryOutbox {
                 } else {
                     scheduler.reschedule()
                 }
+                onDeliveryStateChanged?()
             }
         }
 

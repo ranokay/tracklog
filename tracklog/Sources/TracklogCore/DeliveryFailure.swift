@@ -3,6 +3,10 @@ import Foundation
 /// The failure text stored on a delivery row. It never includes a credential;
 /// the adapters carry none into their messages.
 enum DeliveryFailure {
+    /// The one stored message that marks a rate-limit backoff, so the pending
+    /// banner can tell it apart from an ordinary transport failure.
+    static let rateLimitedMessage = "The service is rate limiting requests."
+
     static func from(_ error: any Error) -> ServiceFailure {
         (error as? ServiceFailure) ?? .retryable
     }
@@ -12,7 +16,7 @@ enum DeliveryFailure {
         case .auth:
             "The service did not accept the credential."
         case .rateLimited:
-            "The service is rate limiting requests."
+            rateLimitedMessage
         case .retryable:
             "The service could not be reached."
         case let .rejected(message):
