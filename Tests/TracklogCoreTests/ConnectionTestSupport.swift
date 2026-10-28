@@ -243,3 +243,46 @@ actor LoadFailingStore: ConnectionStore, ListenStore {
         try await base.setCurrentConnectionID(id)
     }
 }
+
+/// A memory credential store whose save suspends, to prove a load cannot
+/// interleave with a link after the row is saved but before the credential is.
+actor SuspendingCredentialStore: CredentialStore {
+    private let base = MemoryCredentialStore()
+    private var saveContinuation: CheckedContinuation<Void, Never>?
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var didStartSaving = false
+
+    func credential(forConnection id: Int64) async throws -> String? {
+        try await base.credential(forConnection: id)
+    }
+
+    func saveCredential(_ credential: String, forConnection id: Int64) async throws {
+        didStartSaving = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+        await withCheckedContinuation { saveContinuation = $0 }
+        try await base.saveCredential(credential, forConnection: id)
+    }
+
+    func deleteCredential(forConnection id: Int64) async throws {
+        try await base.deleteCredential(forConnection: id)
+    }
+
+    func appCredential() async throws -> String? {
+        try await base.appCredential()
+    }
+
+    func saveAppCredential(_ credential: String?) async throws {
+        try await base.saveAppCredential(credential)
+    }
+
+    func waitUntilSaving() async {
+        guard !didStartSaving else { return }
+        await withCheckedContinuation { startedContinuation = $0 }
+    }
+
+    func resumeSaving() {
+        saveContinuation?.resume()
+        saveContinuation = nil
+    }
+}

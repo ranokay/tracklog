@@ -7,6 +7,34 @@ import Testing
 struct ConnectionRecoveryTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
 
+    @Test func aLoadWaitsForAnInFlightLink() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = SuspendingCredentialStore()
+        let service = ConnectionService(
+            store: store,
+            credentials: credentials,
+            adapters: [ListenBrainzAdapter(transport: ScriptedTransport([listenBrainzValidResponse()]))],
+            clock: FakeClock(base),
+        )
+
+        let linkTask = Task { try await service.link(kind: .listenBrainz, credential: "token") }
+        await credentials.waitUntilSaving()
+
+        let loadTask = Task { try await service.load() }
+        for _ in 0 ..< 5 {
+            await Task.yield()
+        }
+        await credentials.resumeSaving()
+
+        let linked = try await linkTask.value
+        try await loadTask.value
+
+        #expect(service.connections == [linked])
+        #expect(service.currentID == linked.id)
+        #expect(try await credentials.credential(forConnection: linked.id ?? -1) == "token")
+    }
+
     @Test func aCredentialCleanupFailureIsRepairedOnLoad() async throws {
         let database = try TemporaryDatabase()
         let baseStore = try SQLiteListenStore(url: database.url)

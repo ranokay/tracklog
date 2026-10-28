@@ -16,6 +16,30 @@ public enum ConnectionEvent: Equatable, Sendable, CustomStringConvertible {
     }
 }
 
+/// Serializes operations that span several awaits. A load must never observe
+/// or repair a link that has saved its row but not its credential or cursor.
+@MainActor
+private final class ConnectionOperationGate {
+    private var isLocked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard isLocked else {
+            isLocked = true
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            isLocked = false
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 /// The link and connection-choice flows over the connection, credential and
 /// adapter ports. A link validates first, so a rejected token cannot disturb
 /// an existing connection.
@@ -29,6 +53,7 @@ public final class ConnectionService {
     private let adapters: [ServiceKind: any ServiceAdapter]
     private let clock: any Clock
     private let log: @MainActor (ConnectionEvent) -> Void
+    private let gate = ConnectionOperationGate()
 
     public init(
         store: any ConnectionStore,
@@ -52,7 +77,15 @@ public final class ConnectionService {
         connections.first { $0.id == currentID }
     }
 
+    /// Loads the durable connections and repairs any credentialless orphan.
+    /// Serialized with `link()` so it never observes a half-made link.
     public func load() async throws {
+        try await withGate {
+            try await loadConnections()
+        }
+    }
+
+    private func loadConnections() async throws {
         var loaded: [Connection] = []
         for connection in try await store.connections() {
             guard let id = connection.id else {
@@ -98,7 +131,13 @@ public final class ConnectionService {
     /// makes the new connection current. A credential that cannot be saved
     /// removes the half-made connection.
     @discardableResult
-    public func link(kind: ServiceKind, credential rawCredential: String) async throws -> Connection {
+    public func link(kind: ServiceKind, credential: String) async throws -> Connection {
+        try await withGate {
+            try await linkConnection(kind: kind, credential: credential)
+        }
+    }
+
+    private func linkConnection(kind: ServiceKind, credential rawCredential: String) async throws -> Connection {
         let credential = rawCredential.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !credential.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
         guard let adapter = adapters[kind] else {
@@ -197,23 +236,39 @@ public final class ConnectionService {
     }
 
     public func setEnabled(id: Int64, enabled: Bool) async throws {
-        guard let index = connections.firstIndex(where: { $0.id == id }) else {
-            throw ConnectionError.unknownConnection(id: id)
+        try await withGate {
+            guard let index = connections.firstIndex(where: { $0.id == id }) else {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            var updated = connections[index]
+            updated.isEnabled = enabled
+            let stored = try await store.save(updated)
+            connections[index] = stored
         }
-        var updated = connections[index]
-        updated.isEnabled = enabled
-        let stored = try await store.save(updated)
-        connections[index] = stored
     }
 
     /// Persists the current-connection read cursor. It never changes a queued
     /// delivery's target and never scopes local history.
     public func setCurrent(_ id: Int64?) async throws {
-        if let id, !connections.contains(where: { $0.id == id }) {
-            throw ConnectionError.unknownConnection(id: id)
+        try await withGate {
+            if let id, !connections.contains(where: { $0.id == id }) {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            try await store.setCurrentConnectionID(id)
+            currentID = id
         }
-        try await store.setCurrentConnectionID(id)
-        currentID = id
+    }
+
+    private func withGate<T>(_ operation: @MainActor () async throws -> T) async throws -> T {
+        await gate.acquire()
+        do {
+            let result = try await operation()
+            gate.release()
+            return result
+        } catch {
+            gate.release()
+            throw error
+        }
     }
 
     private static func reason(for failure: ServiceFailure) -> String {

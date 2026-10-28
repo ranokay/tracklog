@@ -209,9 +209,9 @@ struct TracklogAddServicePage: View {
                 }
             }
 
-            if let errorMessage, listenBrainzIdentity == nil {
+            if let errorMessage {
                 DropletSettingsSection {
-                    settingsSectionHeader("Not linked")
+                    settingsSectionHeader("Needs attention")
                 } content: {
                     DropletSettingsCard {
                         Text(errorMessage)
