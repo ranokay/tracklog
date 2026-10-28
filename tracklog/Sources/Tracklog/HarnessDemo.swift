@@ -44,7 +44,7 @@ final class HarnessDemoSource: NowPlayingSource {
 }
 
 actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore {
-    private let listens: [Listen]
+    private var listens: [Listen]
     private var artworks: [String: StoredArtwork]
     private var artworkHashes: [String: String]
     private var seenApps: [SeenApp]
@@ -87,6 +87,10 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     func attachArtwork(_ artwork: StoredArtwork, toTrack identity: String) async throws {
         artworks[artwork.hash] = artwork
         artworkHashes[identity] = artwork.hash
+        listens = listens.map { listen in
+            guard listen.raw.identity == identity, listen.artworkHash == nil else { return listen }
+            return listen.withArtworkHash(artwork.hash)
+        }
     }
 
     func apps() async throws -> [SeenApp] {

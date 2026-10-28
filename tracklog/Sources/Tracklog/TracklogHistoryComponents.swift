@@ -37,6 +37,7 @@ struct HistoryDayHeader: View {
 struct HistoryRow: View {
     let listen: Listen
     let droplet: TracklogDroplet
+    let artwork: Data?
 
     @State private var isHovering = false
 
@@ -45,7 +46,7 @@ struct HistoryRow: View {
             HStack(spacing: DroppySpacing.md) {
                 ArtworkSleeve(
                     size: 52,
-                    artwork: droplet.artworkData(for: listen),
+                    artwork: artwork,
                     identity: listen.raw.identity,
                 )
                 VStack(alignment: .leading, spacing: 1) {

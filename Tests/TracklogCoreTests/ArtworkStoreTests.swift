@@ -113,7 +113,7 @@ struct ArtworkStoreTests {
         let database = try TemporaryDatabase()
         let versionFour = Array(SQLiteListenStore.schemaMigrations.prefix(4))
         let old = try SQLiteListenStore(url: database.url, migrations: versionFour)
-        let metadata = ListenMetadata(title: "  Song ", artist: " Artist ", album: "Album")
+        let metadata = ListenMetadata(title: "\tSong Ä\n", artist: " ARTIST ", album: "Album")
         let legacy = try database.insertLegacyListen(
             Listen(
                 raw: metadata,

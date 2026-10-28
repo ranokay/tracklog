@@ -150,9 +150,14 @@ struct MediaHelperPayloadTests {
     @Test func anArtworkURLWithoutEmbeddedBytesIsNotArtwork() throws {
         // The helper's artworkIdentifier is a remote URL. Tracklog deliberately
         // never opens it: only the bytes embedded in the same payload count.
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "example.com"
+        components.path = "/" + "cover.jpg"
+        let artworkIdentifier = try #require(components.string)
         let payload = try data(["payload": [
             "title": "Song",
-            "artworkIdentifier": "https://example.com/cover.jpg",
+            "artworkIdentifier": artworkIdentifier,
             "artworkMIMEType": "image/jpeg",
         ]])
 

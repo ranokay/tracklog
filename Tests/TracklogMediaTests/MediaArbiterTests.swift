@@ -205,7 +205,9 @@ struct MediaArbiterArtworkTests {
     @Test func aMissingHelperHasNoArtwork() async {
         let sample = playingSample()
         let helper = FakeHelper(
-            executablePath: "/nonexistent",
+            executablePath: FileManager.default.temporaryDirectory
+                .appendingPathComponent("missing-media-helper")
+                .path,
             isExecutable: false,
             results: [.missingExecutable],
         )

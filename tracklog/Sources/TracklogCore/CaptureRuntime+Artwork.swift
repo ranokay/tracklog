@@ -8,6 +8,10 @@ extension CaptureRuntime {
     /// can never hold up the scrobble.
     func resolveArtwork(for track: Track) {
         let identity = ListenMetadata(track).identity
+        guard source.mediaStatus.source == .helper else {
+            showNeutralArtwork(for: identity)
+            return
+        }
         guard identity != artworkIdentity else { return }
 
         artworkIdentity = identity
@@ -17,6 +21,19 @@ extension CaptureRuntime {
         artworkTask = Task { [weak self] in
             await self?.loadArtwork(for: track, identity: identity)
         }
+    }
+
+    /// Automation cannot supply a cover. Keep the raw identity for the
+    /// neutral sleeve, but drop any helper image from an earlier sample.
+    private func showNeutralArtwork(for identity: String) {
+        guard artworkTask != nil || state.nowPlayingArtwork != nil || state.nowPlayingArtworkIdentity != identity else {
+            return
+        }
+        artworkTask?.cancel()
+        artworkTask = nil
+        artworkIdentity = nil
+        state.nowPlayingArtwork = nil
+        state.nowPlayingArtworkIdentity = identity
     }
 
     /// Waits for the artwork task started for the current identity. The

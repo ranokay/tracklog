@@ -140,4 +140,30 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         #expect(second.state.nowPlayingArtworkIdentity == ListenMetadata(track()).identity)
         #expect(secondSource.artworkLookups.isEmpty, "a stored cover is reused before the source")
     }
+
+    @Test func aNonHelperSourceDropsAPreviousHelperCover() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        source.artworkData = try #require(testImageData())
+        let runtime = runtime(database: database, clock: clock, source: source)
+        await runtime.start()
+
+        let track = track()
+        await replay(thresholdSamples(track), on: runtime, clock: clock)
+        await eventually { runtime.state.nowPlayingArtwork != nil }
+        #expect(runtime.state.nowPlayingArtwork != nil)
+
+        source.emitStatus(MediaStatus(
+            source: .musicAutomation,
+            helperHealth: .silent,
+            automation: .available,
+            helperPath: "",
+        ))
+        await replay([sample(track, at: 120, elapsed: 0)], on: runtime, clock: clock)
+        await eventually { runtime.state.nowPlayingArtwork == nil }
+
+        #expect(runtime.state.nowPlayingArtwork == nil)
+        #expect(runtime.state.nowPlayingArtworkIdentity == ListenMetadata(track).identity)
+    }
 }
