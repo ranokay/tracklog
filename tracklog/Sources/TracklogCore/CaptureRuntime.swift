@@ -31,6 +31,7 @@ public final class CaptureRuntime {
     var historyLoading = false
     var artworkIdentity: String?
     var artworkTask: Task<Void, Never>?
+    var deliveryRefreshTask: Task<Void, Never>?
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
@@ -111,6 +112,9 @@ public final class CaptureRuntime {
 
         deliveryOutbox?.onConnectionsChanged = { [weak self] in
             self?.applyConnectionSnapshot()
+        }
+        deliveryOutbox?.onDeliveryStateChanged = { [weak self] in
+            self?.scheduleDeliveryRefresh()
         }
     }
 
@@ -217,6 +221,8 @@ public final class CaptureRuntime {
     public func stop() {
         pauseTask?.cancel()
         pauseTask = nil
+        deliveryRefreshTask?.cancel()
+        deliveryRefreshTask = nil
         deliveryOutbox?.deactivate()
         stopFeed()
         started = false

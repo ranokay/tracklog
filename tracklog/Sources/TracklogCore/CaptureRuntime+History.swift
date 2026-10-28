@@ -8,6 +8,7 @@ extension CaptureRuntime {
     public func reloadHistory() async {
         guard started, let store else { return }
         await loadFirstPage(from: store, generation: startGeneration)
+        await reloadDeliveryState()
     }
 
     /// Appends the next page. The store's cursor makes this keyset paging, so a
@@ -39,6 +40,7 @@ extension CaptureRuntime {
             clearHistoryFailure()
             await refreshDayCounts(from: store, request: request, generation: startGeneration)
             await loadStoredArtwork(for: page)
+            await reloadDeliveryState()
         } catch {
             guard isCurrentHistoryRequest(request, startGeneration: startGeneration) else { return }
             recordHistoryFailure(error)

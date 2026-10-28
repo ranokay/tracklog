@@ -114,37 +114,30 @@ public extension SQLiteListenStore {
         sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
         sqlite3_bind_int(statement, 3, Int32(clamping: limit))
 
-        var queued: [QueuedDelivery] = []
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                try queued.append(
-                    QueuedDelivery(
-                        delivery: readDelivery(statement, offset: 0),
-                        listen: readListen(statement, offset: Int32(Self.deliveryColumnCount)),
-                    ),
-                )
-            case SQLITE_DONE:
-                return queued
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-        }
+        return try readQueuedDeliveries(statement, handle: handle)
     }
 
     func deliveries(for listenID: Int64) async throws -> [Delivery] {
+        try await deliveries(forListenIDs: [listenID])
+    }
+
+    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery] {
+        guard !listenIDs.isEmpty else { return [] }
         let handle = try database()
+        let placeholders = Array(repeating: "?", count: listenIDs.count).joined(separator: ", ")
         let statement = try prepare(
             handle,
             """
             SELECT \(Self.deliveryColumns)
             FROM deliveries d
-            WHERE d.listen_id = ?
-            ORDER BY d.connection_id ASC, d.id ASC
+            WHERE d.listen_id IN (\(placeholders))
+            ORDER BY d.listen_id ASC, d.connection_id ASC, d.id ASC
             """,
         )
         defer { sqlite3_finalize(statement) }
-        sqlite3_bind_int64(statement, 1, listenID)
+        for (offset, listenID) in listenIDs.enumerated() {
+            sqlite3_bind_int64(statement, Int32(offset + 1), listenID)
+        }
 
         var deliveries: [Delivery] = []
         while true {
@@ -157,6 +150,25 @@ public extension SQLiteListenStore {
                 throw DatabaseError.sqlite(errorMessage(handle))
             }
         }
+    }
+
+    func pendingDeliveries() async throws -> [QueuedDelivery] {
+        let handle = try database()
+        let statement = try prepare(
+            handle,
+            """
+            SELECT \(Self.deliveryColumns),
+                   l.id, l.raw_title, l.raw_artist, l.raw_album, l.raw_album_artist,
+                   l.title, l.artist, l.album, l.album_artist, l.bundle_id,
+                   l.duration, l.played_duration, l.started_at, l.captured_at, l.artwork_hash
+            FROM deliveries d
+            JOIN listens l ON l.id = d.listen_id
+            WHERE d.state IN ('waiting', 'retrying')
+            ORDER BY l.started_at ASC, l.id ASC, d.connection_id ASC, d.id ASC
+            """,
+        )
+        defer { sqlite3_finalize(statement) }
+        return try readQueuedDeliveries(statement, handle: handle)
     }
 
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
@@ -302,6 +314,28 @@ extension SQLiteListenStore {
     d.id, d.listen_id, d.connection_id, d.state, d.attempts, d.last_attempt_at,
     d.next_attempt_at, d.last_error, d.abandoned_reason, d.delivered_at, d.service_reference
     """
+
+    private func readQueuedDeliveries(
+        _ statement: OpaquePointer,
+        handle: OpaquePointer,
+    ) throws -> [QueuedDelivery] {
+        var queued: [QueuedDelivery] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                try queued.append(
+                    QueuedDelivery(
+                        delivery: readDelivery(statement, offset: 0),
+                        listen: readListen(statement, offset: Int32(Self.deliveryColumnCount)),
+                    ),
+                )
+            case SQLITE_DONE:
+                return queued
+            default:
+                throw DatabaseError.sqlite(errorMessage(handle))
+            }
+        }
+    }
 
     func insertDeliveryRow(
         listenID: Int64,

@@ -38,6 +38,8 @@ struct HistoryRow: View {
     let listen: Listen
     let droplet: TracklogDroplet
     let artwork: Data?
+    let deliveries: [Delivery]
+    let connections: [Connection]
 
     @State private var isHovering = false
 
@@ -73,16 +75,16 @@ struct HistoryRow: View {
                         .font(.system(size: 12, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                    Image(systemName: "circle.dashed")
+                    Image(systemName: deliveryGlyph)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                        .foregroundStyle(deliveryGlyphColor)
                         .accessibilityHidden(true)
                 }
                 .accessibilityHidden(true)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(rowLabel)
-            .accessibilityValue("Delivery not recorded")
+            .accessibilityValue(deliveryValue)
 
             rowMenu
         }
@@ -100,6 +102,28 @@ struct HistoryRow: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
+    }
+
+    private var deliveryValue: String {
+        DeliverySummary(deliveries).accessibilityValue(connections: connections)
+    }
+
+    private var deliveryGlyph: String {
+        switch DeliveryAggregate(deliveries) {
+        case .delivered: "checkmark.circle.fill"
+        case .pending: "clock.arrow.circlepath"
+        case .notDelivered: "exclamationmark.circle.fill"
+        case .none: "circle.dashed"
+        }
+    }
+
+    private var deliveryGlyphColor: Color {
+        switch DeliveryAggregate(deliveries) {
+        case .delivered: AdaptiveColors.notchSurfaceSecondaryText
+        case .pending: AdaptiveColors.notchSurfacePrimaryText
+        case .notDelivered: .orange
+        case .none: AdaptiveColors.notchSurfaceTertiaryText
+        }
     }
 
     private var rowMenu: some View {
@@ -120,9 +144,42 @@ struct HistoryRow: View {
         .accessibilityLabel("Actions for \(listen.processed.title)")
     }
 
+    @ViewBuilder
     private var rowMenuItems: some View {
+        if deliveries.isEmpty {
+            Text("No delivery targets")
+        } else {
+            Section("Deliveries") {
+                ForEach(deliveries, id: \.id) { delivery in
+                    Text(deliveryMenuText(delivery))
+                }
+            }
+        }
         Button("Copy metadata") {
             droplet.copyMetadata(for: listen)
+        }
+    }
+
+    private func deliveryMenuText(_ delivery: Delivery) -> String {
+        let name = connections.first { $0.id == delivery.connectionID }?.kind.displayName
+            ?? "Unknown service"
+        switch delivery.state {
+        case .waiting, .retrying:
+            var parts = [
+                "\(name) — \(delivery.state == .waiting ? "Waiting" : "Retrying")",
+                "\(delivery.attempts) \(delivery.attempts == 1 ? "attempt" : "attempts")",
+            ]
+            if let error = delivery.lastError, !error.isEmpty {
+                parts.append(error)
+            }
+            return parts.joined(separator: " · ")
+        case .delivered:
+            return "\(name) — Delivered"
+        case .abandoned:
+            guard let reason = delivery.abandonedReason, !reason.isEmpty else {
+                return "\(name) — Not delivered"
+            }
+            return "\(name) — Not delivered · \(reason)"
         }
     }
 }

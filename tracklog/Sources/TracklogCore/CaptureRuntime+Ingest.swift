@@ -106,6 +106,7 @@ extension CaptureRuntime {
             state.listenCount += 1
             state.historyCount += 1
             await reloadVisibleHistory(in: store)
+            scheduleDeliveryRefresh()
         } catch {
             guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.failure = .storage(error: error)

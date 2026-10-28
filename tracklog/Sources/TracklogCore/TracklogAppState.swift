@@ -78,6 +78,44 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var nowPlayingArtworkIdentity: String?
     /// Covers already loaded from the store, by content hash.
     @Published public internal(set) var artworkByHash: [String: Data] = [:]
+    /// Deliveries for the listens on the loaded page, keyed by listen id.
+    @Published public internal(set) var deliveriesByListen: [Int64: [Delivery]] = [:]
+    /// Every pending delivery, grouped by connection, regardless of which
+    /// history page is loaded.
+    @Published public internal(set) var pendingQueue = PendingQueue()
+    /// Whether the pending list is open beneath the banner. The queue badge
+    /// opens History with this already set.
+    @Published public internal(set) var pendingListExpanded = false
+
+    public var pendingCount: Int {
+        pendingQueue.count
+    }
+
+    /// The one banner the History feed shows, highest priority first.
+    public var pendingBanner: HistoryBanner? {
+        HistoryBanner.resolve(
+            feedAvailable: feedAvailable,
+            connections: connections,
+            pending: pendingQueue,
+        )
+    }
+
+    public func deliveries(for listen: Listen) -> [Delivery] {
+        guard let id = listen.id else { return [] }
+        return deliveriesByListen[id] ?? []
+    }
+
+    public func deliveryAggregate(for listen: Listen) -> DeliveryAggregate {
+        DeliveryAggregate(deliveries(for: listen))
+    }
+
+    public func setPendingListExpanded(_ expanded: Bool) {
+        pendingListExpanded = expanded
+    }
+
+    public func togglePendingList() {
+        pendingListExpanded.toggle()
+    }
 
     public init() {}
 

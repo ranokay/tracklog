@@ -104,6 +104,14 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         try await base.deliveries(for: listenID)
     }
 
+    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery] {
+        try await base.deliveries(forListenIDs: listenIDs)
+    }
+
+    func pendingDeliveries() async throws -> [QueuedDelivery] {
+        try await base.pendingDeliveries()
+    }
+
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
         guard deliveredWritesToFail == 0 else {
             deliveredWritesToFail -= 1
