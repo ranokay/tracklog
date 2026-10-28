@@ -1,8 +1,7 @@
 import Foundation
 
-/// ListenBrainz's token link: one GET with the user token, the username from
-/// the answer.
-public struct ListenBrainzAdapter: ServiceAdapter {
+/// ListenBrainz's token link and its listen submission.
+public struct ListenBrainzAdapter: DeliveryAdapter {
     public let kind = ServiceKind.listenBrainz
     public let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
@@ -11,11 +10,12 @@ public struct ListenBrainzAdapter: ServiceAdapter {
         supportsHate: true,
         supportsDelete: false,
         signsRequests: false,
+        minimumRequestInterval: 1,
     )
 
-    private let endpoint: ServiceEndpoint
-    private let transport: any HTTPTransport
-    private let userAgent: String
+    let endpoint: ServiceEndpoint
+    let transport: any HTTPTransport
+    let userAgent: String
 
     public init(
         endpoint: ServiceEndpoint = .listenBrainz,
@@ -77,13 +77,14 @@ public struct ListenBrainzAdapter: ServiceAdapter {
         return ServiceIdentity(name: name)
     }
 
-    private func message(from response: HTTPResponse) -> String? {
+    func message(from response: HTTPResponse) -> String? {
         let body = try? JSONDecoder().decode(TokenResponse.self, from: response.body)
-        let message = body?.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let text = body?.error ?? body?.message
+        let message = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return message.isEmpty ? nil : message
     }
 
-    private func retryAfter(from response: HTTPResponse) -> TimeInterval? {
+    func retryAfter(from response: HTTPResponse) -> TimeInterval? {
         for name in ["X-RateLimit-Reset-In", "Retry-After"] {
             guard let value = response.header(name)?.trimmingCharacters(in: .whitespaces),
                   let seconds = TimeInterval(value)
@@ -98,10 +99,12 @@ private struct TokenResponse: Decodable {
     let valid: Bool?
     let userName: String?
     let message: String?
+    let error: String?
 
     enum CodingKeys: String, CodingKey {
         case valid
         case userName = "user_name"
         case message
+        case error
     }
 }

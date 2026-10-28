@@ -142,6 +142,30 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 7) { handle in
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE deliveries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        listen_id INTEGER NOT NULL REFERENCES listens (id) ON DELETE CASCADE,
+                        connection_id INTEGER NOT NULL REFERENCES connections (id) ON DELETE CASCADE,
+                        state TEXT NOT NULL,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        last_attempt_at REAL,
+                        next_attempt_at REAL,
+                        last_error TEXT,
+                        abandoned_reason TEXT,
+                        delivered_at REAL,
+                        service_reference TEXT,
+                        UNIQUE (listen_id, connection_id)
+                    );
+                    CREATE INDEX deliveries_connection_due
+                        ON deliveries (connection_id, state, next_attempt_at);
+                    CREATE INDEX deliveries_next_attempt ON deliveries (next_attempt_at);
+                    """,
+                )
+            },
         ]
     }
 

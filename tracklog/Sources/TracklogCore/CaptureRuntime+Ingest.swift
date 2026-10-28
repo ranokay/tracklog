@@ -68,6 +68,7 @@ extension CaptureRuntime {
             switch effect {
             case let .nowPlaying(track):
                 sendNowPlaying?(track)
+                deliveryOutbox?.sendNowPlaying(track)
             case let .scrobble(scrobble):
                 await persist(scrobble, in: store)
             }
@@ -84,11 +85,23 @@ extension CaptureRuntime {
             processed: ListenMetadata(scrobble.submitted),
             capturedAt: clock.now,
         )
+        // Targets are the connections enabled at this instant. A connection
+        // paused now is not a target and is never backfilled on re-enable.
+        let targets = (connectionService?.connections ?? [])
+            .filter(\.isEnabled)
+            .compactMap(\.id)
 
         do {
-            guard let stored = try await store.insert(listen),
-                  !Task.isCancelled, started, state.scrobblingEnabled
-            else { return }
+            let stored = if let deliveryStore {
+                try await deliveryStore.insert(listen, targets: targets)
+            } else {
+                try await store.insert(listen)
+            }
+            guard let stored else { return }
+            // The row is committed, so a later stop, switch-off or history
+            // failure cannot suppress this drain.
+            deliveryOutbox?.drain(connectionIDs: targets)
+            guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.lastListen = stored
             state.listenCount += 1
             state.historyCount += 1

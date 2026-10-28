@@ -32,7 +32,8 @@ struct TracklogServicesPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Services")
                     Text(
-                        "Connect the services you use. Delivery to them arrives in a later update. "
+                        "Connect the services you use. Every listen is sent to each service you enable, "
+                            + "and retried from the queue when a service is unavailable. "
                             + "The current connection only decides which account service-backed reads show; "
                             + "it never changes where a scrobble goes, and local history stays on this Mac.",
                     )
@@ -172,8 +173,7 @@ struct TracklogAddServicePage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Add a service")
                     Text(
-                        "Tracklog will send every listen to each service you connect and enable. "
-                            + "Delivery arrives in a later update.",
+                        "Tracklog will send every listen to each service you connect and enable.",
                     )
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)

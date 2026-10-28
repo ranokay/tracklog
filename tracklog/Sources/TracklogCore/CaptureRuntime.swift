@@ -14,6 +14,8 @@ public final class CaptureRuntime {
     let editStore: (any SimpleEditStore)?
     let blockStore: (any BlockStore)?
     let connectionService: ConnectionService?
+    let deliveryStore: (any DeliveryStore)?
+    let deliveryOutbox: DeliveryOutbox?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
@@ -45,6 +47,7 @@ public final class CaptureRuntime {
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
+        deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
@@ -62,8 +65,8 @@ public final class CaptureRuntime {
         self.allowlist = allowlist
         editStore = edits
         blockStore = blocks
-        if let connectionStore = store as? any ConnectionStore, let credentials {
-            connectionService = ConnectionService(
+        let service: ConnectionService? = if let connectionStore = store as? any ConnectionStore, let credentials {
+            ConnectionService(
                 store: connectionStore,
                 credentials: credentials,
                 adapters: serviceAdapters,
@@ -71,7 +74,24 @@ public final class CaptureRuntime {
                 log: connectionLog ?? { _ in },
             )
         } else {
-            connectionService = nil
+            nil
+        }
+        connectionService = service
+        let deliveries = store as? any DeliveryStore
+        deliveryStore = deliveries
+        if let service, let deliveries, let credentials {
+            deliveryOutbox = DeliveryOutbox(
+                store: deliveries,
+                connections: service,
+                credentials: credentials,
+                adapters: serviceAdapters.compactMap { $0 as? any DeliveryAdapter },
+                clock: clock,
+                log: deliveryLog ?? { _ in
+                    // A runtime without a delivery log stays silent.
+                },
+            )
+        } else {
+            deliveryOutbox = nil
         }
         self.persistSettings = persistSettings
         self.sendNowPlaying = sendNowPlaying
@@ -88,6 +108,10 @@ public final class CaptureRuntime {
         state.captureAvailable = store != nil
         state.failure = failure
         state.mediaStatus = source.mediaStatus
+
+        deliveryOutbox?.onConnectionsChanged = { [weak self] in
+            self?.applyConnectionSnapshot()
+        }
     }
 
     /// Opens the real database in the droplet's container. A database that
@@ -102,6 +126,7 @@ public final class CaptureRuntime {
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
+        deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
@@ -130,6 +155,7 @@ public final class CaptureRuntime {
             credentials: credentials,
             serviceAdapters: serviceAdapters,
             connectionLog: connectionLog,
+            deliveryLog: deliveryLog,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -164,6 +190,10 @@ public final class CaptureRuntime {
         await loadConnections()
         guard finishStart(generation) else { return }
 
+        // Deliveries are durable and independent of the capture switches, so a
+        // relaunch resumes the queue even with scrobbling off or paused.
+        deliveryOutbox?.activate()
+
         if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
             startFeed()
         }
@@ -187,6 +217,7 @@ public final class CaptureRuntime {
     public func stop() {
         pauseTask?.cancel()
         pauseTask = nil
+        deliveryOutbox?.deactivate()
         stopFeed()
         started = false
     }
