@@ -36,12 +36,15 @@ actor DeliveryGate {
     }
 }
 
-/// A real store whose combined listen-and-delivery write fails, to prove that
-/// a persist failure never reaches the network.
-actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
+/// A real store whose inserts, state writes or next pending read can be held,
+/// so the composition tests can prove persistence failure and snapshot races.
+actor ControllableDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
     private let base: SQLiteListenStore
     private let failInsert: Bool
     private var deliveredWritesToFail: Int
+    private var pauseNextPending = false
+    private var isPaused = false
+    private var pendingContinuation: CheckedContinuation<Void, Never>?
 
     init(
         _ base: SQLiteListenStore,
@@ -51,6 +54,22 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
         self.base = base
         self.failInsert = failInsert
         self.deliveredWritesToFail = deliveredWritesToFail
+    }
+
+    func pauseNextPendingRead() {
+        pauseNextPending = true
+    }
+
+    func waitUntilPaused() async {
+        while !isPaused {
+            await Task.yield()
+        }
+    }
+
+    func releasePendingRead() {
+        isPaused = false
+        pendingContinuation?.resume()
+        pendingContinuation = nil
     }
 
     func insert(_ listen: Listen) async throws -> Listen? {
@@ -109,7 +128,13 @@ actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
     }
 
     func pendingDeliveries() async throws -> [QueuedDelivery] {
-        try await base.pendingDeliveries()
+        let rows = try await base.pendingDeliveries()
+        if pauseNextPending {
+            pauseNextPending = false
+            isPaused = true
+            await withCheckedContinuation { pendingContinuation = $0 }
+        }
+        return rows
     }
 
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {

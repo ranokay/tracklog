@@ -275,7 +275,7 @@ struct DeliveryReloadRaceTests: CaptureTestHelpers {
     @Test func aStaleReloadCannotOverwriteANewerSnapshot() async throws {
         let database = try TemporaryDatabase()
         let sqlite = try SQLiteListenStore(url: database.url)
-        let store = PausingDeliveryStore(sqlite)
+        let store = ControllableDeliveryStore(sqlite, failInsert: false)
         let adapter = RecordingDeliveryAdapter()
         let clock = FakeClock(base)
         let state = TracklogAppState()
