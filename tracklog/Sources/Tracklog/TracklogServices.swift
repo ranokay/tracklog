@@ -6,6 +6,7 @@ import TracklogCore
 /// local id, so a page id stays valid across a relaunch.
 let tracklogServicesPageID = "services"
 let tracklogAddServicePageID = "add-service"
+let tracklogLastFMLinkPageID = "lastfm-link"
 
 private let tracklogConnectionPagePrefix = "connection-"
 
@@ -71,6 +72,20 @@ struct TracklogServicesPage: View {
                         page: tracklogAddServicePageID,
                     ) {
                         SettingsLinkTile(systemImage: "plus")
+                    }
+                }
+            }
+
+            if let problem = state.lastFMAppCredentialProblem {
+                DropletSettingsSection {
+                    settingsSectionHeader("Last.fm app credentials")
+                } content: {
+                    DropletSettingsCard {
+                        DropletStackedRow(title: problem.title) {
+                            Text(problem.detail)
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }
@@ -148,7 +163,8 @@ struct TracklogServicesPage: View {
 
 // MARK: - Add service
 
-/// Add service: the launch services, with ListenBrainz's token link.
+/// Add service: the launch services, with Last.fm's browser link and
+/// ListenBrainz's token link.
 struct TracklogAddServicePage: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -167,6 +183,10 @@ struct TracklogAddServicePage: View {
         state.connection(kind: .listenBrainz)?.identity
     }
 
+    private var lastFMConnection: Connection? {
+        state.connection(kind: .lastFM)
+    }
+
     var body: some View {
         DropletSettingsPage {
             DropletSettingsSection {
@@ -183,6 +203,46 @@ struct TracklogAddServicePage: View {
                     ForEach(ServiceKind.allCases) { kind in
                         DropletControlRow(title: kind.displayName) {
                             DropletValuePill(text: status(for: kind))
+                        }
+                    }
+                }
+            }
+
+            DropletSettingsSection {
+                VStack(alignment: .leading, spacing: 2) {
+                    settingsSectionHeader("Last.fm")
+                    Text(
+                        "Sign in through your browser. Tracklog never sees your Last.fm password, "
+                            + "and the session key is kept in the Keychain.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                }
+            } content: {
+                DropletSettingsCard {
+                    if let lastFMConnection {
+                        DropletControlRow(title: "Connected") {
+                            DropletValuePill(text: lastFMConnection.identity)
+                        }
+                        DropletStackedRow(title: "Session") {
+                            Text(
+                                "The session key is in the Keychain. "
+                                    + "The connection is listed on the Services page.",
+                            )
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else if droplet.lastFMLink != nil {
+                        DropletSettingsPageLink(
+                            "Sign in with Last.fm",
+                            subtitle: "Opens Last.fm in your browser and waits for you to authorize Tracklog.",
+                            page: tracklogLastFMLinkPageID,
+                        ) {
+                            SettingsLinkTile(systemImage: "music.note")
+                        }
+                    } else {
+                        DropletStackedRow(title: "Last.fm sign-in is unavailable in the harness.") {
+                            EmptyView()
                         }
                     }
                 }
@@ -227,7 +287,9 @@ struct TracklogAddServicePage: View {
         switch kind {
         case .listenBrainz:
             listenBrainzIdentity == nil ? "Not connected" : "Connected"
-        case .lastFM, .libreFM:
+        case .lastFM:
+            lastFMConnection == nil ? "Not connected" : "Connected"
+        case .libreFM:
             "Later update"
         }
     }

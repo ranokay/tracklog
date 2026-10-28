@@ -29,7 +29,11 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     private(set) var host: DropletHost?
     private(set) var runtime: CaptureRuntime?
-    private var automationGate: HostAutomationPermissionGate?
+    /// The Last.fm browser link's page model. It lives here, not in the view,
+    /// because Droppy rebuilds the page view each time it opens and the pending
+    /// token must survive that.
+    private(set) var lastFMLink: LastFMLinkModel?
+    var automationGate: HostAutomationPermissionGate?
     private var networkReachability: NetworkReachability?
     private var activationTask: Task<Void, Never>?
 
@@ -37,8 +41,20 @@ public final class TracklogDroplet: NSObject, Droplet {
         self.host = host
 
         let isHarness = host.environment.isHarness
-        let runtime = isHarness ? makeHarnessRuntime() : makeProductionRuntime(host: host)
+        let transport: URLSessionTransport?
+        let runtime: CaptureRuntime
+        if isHarness {
+            transport = nil
+            runtime = makeHarnessRuntime()
+        } else {
+            let sessionTransport = URLSessionTransport()
+            transport = sessionTransport
+            runtime = makeProductionRuntime(host: host, transport: sessionTransport)
+        }
         self.runtime = runtime
+        if let transport {
+            lastFMLink = makeLastFMLink(transport: transport)
+        }
         if !isHarness {
             let reachability = NetworkReachability { [weak runtime] in
                 runtime?.networkBecameAvailable()
@@ -63,72 +79,11 @@ public final class TracklogDroplet: NSObject, Droplet {
         host.log.info("Tracklog activated")
     }
 
-    private func makeHarnessRuntime() -> CaptureRuntime {
-        let store = HarnessDemoStore()
-        return CaptureRuntime(
-            state: state,
-            clock: SystemClock(),
-            source: HarnessDemoSource(),
-            store: store,
-            allowlist: store,
-            edits: store,
-            blocks: store,
-            credentials: MemoryCredentialStore(),
-            serviceAdapters: [HarnessDemoServiceAdapter()],
-            settings: CaptureSettings(scrobblingEnabled: true),
-        )
-    }
-
-    private func makeProductionRuntime(host: DropletHost) -> CaptureRuntime {
-        let settings = CaptureSettings(
-            scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
-            nowPlayingEnabled: host.preferences.value(forKey: "nowPlayingEnabled", default: true),
-            pausedUntil: host.preferences.value(forKey: "pausedUntil", as: Date.self),
-            minimumDuration: host.preferences.value(
-                forKey: "minimumDuration",
-                default: CaptureSettings.defaultMinimumDuration,
-            ),
-        )
-        let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
-        let gate = HostAutomationPermissionGate(host: host)
-        automationGate = gate
-        let transport = URLSessionTransport()
-        return CaptureRuntime.open(
-            state: state,
-            databaseURL: databaseURL,
-            clock: SystemClock(),
-            source: MediaArbiter(helper: MediaHelperReader(), permissions: gate),
-            settings: settings,
-            credentials: KeychainCredentialStore(),
-            serviceAdapters: [ListenBrainzAdapter(transport: transport)],
-            connectionLog: { event in
-                switch event {
-                case .linked:
-                    host.log.info(event.description)
-                case .linkFailed:
-                    host.log.notice(event.description)
-                }
-            },
-            deliveryLog: { event in
-                switch event {
-                case .delivered:
-                    host.log.info(event.description)
-                case .failed, .abandoned:
-                    host.log.notice(event.description)
-                }
-            },
-            persistSettings: { settings in
-                host.preferences.setValue(settings.scrobblingEnabled, forKey: "scrobblingEnabled")
-                host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")
-                host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
-                host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
-            },
-        )
-    }
-
     public func deactivate() {
         activationTask?.cancel()
         activationTask = nil
+        lastFMLink?.cancel()
+        lastFMLink = nil
         networkReachability?.stop()
         networkReachability = nil
         runtime?.stop()
