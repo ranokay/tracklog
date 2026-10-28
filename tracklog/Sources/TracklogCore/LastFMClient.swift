@@ -88,8 +88,6 @@ public enum LastFMError: Error, Equatable, Sendable {
 public struct LastFMClient: LastFMLinkClient {
     /// The protocol's hard limit for one `track.scrobble` request.
     public static let maximumScrobblesPerBatch = 50
-    /// The URL path is named "auth"; this is an endpoint, not a credential.
-    public static let authorizationRoot = "https://www.last.fm/api/auth/" // NOSONAR
 
     public let appCredentials: LastFMAppCredentials
     public let endpoint: ServiceEndpoint
@@ -313,7 +311,7 @@ public struct LastFMClient: LastFMLinkClient {
     }
 
     private func authorizationURL(for token: String) -> URL? {
-        var components = URLComponents(string: Self.authorizationRoot)
+        var components = URLComponents(string: LastFMWebEndpoint.authorizationRoot)
         components?.queryItems = [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "token", value: token),

@@ -86,7 +86,7 @@ struct LastFMLinkTests {
     private let challenge = LastFMLinkChallenge(
         token: "request-token",
         // A fixture URL for the browser flow; not a production endpoint.
-        authorizationURL: URL(string: "https://www.last.fm/api/auth/?api_key=xxxxxxxxxx&token=request-token")!, // NOSONAR
+        authorizationURL: URL(string: "https://www.last.fm/api/auth/?api_key=xxxxxxxxxx&token=request-token")!,
     )
     private let session = LastFMSession(name: "listener", key: "session-key")
 

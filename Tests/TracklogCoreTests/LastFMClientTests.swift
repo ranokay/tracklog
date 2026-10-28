@@ -21,13 +21,13 @@ struct LastFMClientTests {
         let query = try #require(URLComponents(url: challenge.authorizationURL, resolvingAgainstBaseURL: false)?.queryItems)
         #expect(URLComponents(url: challenge.authorizationURL, resolvingAgainstBaseURL: false)?.host == "www.last.fm")
         // The documented Last.fm endpoints are the expected values here.
-        #expect(URLComponents(url: challenge.authorizationURL, resolvingAgainstBaseURL: false)?.path == "/api/auth/") // NOSONAR
+        #expect(URLComponents(url: challenge.authorizationURL, resolvingAgainstBaseURL: false)?.path == "/api/auth/")
         #expect(query.first(where: { $0.name == "api_key" })?.value == "xxxxxxxxxx")
         #expect(query.first(where: { $0.name == "token" })?.value == "request-token")
 
         let request = try #require(await transport.requests.first)
         #expect(request.method == .post)
-        #expect(request.url.absoluteString == "https://ws.audioscrobbler.com/2.0/") // NOSONAR
+        #expect(request.url.absoluteString == "https://ws.audioscrobbler.com/2.0/")
         #expect(request.headers["User-Agent"] == TracklogHTTP.userAgent)
         #expect(request.headers["Content-Type"]?.hasPrefix("application/x-www-form-urlencoded") == true)
         let params = formParameters(request)

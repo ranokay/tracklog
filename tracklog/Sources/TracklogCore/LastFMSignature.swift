@@ -19,7 +19,7 @@ public enum LastFMSignature {
 
         // Last.fm's protocol requires MD5 for the request signature. This is a
         // protocol MAC over a public shared secret, not password storage.
-        let digest = Insecure.MD5.hash(data: Data((signed + sharedSecret).utf8)) // NOSONAR
+        let digest = Insecure.MD5.hash(data: Data((signed + sharedSecret).utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
