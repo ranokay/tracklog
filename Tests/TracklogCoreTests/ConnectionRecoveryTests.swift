@@ -24,8 +24,17 @@ struct ConnectionRecoveryTests {
         let (gateWait, gateWaitContinuation) = AsyncStream.makeStream(of: Void.self)
         service.onGateWait = { gateWaitContinuation.yield() }
         let loadTask = Task { try await service.load() }
+        // If the gate regresses, finish the stream and release the suspended
+        // credential so the test fails on the assertion instead of hanging.
+        let watchdog = Task {
+            try? await Task.sleep(for: .seconds(2))
+            gateWaitContinuation.finish()
+            await credentials.resumeSaving()
+        }
         var gateWaitIterator = gateWait.makeAsyncIterator()
-        _ = await gateWaitIterator.next()
+        let gateWaitEvent = await gateWaitIterator.next()
+        watchdog.cancel()
+        #expect(gateWaitEvent != nil)
         await credentials.resumeSaving()
 
         let linked = try await linkTask.value
