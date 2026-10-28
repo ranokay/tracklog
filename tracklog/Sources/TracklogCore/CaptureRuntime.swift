@@ -32,6 +32,9 @@ public final class CaptureRuntime {
     var artworkIdentity: String?
     var artworkTask: Task<Void, Never>?
     var deliveryRefreshTask: Task<Void, Never>?
+    /// Identifies the newest delivery read, so an older suspended read cannot
+    /// overwrite a newer queue or row snapshot.
+    var deliveryReloadGeneration = 0
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?

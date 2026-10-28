@@ -269,6 +269,38 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
     }
 }
 
+@Suite("Delivery reload race")
+@MainActor
+struct DeliveryReloadRaceTests: CaptureTestHelpers {
+    @Test func aStaleReloadCannotOverwriteANewerSnapshot() async throws {
+        let database = try TemporaryDatabase()
+        let sqlite = try SQLiteListenStore(url: database.url)
+        let store = PausingDeliveryStore(sqlite)
+        let adapter = RecordingDeliveryAdapter()
+        let clock = FakeClock(base)
+        let state = TracklogAppState()
+        let runtime = makeRuntime(store: store, adapters: [adapter], clock: clock, state: state)
+        await runtime.start()
+        let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await settleOutbox()
+        let id = connection.id ?? -1
+
+        _ = try await store.insert(deliveryListen(title: "First", base: base), targets: [id])
+        await store.pauseNextPendingRead()
+        let stale = Task { await runtime.reloadDeliveryState() }
+        await store.waitUntilPaused()
+
+        _ = try await store.insert(deliveryListen(title: "Second", base: base, start: 10), targets: [id])
+        await runtime.reloadDeliveryState()
+        #expect(state.pendingQueue.count == 2)
+
+        await store.releasePendingRead()
+        await stale.value
+
+        #expect(state.pendingQueue.count == 2, "the older one-row snapshot must not win")
+    }
+}
+
 @MainActor
 private func settleOutbox() async {
     await turnMainActor(100)
@@ -276,7 +308,7 @@ private func settleOutbox() async {
 
 @MainActor
 private func makeRuntime(
-    store: SQLiteListenStore,
+    store: any ListenStore,
     adapters: [RecordingDeliveryAdapter],
     clock: FakeClock,
     state: TracklogAppState,

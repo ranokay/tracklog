@@ -121,7 +121,7 @@ struct HistoryRow: View {
         switch DeliveryAggregate(deliveries) {
         case .delivered: AdaptiveColors.notchSurfaceSecondaryText
         case .pending: AdaptiveColors.notchSurfacePrimaryText
-        case .notDelivered: .orange
+        case .notDelivered: AdaptiveColors.notchSurfacePrimaryText
         case .none: AdaptiveColors.notchSurfaceTertiaryText
         }
     }

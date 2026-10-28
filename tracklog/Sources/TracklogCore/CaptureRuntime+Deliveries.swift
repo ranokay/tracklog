@@ -12,6 +12,8 @@ extension CaptureRuntime {
             state.deliveriesByListen = [:]
             return
         }
+        deliveryReloadGeneration += 1
+        let generation = deliveryReloadGeneration
 
         let pending: [QueuedDelivery]
         do {
@@ -19,19 +21,26 @@ extension CaptureRuntime {
         } catch {
             return
         }
+        guard isCurrentDeliveryReload(generation) else { return }
         state.pendingQueue = PendingQueue(pending: pending, connections: state.connections)
 
         let listenIDs = state.listens.compactMap(\.id)
         guard !listenIDs.isEmpty else {
+            guard isCurrentDeliveryReload(generation) else { return }
             state.deliveriesByListen = [:]
             return
         }
         do {
             let deliveries = try await deliveryStore.deliveries(forListenIDs: listenIDs)
+            guard isCurrentDeliveryReload(generation) else { return }
             state.deliveriesByListen = Dictionary(grouping: deliveries, by: \.listenID)
         } catch {
             return
         }
+    }
+
+    private func isCurrentDeliveryReload(_ generation: Int) -> Bool {
+        generation == deliveryReloadGeneration && !Task.isCancelled
     }
 
     /// Abandons one delivery and leaves its listen in local history. The
