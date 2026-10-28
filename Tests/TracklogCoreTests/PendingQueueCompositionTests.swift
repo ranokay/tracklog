@@ -57,6 +57,45 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
         #expect(state.pendingBanner == nil)
     }
 
+    @Test func thePendingListGroupsAcrossConnectionsAtTheCompositionSeam() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let brainz = RecordingDeliveryAdapter(kind: .listenBrainz)
+        let lastFM = RecordingDeliveryAdapter(kind: .lastFM)
+        let clock = FakeClock(base)
+        let state = TracklogAppState()
+        let runtime = makeRuntime(store: store, adapters: [brainz, lastFM], clock: clock, state: state)
+        await runtime.start()
+        let brainzConnection = try await runtime.link(kind: .listenBrainz, credential: "token")
+        let lastFMConnection = try await runtime.link(kind: .lastFM, credential: "key")
+        await settleOutbox()
+
+        _ = try await store.insert(
+            deliveryListen(title: "Newest", base: base, start: 20),
+            targets: [brainzConnection.id ?? -1],
+        )
+        _ = try await store.insert(
+            deliveryListen(title: "Oldest", base: base, start: 5),
+            targets: [brainzConnection.id ?? -1],
+        )
+        _ = try await store.insert(
+            deliveryListen(title: "Other service", base: base, start: 10),
+            targets: [lastFMConnection.id ?? -1],
+        )
+
+        await runtime.reloadDeliveryState()
+
+        #expect(
+            state.pendingQueue.groups.map(\.connection.kind)
+                == [.listenBrainz, .lastFM],
+        )
+        #expect(
+            state.pendingQueue.groups.first?.items.map(\.listen.processed.title)
+                == ["Oldest", "Newest"],
+        )
+        #expect(state.pendingQueue.count == 3)
+    }
+
     @Test func theBannerPriorityFollowsTheLiveProblems() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
@@ -207,28 +246,6 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
         #expect(state.pendingQueue.count == 1)
     }
 
-    private func settleOutbox() async {
-        await turnMainActor(100)
-    }
-
-    private func makeRuntime(
-        store: SQLiteListenStore,
-        adapters: [RecordingDeliveryAdapter],
-        clock: FakeClock,
-        state: TracklogAppState,
-    ) -> CaptureRuntime {
-        CaptureRuntime(
-            state: state,
-            clock: clock,
-            source: ReplayedNowPlaying(),
-            store: store,
-            allowlist: InMemoryAppAllowlist(),
-            credentials: MemoryCredentialStore(),
-            serviceAdapters: adapters.map { $0 as any ServiceAdapter },
-            settings: CaptureSettings(scrobblingEnabled: true),
-        )
-    }
-
     private func isPending(_ banner: HistoryBanner?) -> Bool {
         if case .pending = banner {
             return true
@@ -249,4 +266,28 @@ struct PendingQueueCompositionTests: CaptureTestHelpers {
         }
         return false
     }
+}
+
+@MainActor
+private func settleOutbox() async {
+    await turnMainActor(100)
+}
+
+@MainActor
+private func makeRuntime(
+    store: SQLiteListenStore,
+    adapters: [RecordingDeliveryAdapter],
+    clock: FakeClock,
+    state: TracklogAppState,
+) -> CaptureRuntime {
+    CaptureRuntime(
+        state: state,
+        clock: clock,
+        source: ReplayedNowPlaying(),
+        store: store,
+        allowlist: InMemoryAppAllowlist(),
+        credentials: MemoryCredentialStore(),
+        serviceAdapters: adapters.map { $0 as any ServiceAdapter },
+        settings: CaptureSettings(scrobblingEnabled: true),
+    )
 }

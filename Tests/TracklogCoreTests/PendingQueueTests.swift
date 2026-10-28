@@ -157,6 +157,27 @@ struct PendingQueueTests {
         #expect(queue.rateLimitedConnections.isEmpty)
     }
 
+    @Test func aPausedNeedsSignInConnectionDoesNotOwnTheBanner() {
+        let paused = connection(1, kind: .listenBrainz, needsSignIn: true)
+        var disabled = paused
+        disabled.isEnabled = false
+        let queue = PendingQueue(
+            pending: [queued(deliveryID: 1, connectionID: 1, title: "Song", start: 0)],
+            connections: [disabled],
+        )
+
+        if case .pending = HistoryBanner.resolve(
+            feedAvailable: true,
+            connections: [disabled],
+            pending: queue,
+        ) {
+            // The user paused this connection, so its sign-in state is not the
+            // live problem; the backlog owns the slot.
+        } else {
+            Issue.record("a paused needs-sign-in connection outranked the backlog")
+        }
+    }
+
     @Test func theBannerPicksTheHighestPriorityProblem() {
         let lastFM = connection(1, kind: .lastFM)
         let brainz = connection(2, kind: .listenBrainz, needsSignIn: true)

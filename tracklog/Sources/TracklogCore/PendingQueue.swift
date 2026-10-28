@@ -100,7 +100,7 @@ public enum HistoryBanner: Equatable, Sendable {
         if !feedAvailable {
             return .mediaFeedUnavailable
         }
-        let needsSignIn = connections.filter { $0.authState == .needsSignIn }
+        let needsSignIn = connections.filter { $0.isEnabled && $0.authState == .needsSignIn }
         if !needsSignIn.isEmpty {
             return .needsSignIn(needsSignIn)
         }

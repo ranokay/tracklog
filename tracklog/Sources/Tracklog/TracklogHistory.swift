@@ -89,6 +89,7 @@ private struct TracklogHistory: View {
             alignment: .topLeading,
         )
         .task { await droplet.reloadHistory() }
+        .onDisappear { state.setPendingListExpanded(false) }
     }
 
     // MARK: Header

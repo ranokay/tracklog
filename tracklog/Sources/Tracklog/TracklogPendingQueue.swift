@@ -140,6 +140,7 @@ struct PendingQueuePanel: View {
                         PendingConnectionGroupView(group: group, droplet: droplet)
                     }
                 }
+                .droppyFlatGlassControls()
             }
             .frame(maxHeight: 220)
         }

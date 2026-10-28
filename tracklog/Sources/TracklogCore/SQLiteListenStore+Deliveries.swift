@@ -183,7 +183,7 @@ public extension SQLiteListenStore {
                 last_error = NULL,
                 delivered_at = ?,
                 service_reference = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }
@@ -217,7 +217,7 @@ public extension SQLiteListenStore {
                 last_attempt_at = ?,
                 next_attempt_at = ?,
                 last_error = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('waiting', 'retrying')
             """,
         )
         defer { sqlite3_finalize(statement) }

@@ -42,7 +42,7 @@ extension CaptureRuntime {
             try await deliveryStore.abandon(
                 delivery.id,
                 attempts: delivery.attempts,
-                at: clock.now,
+                at: delivery.lastAttemptAt ?? clock.now,
                 reason: Self.deletedDeliveryReason,
             )
         } catch {

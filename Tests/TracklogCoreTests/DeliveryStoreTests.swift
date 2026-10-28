@@ -167,6 +167,31 @@ struct DeliveryStoreTests {
         #expect(try await store.recent(limit: 1).count == 1)
     }
 
+    @Test func aWriteAfterAbandonmentDoesNotResurrectTheDelivery() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let target = try await connection(store)
+        let id = target.id ?? -1
+        let stored = try #require(try await store.insert(listen(), targets: [id]))
+        let delivery = try #require(try await store.deliveries(for: stored.id ?? -1).first)
+
+        try await store.abandon(delivery.id, attempts: 1, at: base, reason: "Deleted from the pending list.")
+        try await store.markDelivered(delivery.id, at: base.addingTimeInterval(5), reference: nil)
+        try await store.markFailed(
+            delivery.id,
+            attempts: 2,
+            at: base.addingTimeInterval(6),
+            nextAttemptAt: base.addingTimeInterval(60),
+            error: "offline",
+        )
+
+        let updated = try #require(try await store.deliveries(for: stored.id ?? -1).first)
+        #expect(updated.state == .abandoned)
+        #expect(updated.attempts == 1)
+        #expect(updated.deliveredAt == nil)
+        #expect(updated.abandonedReason == "Deleted from the pending list.")
+    }
+
     @Test func markingDueMovesPendingRowsWithoutTouchingAttempts() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)

@@ -85,14 +85,8 @@ struct TracklogWidget: View {
                     .monospacedDigit()
             }
             .font(.system(size: 11, weight: .semibold))
-            .padding(.horizontal, 5)
-            .frame(height: 20)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(AdaptiveColors.overlayAuto(0.10)),
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DroppyQuietButtonStyle(size: .small))
         .help("Pending scrobbles")
         .accessibilityLabel("\(state.pendingCount) \(state.pendingCount == 1 ? "scrobble" : "scrobbles") waiting")
         .accessibilityHint("Opens History with the pending list")
