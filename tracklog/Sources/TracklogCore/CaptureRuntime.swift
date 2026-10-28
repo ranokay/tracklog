@@ -13,6 +13,7 @@ public final class CaptureRuntime {
     let allowlist: any AppAllowlistStore
     let editStore: (any SimpleEditStore)?
     let blockStore: (any BlockStore)?
+    let connectionService: ConnectionService?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
@@ -41,6 +42,9 @@ public final class CaptureRuntime {
         allowlist: any AppAllowlistStore,
         edits: (any SimpleEditStore)? = nil,
         blocks: (any BlockStore)? = nil,
+        credentials: (any CredentialStore)? = nil,
+        serviceAdapters: [any ServiceAdapter] = [],
+        connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
@@ -58,6 +62,17 @@ public final class CaptureRuntime {
         self.allowlist = allowlist
         editStore = edits
         blockStore = blocks
+        if let connectionStore = store as? any ConnectionStore, let credentials {
+            connectionService = ConnectionService(
+                store: connectionStore,
+                credentials: credentials,
+                adapters: serviceAdapters,
+                clock: clock,
+                log: connectionLog ?? { _ in },
+            )
+        } else {
+            connectionService = nil
+        }
         self.persistSettings = persistSettings
         self.sendNowPlaying = sendNowPlaying
 
@@ -84,6 +99,9 @@ public final class CaptureRuntime {
         clock: any Clock,
         source: any NowPlayingSource,
         settings: CaptureSettings = CaptureSettings(),
+        credentials: (any CredentialStore)? = nil,
+        serviceAdapters: [any ServiceAdapter] = [],
+        connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
@@ -109,6 +127,9 @@ public final class CaptureRuntime {
             allowlist: allowlist,
             edits: store,
             blocks: store,
+            credentials: credentials,
+            serviceAdapters: serviceAdapters,
+            connectionLog: connectionLog,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -138,6 +159,9 @@ public final class CaptureRuntime {
         guard finishStart(generation) else { return }
 
         await loadBlocks()
+        guard finishStart(generation) else { return }
+
+        await loadConnections()
         guard finishStart(generation) else { return }
 
         if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {

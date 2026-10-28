@@ -128,6 +128,7 @@ public struct CaptureFailure: Equatable, Sendable {
         case history
         case edits
         case blocks
+        case connections
     }
 
     public let stage: Stage
@@ -187,6 +188,16 @@ public struct CaptureFailure: Equatable, Sendable {
             stage: .blocks,
             message: "Blocks could not be read. Capture continues with the blocks it already has.",
             diagnostics: "Tracklog could not read its block rules. Capture continues with the last loaded set.\nError: \(error)",
+        )
+    }
+
+    /// Services could not be read. Capture and local history keep running;
+    /// only the Services page is unavailable.
+    public static func connections(error: Error) -> CaptureFailure {
+        CaptureFailure(
+            stage: .connections,
+            message: "Services could not be loaded from this Mac.",
+            diagnostics: "Tracklog could not read its connections.\nError: \(error)",
         )
     }
 }

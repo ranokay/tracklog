@@ -2,15 +2,15 @@
   "id": "tracklog",
   "name": "Tracklog",
   "version": "1.0.0",
-  "summary": "Scrobbles what you play on your Mac to four services.",
-  "description": "Tracklog is a scrobbler that lives in Droppy. It reads the system's now-playing feed, applies your edits and blocks, and sends what you listen to Last.fm, ListenBrainz, Libre.fm and Pleroma. A local queue keeps scrobbles safe while you are offline, and a local history keeps your listening in one place.\n\nTracklog is a clean-room implementation inspired by Pano Scrobbler, and is not affiliated with it.",
+  "summary": "Scrobbles what you play on your Mac to three services.",
+  "description": "Tracklog is a scrobbler that lives in Droppy. It reads the system's now-playing feed, applies your edits and blocks, and sends what you listen to Last.fm, ListenBrainz and Libre.fm. A local queue keeps scrobbles safe while you are offline, and a local history keeps your listening in one place.\n\nTracklog is a clean-room implementation inspired by Pano Scrobbler, and is not affiliated with it.",
   "category": "media",
   "kit": {
     "abi": 1,
     "minAPI": "1.18.0"
   },
   "minAppVersion": "15.3.0",
-  "capabilities": ["apple-events", "clipboard-write", "expanded-surface"],
+  "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "network-client"],
   "surfaces": [
     "shelf-widget",
     "expanded-surface",
@@ -34,7 +34,6 @@
     "last.fm",
     "listenbrainz",
     "libre.fm",
-    "pleroma",
     "music",
     "listening history"
   ]

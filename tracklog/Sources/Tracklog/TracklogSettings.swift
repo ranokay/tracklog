@@ -150,10 +150,15 @@ struct TracklogSettings: View {
                 settingsSectionHeader("Services")
             } content: {
                 DropletSettingsCard {
-                    serviceRow("Last.fm")
-                    serviceRow("ListenBrainz")
-                    serviceRow("Libre.fm")
-                    serviceRow("Pleroma")
+                    DropletSettingsPageLink(
+                        "Services",
+                        subtitle: state.connections.isEmpty
+                            ? "Connect Last.fm, Libre.fm or ListenBrainz."
+                            : "\(state.connections.count) connected. Choose the current account.",
+                        page: tracklogServicesPageID,
+                    ) {
+                        SettingsLinkTile(systemImage: "link")
+                    }
                 }
             }
 
@@ -256,12 +261,6 @@ struct TracklogSettings: View {
 
     // MARK: - Failure
 
-    private func serviceRow(_ name: String) -> some View {
-        DropletControlRow(title: name) {
-            DropletValuePill(text: "Not connected")
-        }
-    }
-
     private func failureLabel(for failure: CaptureFailure) -> String {
         switch failure.stage {
         case .database: "Unavailable"
@@ -269,6 +268,7 @@ struct TracklogSettings: View {
         case .history: "Read failed"
         case .edits: "Read failed"
         case .blocks: "Read failed"
+        case .connections: "Unavailable"
         }
     }
 }
@@ -369,7 +369,7 @@ private extension TracklogSettings {
 
 // MARK: - Link tile
 
-private struct SettingsLinkTile: View {
+struct SettingsLinkTile: View {
     let systemImage: String
 
     var body: some View {

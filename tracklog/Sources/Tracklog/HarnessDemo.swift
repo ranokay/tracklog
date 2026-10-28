@@ -43,13 +43,16 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore {
     private var listens: [Listen]
     private var artworks: [String: StoredArtwork]
     private var artworkHashes: [String: String]
     private var seenApps: [SeenApp]
     private var simpleEdits: [SimpleEditRule]
     private var blockRules: [BlockRule]
+    var linkedConnections: [Connection] = []
+    var currentConnection: Int64?
+    var nextConnectionID: Int64 = 1
 
     init() {
         let content = HarnessDemoData.makeContent()

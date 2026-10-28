@@ -15,6 +15,13 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var seenApps: [SeenApp] = []
     /// Saved simple edits, in the order the metadata pipeline applies them.
     @Published public internal(set) var simpleEdits: [SimpleEditRule] = []
+    /// Every linked service, in link order.
+    @Published public internal(set) var connections: [Connection] = []
+    /// The read cursor. It never scopes local history or redirects a delivery.
+    @Published public internal(set) var currentConnectionID: Int64?
+    /// Set until a connection read succeeds, so the Services page can say the
+    /// list is unavailable rather than empty.
+    @Published public internal(set) var connectionsFailure: CaptureFailure?
     /// Saved blocks, in the order the metadata pipeline evaluates them.
     @Published public internal(set) var blocks: [BlockRule] = []
     /// Set until a block read succeeds, even if a later storage failure
@@ -30,6 +37,20 @@ public final class TracklogAppState: ObservableObject {
     /// status so the two cannot drift apart.
     public var feedAvailable: Bool {
         mediaStatus.isAvailable
+    }
+
+    /// The connection service-backed reads are scoped to, if one is chosen.
+    public var currentConnection: Connection? {
+        guard let currentConnectionID else { return nil }
+        return connection(id: currentConnectionID)
+    }
+
+    public func connection(id: Int64) -> Connection? {
+        connections.first { $0.id == id }
+    }
+
+    public func connection(kind: ServiceKind) -> Connection? {
+        connections.first { $0.kind == kind }
     }
 
     /// The live media source and the health behind the feed.

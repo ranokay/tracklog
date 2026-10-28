@@ -1,0 +1,76 @@
+import Foundation
+@testable import TracklogCore
+
+// MARK: - Connections
+
+/// A scripted transport shared by the connection and adapter suites. Each
+/// send takes the next answer and records the request it was handed.
+actor ScriptedTransport: HTTPTransport {
+    private enum Answer: Sendable {
+        case response(HTTPResponse)
+        case failure(URLError.Code)
+    }
+
+    private var answers: [Answer]
+    private(set) var requests: [HTTPRequest] = []
+
+    init(_ responses: [HTTPResponse]) {
+        answers = responses.map { .response($0) }
+    }
+
+    init(error: URLError.Code) {
+        answers = [.failure(error)]
+    }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        requests.append(request)
+        guard !answers.isEmpty else { throw URLError(.unknown) }
+        switch answers.removeFirst() {
+        case let .response(response):
+            return response
+        case let .failure(code):
+            throw URLError(code)
+        }
+    }
+}
+
+/// A successful ListenBrainz token-validation answer.
+func listenBrainzValidResponse(user: String = "listener") -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"{"code":200,"message":"Token valid","valid":true,"user_name":"\#(user)"}"#.utf8,
+        ),
+    )
+}
+
+/// A credential store whose every write fails, to exercise link rollback.
+struct FailingCredentialStore: CredentialStore {
+    func credential(forConnection _: Int64) async throws -> String? {
+        nil
+    }
+
+    func saveCredential(_: String, forConnection _: Int64) async throws {
+        throw URLError(.cannotWriteToFile)
+    }
+
+    func deleteCredential(forConnection _: Int64) async throws {}
+
+    func appCredential() async throws -> String? {
+        nil
+    }
+
+    func saveAppCredential(_: String?) async throws {}
+}
+
+/// A service adapter with a fixed identity, for kinds whose real flow has not
+/// landed yet.
+struct StubAdapter: ServiceAdapter {
+    let kind: ServiceKind
+    let identity: ServiceIdentity
+    let capabilities = ServiceCapabilities()
+
+    func validate(_: String) async throws -> ServiceIdentity {
+        identity
+    }
+}

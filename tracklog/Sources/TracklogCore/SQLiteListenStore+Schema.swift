@@ -119,6 +119,29 @@ extension SQLiteListenStore {
                 )
                 try backfillTrackIdentities(handle)
             },
+            Migration(version: 6) { handle in
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE connections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL,
+                        endpoint TEXT NOT NULL,
+                        identity TEXT NOT NULL,
+                        display_name TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        auth_state TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        last_used_at REAL NOT NULL,
+                        UNIQUE (kind, endpoint)
+                    );
+                    CREATE TABLE connection_preferences (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
+                    """,
+                )
+            },
         ]
     }
 

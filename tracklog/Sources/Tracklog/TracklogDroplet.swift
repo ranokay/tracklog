@@ -27,8 +27,8 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The one observable state every surface reads.
     public let state = TracklogAppState()
 
-    private var host: DropletHost?
-    private var runtime: CaptureRuntime?
+    private(set) var host: DropletHost?
+    private(set) var runtime: CaptureRuntime?
     private var automationGate: HostAutomationPermissionGate?
     private var activationTask: Task<Void, Never>?
 
@@ -47,6 +47,8 @@ public final class TracklogDroplet: NSObject, Droplet {
                 allowlist: store,
                 edits: store,
                 blocks: store,
+                credentials: MemoryCredentialStore(),
+                serviceAdapters: [HarnessDemoServiceAdapter()],
                 settings: CaptureSettings(scrobblingEnabled: true),
             )
         } else {
@@ -62,6 +64,7 @@ public final class TracklogDroplet: NSObject, Droplet {
             let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
             let gate = HostAutomationPermissionGate(host: host)
             automationGate = gate
+            let transport = URLSessionTransport()
             runtime = CaptureRuntime.open(
                 state: state,
                 databaseURL: databaseURL,
@@ -71,6 +74,16 @@ public final class TracklogDroplet: NSObject, Droplet {
                     permissions: gate,
                 ),
                 settings: settings,
+                credentials: KeychainCredentialStore(),
+                serviceAdapters: [ListenBrainzAdapter(transport: transport)],
+                connectionLog: { event in
+                    switch event {
+                    case .linked:
+                        host.log.info(event.description)
+                    case .linkFailed:
+                        host.log.notice(event.description)
+                    }
+                },
                 // The delivery outbox (#39) supplies the now-playing sender;
                 // the toggle persists and the gate is ready for it.
                 persistSettings: { settings in
@@ -326,63 +339,5 @@ extension TracklogDroplet: ShelfWidgetProviding {
 
     public func makeWidgetSettingsPopover(_: ShelfWidgetID) -> AnyView? {
         nil
-    }
-}
-
-// MARK: - Settings
-
-extension TracklogDroplet: SettingsPagesProviding {
-    public func makeSettingsPane(context _: SettingsPaneContext) -> AnyView {
-        AnyView(TracklogSettings(droplet: self, state: state))
-    }
-
-    public func makeSettingsPage(id: String, context _: SettingsPaneContext) -> AnyView? {
-        switch id {
-        case tracklogAppsPageID:
-            AnyView(TracklogAppsPage(droplet: self, state: state))
-        case tracklogEditsPageID:
-            AnyView(TracklogEditsPage(droplet: self, state: state))
-        case tracklogBlocksPageID:
-            AnyView(TracklogBlocksPage(droplet: self, state: state))
-        default:
-            nil
-        }
-    }
-
-    public var settingsSearchEntries: [SettingsSearchEntry] {
-        [
-            SettingsSearchEntry(
-                title: "Scrobble what I play",
-                keywords: ["scrobble", "capture", "play"],
-            ),
-            SettingsSearchEntry(
-                title: "Pause",
-                keywords: ["pause", "resume", "hold"],
-            ),
-            SettingsSearchEntry(
-                title: "Send now playing",
-                keywords: ["now playing", "profile"],
-            ),
-            SettingsSearchEntry(
-                title: "Minimum length",
-                keywords: ["minimum", "duration", "jingle", "snippet"],
-            ),
-            SettingsSearchEntry(
-                title: "Apps",
-                keywords: ["apps", "players", "allow", "deny"],
-            ),
-            SettingsSearchEntry(
-                title: "Edits",
-                keywords: ["edits", "metadata", "title", "artist", "album", "fix"],
-            ),
-            SettingsSearchEntry(
-                title: "Blocks",
-                keywords: ["blocks", "blocked", "hide", "podcast", "artist", "album"],
-            ),
-            SettingsSearchEntry(
-                title: "Services",
-                keywords: ["last.fm", "listenbrainz", "libre.fm", "pleroma"],
-            ),
-        ]
     }
 }
