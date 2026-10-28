@@ -23,6 +23,10 @@ private final class ConnectionOperationGate {
     private var isLocked = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
+    var waiterCount: Int {
+        waiters.count
+    }
+
     func acquire() async {
         guard isLocked else {
             isLocked = true
@@ -75,6 +79,12 @@ public final class ConnectionService {
 
     public var currentConnection: Connection? {
         connections.first { $0.id == currentID }
+    }
+
+    /// Test seam for the serialization regression: operations suspended on
+    /// the gate, excluding the current holder.
+    var suspendedGateWaiterCount: Int {
+        gate.waiterCount
     }
 
     /// Loads the durable connections and repairs any credentialless orphan.

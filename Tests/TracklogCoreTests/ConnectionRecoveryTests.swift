@@ -22,9 +22,13 @@ struct ConnectionRecoveryTests {
         await credentials.waitUntilSaving()
 
         let loadTask = Task { try await service.load() }
-        for _ in 0 ..< 5 {
+        for _ in 0 ..< 1000 {
+            if service.suspendedGateWaiterCount == 1 {
+                break
+            }
             await Task.yield()
         }
+        #expect(service.suspendedGateWaiterCount == 1)
         await credentials.resumeSaving()
 
         let linked = try await linkTask.value
