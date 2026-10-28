@@ -38,7 +38,7 @@ struct TracklogConnectionPage: View {
                         }
                         DropletToggleRow(
                             title: "Enabled",
-                            subtitle: "Sends now playing and scrobbles here. Turning it off holds its deliveries and discards nothing.",
+                            subtitle: "Saved now; delivery arrives later. Turning it off holds its deliveries and discards nothing.",
                             isOn: enabledBinding(for: connection),
                         )
                         DropletControlRow(title: "Use for reading") {

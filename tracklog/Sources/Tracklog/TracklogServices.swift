@@ -32,7 +32,7 @@ struct TracklogServicesPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Services")
                     Text(
-                        "Every enabled service receives the listens you play. "
+                        "Connect the services you use. Delivery to them arrives in a later update. "
                             + "The current connection only decides which account service-backed reads show; "
                             + "it never changes where a scrobble goes, and local history stays on this Mac.",
                     )
@@ -171,9 +171,12 @@ struct TracklogAddServicePage: View {
             DropletSettingsSection {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Add a service")
-                    Text("Tracklog can send every listen to each service you connect and enable.")
-                        .font(.body)
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                    Text(
+                        "Tracklog will send every listen to each service you connect and enable. "
+                            + "Delivery arrives in a later update.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 }
             } content: {
                 DropletSettingsCard {
