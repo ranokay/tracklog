@@ -5,27 +5,6 @@ import Testing
 @Suite("Delivery composition")
 @MainActor
 struct DeliveryCompositionTests: CaptureTestHelpers {
-    private func runtime(
-        store: any ListenStore,
-        allowlist: any AppAllowlistStore,
-        credentials: any CredentialStore,
-        adapters: [any DeliveryAdapter],
-        clock: FakeClock,
-        state: TracklogAppState = TracklogAppState(),
-        nowPlaying: Bool = false,
-    ) -> CaptureRuntime {
-        CaptureRuntime(
-            state: state,
-            clock: clock,
-            source: ReplayedNowPlaying(),
-            store: store,
-            allowlist: allowlist,
-            credentials: credentials,
-            serviceAdapters: adapters.map { $0 as any ServiceAdapter },
-            settings: CaptureSettings(scrobblingEnabled: true, nowPlayingEnabled: nowPlaying),
-        )
-    }
-
     @Test func aCapturedListenAndItsDeliveriesAreCommittedBeforeSubmit() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
@@ -38,7 +17,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         })
         let clock = FakeClock(base)
         let state = TracklogAppState()
-        let runtime = runtime(
+        let runtime = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: MemoryCredentialStore(),
@@ -51,9 +30,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
 
         await replay(thresholdSamples(track()), on: runtime, clock: clock)
 
-        let batches = await awaitBatches(adapter, count: 1)
-        #expect(batches.count == 1)
-        let observed = await probe.observed
+        let observed = await awaitProbe(probe, count: 1)
         #expect(observed.count == 1)
         #expect(observed.first?.count == 1)
         #expect(observed.first?.first?.state == .waiting, "the row existed before the network call")
@@ -68,7 +45,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         let adapter = RecordingDeliveryAdapter()
         let clock = FakeClock(base)
         let state = TracklogAppState()
-        let runtime = runtime(
+        let runtime = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: MemoryCredentialStore(),
@@ -94,7 +71,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         let lastFM = RecordingDeliveryAdapter(kind: .lastFM)
         let clock = FakeClock(base)
         let state = TracklogAppState()
-        let runtime = runtime(
+        let runtime = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: MemoryCredentialStore(),
@@ -115,10 +92,85 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         #expect(deliveries.map(\.connectionID) == [brainz.id])
 
         try await runtime.setConnectionEnabled(id: lastFMConnection.id ?? -1, enabled: true)
-        await yieldABit()
+        await turnMainActor()
         let afterEnable = try await store.deliveries(for: stored.id ?? -1)
         #expect(afterEnable.map(\.connectionID) == [brainz.id], "re-enabling never backfills")
         #expect(await lastFM.batches.isEmpty)
+    }
+
+    @Test func aNeedsSignInConnectionIsATargetAndHoldsItsRows() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let connection = try await store.save(
+            Connection(
+                kind: .listenBrainz,
+                endpoint: .listenBrainz,
+                identity: "listener",
+                isEnabled: true,
+                authState: .needsSignIn,
+                createdAt: base,
+            ),
+        )
+        try await credentials.saveCredential("token", forConnection: connection.id ?? -1)
+        let adapter = RecordingDeliveryAdapter()
+        let clock = FakeClock(base)
+        let state = TracklogAppState()
+        let runtime = makeDeliveryRuntime(
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            credentials: credentials,
+            adapters: [adapter],
+            clock: clock,
+            state: state,
+        )
+        await runtime.start()
+        #expect(state.connections.first?.authState == .needsSignIn)
+
+        await replay(thresholdSamples(track()), on: runtime, clock: clock)
+
+        let stored = try #require(state.listens.first)
+        let deliveries = try await store.deliveries(for: stored.id ?? -1)
+        #expect(deliveries.count == 1)
+        #expect(deliveries.first?.connectionID == connection.id)
+        #expect(deliveries.first?.state == .waiting)
+        await turnMainActor()
+        #expect(await adapter.batches.isEmpty, "a held row is not sent")
+    }
+
+    @Test func enablingAConnectionDrainsItsExistingRows() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let adapter = RecordingDeliveryAdapter()
+        let clock = FakeClock(base)
+        let state = TracklogAppState()
+        let runtime = makeDeliveryRuntime(
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            credentials: MemoryCredentialStore(),
+            adapters: [adapter],
+            clock: clock,
+            state: state,
+        )
+        await runtime.start()
+        let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
+        try await runtime.setConnectionEnabled(id: connection.id ?? -1, enabled: false)
+        let listen = try #require(
+            try await store.insert(
+                deliveryListen(title: "Waiting", base: base),
+                targets: [connection.id ?? -1],
+            ),
+        )
+        await turnMainActor()
+        #expect(await adapter.batches.isEmpty)
+
+        try await runtime.setConnectionEnabled(id: connection.id ?? -1, enabled: true)
+
+        #expect(await awaitBatches(adapter, count: 1).count == 1)
+        let delivered = await awaitDeliveries(store, listen: listen) {
+            $0.allSatisfy { $0.state == .delivered }
+        }
+        #expect(delivered.map(\.state) == [.delivered])
     }
 
     @Test func aRelaunchDoesNotSubmitTheSameListenAgain() async throws {
@@ -128,7 +180,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         let firstAdapter = RecordingDeliveryAdapter()
         let clock = FakeClock(base)
         let firstState = TracklogAppState()
-        let first = runtime(
+        let first = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: credentials,
@@ -146,7 +198,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
 
         let secondAdapter = RecordingDeliveryAdapter()
         let secondState = TracklogAppState()
-        let second = runtime(
+        let second = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: credentials,
@@ -155,7 +207,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
             state: secondState,
         )
         await second.start()
-        await yieldABit()
+        await turnMainActor()
 
         #expect(await secondAdapter.batches.isEmpty)
         #expect(try await store.insert(stored, targets: [connection.id ?? -1]) == nil)
@@ -174,7 +226,7 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
         ])
         let adapter = ListenBrainzAdapter(transport: transport)
         let clock = FakeClock(base)
-        let runtime = runtime(
+        let runtime = makeDeliveryRuntime(
             store: store,
             allowlist: InMemoryAppAllowlist(),
             credentials: MemoryCredentialStore(),
@@ -207,6 +259,18 @@ struct DeliveryCompositionTests: CaptureTestHelpers {
     }
 }
 
+@MainActor
+private func awaitProbe(_ probe: SubmitProbe, count: Int = 1) async -> [[Delivery]] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + .seconds(3)
+    var observed = await probe.observed
+    while observed.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        observed = await probe.observed
+    }
+    return observed
+}
+
 private actor SubmitProbe {
     private(set) var observed: [[Delivery]] = []
 
@@ -216,8 +280,23 @@ private actor SubmitProbe {
 }
 
 @MainActor
-private func yieldABit() async {
-    for _ in 0 ..< 20 {
-        await Task.yield()
-    }
+private func makeDeliveryRuntime(
+    store: any ListenStore,
+    allowlist: any AppAllowlistStore,
+    credentials: any CredentialStore,
+    adapters: [any DeliveryAdapter],
+    clock: FakeClock,
+    state: TracklogAppState = TracklogAppState(),
+    nowPlaying: Bool = false,
+) -> CaptureRuntime {
+    CaptureRuntime(
+        state: state,
+        clock: clock,
+        source: ReplayedNowPlaying(),
+        store: store,
+        allowlist: allowlist,
+        credentials: credentials,
+        serviceAdapters: adapters.map { $0 as any ServiceAdapter },
+        settings: CaptureSettings(scrobblingEnabled: true, nowPlayingEnabled: nowPlaying),
+    )
 }

@@ -92,19 +92,20 @@ extension CaptureRuntime {
             .compactMap(\.id)
 
         do {
-            let stored: Listen? = if let deliveryStore {
+            let stored = if let deliveryStore {
                 try await deliveryStore.insert(listen, targets: targets)
             } else {
                 try await store.insert(listen)
             }
-            guard let stored,
-                  !Task.isCancelled, started, state.scrobblingEnabled
-            else { return }
+            guard let stored else { return }
+            // The row is committed, so a later stop, switch-off or history
+            // failure cannot suppress this drain.
+            deliveryOutbox?.drain(connectionIDs: targets)
+            guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.lastListen = stored
             state.listenCount += 1
             state.historyCount += 1
             await reloadVisibleHistory(in: store)
-            deliveryOutbox?.drain(connectionIDs: targets)
         } catch {
             guard !Task.isCancelled, started, state.scrobblingEnabled else { return }
             state.failure = .storage(error: error)

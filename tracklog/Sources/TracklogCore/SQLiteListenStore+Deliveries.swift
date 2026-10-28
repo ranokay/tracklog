@@ -121,7 +121,7 @@ public extension SQLiteListenStore {
                 try queued.append(
                     QueuedDelivery(
                         delivery: readDelivery(statement, offset: 0),
-                        listen: readListen(statement, offset: 11),
+                        listen: readListen(statement, offset: Int32(Self.deliveryColumnCount)),
                     ),
                 )
             case SQLITE_DONE:
@@ -295,6 +295,9 @@ public extension SQLiteListenStore {
 // MARK: - Helpers
 
 extension SQLiteListenStore {
+    /// The number of columns in `deliveryColumns`, so a query can place the
+    /// listen columns immediately after them without a second literal.
+    static let deliveryColumnCount = 11
     static let deliveryColumns = """
     d.id, d.listen_id, d.connection_id, d.state, d.attempts, d.last_attempt_at,
     d.next_attempt_at, d.last_error, d.abandoned_reason, d.delivered_at, d.service_reference
@@ -306,17 +309,22 @@ extension SQLiteListenStore {
         dueAt: Date,
         handle: OpaquePointer,
     ) throws {
+        // A connection unlinked between capture and this write is no longer a
+        // target. Skipping it keeps the listen, which is the authoritative
+        // record, instead of failing the whole transaction.
         let statement = try prepare(
             handle,
             """
             INSERT INTO deliveries (listen_id, connection_id, state, attempts, next_attempt_at)
-            VALUES (?, ?, 'waiting', 0, ?)
+            SELECT ?, id, 'waiting', 0, ?
+            FROM connections
+            WHERE id = ?
             """,
         )
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_int64(statement, 1, listenID)
-        sqlite3_bind_int64(statement, 2, connectionID)
-        sqlite3_bind_double(statement, 3, dueAt.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, dueAt.timeIntervalSince1970)
+        sqlite3_bind_int64(statement, 3, connectionID)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw DatabaseError.sqlite(errorMessage(handle))
         }

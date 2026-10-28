@@ -29,6 +29,8 @@ final class NetworkReachability {
 
     func stop() {
         guard isStarted else { return }
+        // NWPathMonitor cannot be restarted; a later activation creates a new
+        // instance rather than calling start() again.
         isStarted = false
         monitor.pathUpdateHandler = nil
         monitor.cancel()

@@ -270,33 +270,25 @@ public final class ConnectionService {
     /// identity and its pending deliveries; a later sign-in resumes them.
     @discardableResult
     public func markNeedsSignIn(id: Int64) async throws -> Connection {
-        try await withGate {
-            guard let index = connections.firstIndex(where: { $0.id == id }) else {
-                throw ConnectionError.unknownConnection(id: id)
-            }
-            guard connections[index].authState != .needsSignIn else {
-                return connections[index]
-            }
-            var updated = connections[index]
-            updated.authState = .needsSignIn
-            let stored = try await store.save(updated)
-            connections[index] = stored
-            return stored
-        }
+        try await setAuthState(id: id, .needsSignIn)
     }
 
     /// Clears a rejected credential after the same identity signs in again.
     @discardableResult
     public func markSignedIn(id: Int64) async throws -> Connection {
+        try await setAuthState(id: id, .signedIn)
+    }
+
+    private func setAuthState(id: Int64, _ state: ConnectionAuthState) async throws -> Connection {
         try await withGate {
             guard let index = connections.firstIndex(where: { $0.id == id }) else {
                 throw ConnectionError.unknownConnection(id: id)
             }
-            guard connections[index].authState != .signedIn else {
+            guard connections[index].authState != state else {
                 return connections[index]
             }
             var updated = connections[index]
-            updated.authState = .signedIn
+            updated.authState = state
             let stored = try await store.save(updated)
             connections[index] = stored
             return stored

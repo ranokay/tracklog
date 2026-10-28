@@ -62,7 +62,7 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
             ? .results(listens.map { _ in .delivered(reference: nil) })
             : answers.removeFirst()
         do {
-            let results = try resolve(answer, count: listens.count)
+            let results = try resolve(answer)
             batchesInFlight -= 1
             if let gate {
                 await gate.leave()
@@ -86,7 +86,7 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
         return "msid-\(nowPlaying.count)"
     }
 
-    private func resolve(_ answer: Answer, count _: Int) throws -> [DeliveryResult] {
+    private func resolve(_ answer: Answer) throws -> [DeliveryResult] {
         switch answer {
         case let .results(results):
             return results
@@ -96,47 +96,12 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
     }
 }
 
-/// Holds a batch inside `submit` until the test releases it, and records how
-/// many batches were ever inside at once.
-actor DeliveryGate {
-    private var active = 0
-    private(set) var peak = 0
-    private var held: [CheckedContinuation<Void, Never>] = []
-    private var isHolding = true
-
-    func enter() async {
-        active += 1
-        peak = max(peak, active)
-        guard isHolding else { return }
-        await withCheckedContinuation { held.append($0) }
-    }
-
-    func leave() {
-        active -= 1
-    }
-
-    func waitUntilEntered() async {
-        while active == 0 {
-            await Task.yield()
-        }
-    }
-
-    func release() {
-        isHolding = false
-        let waiting = held
-        held.removeAll()
-        for continuation in waiting {
-            continuation.resume()
-        }
-    }
-}
-
 /// A real SQLite store, a fake clock, and one outbox for the delivery suites.
 @MainActor
 final class DeliveryHarness {
     let database: TemporaryDatabase
     let store: SQLiteListenStore
-    let credentials = MemoryCredentialStore()
+    let credentials: any CredentialStore
     let clock: FakeClock
     let service: ConnectionService
     let outbox: DeliveryOutbox
@@ -144,10 +109,12 @@ final class DeliveryHarness {
     init(
         base: Date = Date(timeIntervalSince1970: 1_000_000),
         adapters: [any DeliveryAdapter],
+        credentials: any CredentialStore = MemoryCredentialStore(),
         retry: DeliveryRetrySchedule = DeliveryRetrySchedule(random: { 0.5 }),
     ) async throws {
         database = try TemporaryDatabase()
         store = try SQLiteListenStore(url: database.url)
+        self.credentials = credentials
         clock = FakeClock(base)
         service = ConnectionService(
             store: store,
@@ -161,7 +128,7 @@ final class DeliveryHarness {
             credentials: credentials,
             adapters: adapters,
             clock: clock,
-            configuration: DeliveryOutboxConfiguration(retry: retry),
+            retry: retry,
         )
     }
 
@@ -214,101 +181,6 @@ func deliveryListen(
         startedAt: base.addingTimeInterval(start),
         capturedAt: base.addingTimeInterval(captured),
     )
-}
-
-/// A real store whose combined listen-and-delivery write fails, to prove that
-/// a persist failure never reaches the network.
-actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
-    private let base: SQLiteListenStore
-    private let failInsert: Bool
-
-    init(_ base: SQLiteListenStore, failInsert: Bool = true) {
-        self.base = base
-        self.failInsert = failInsert
-    }
-
-    func insert(_ listen: Listen) async throws -> Listen? {
-        try await base.insert(listen)
-    }
-
-    func insert(_ listen: Listen, targets: [Int64]) async throws -> Listen? {
-        guard !failInsert else {
-            throw DatabaseError.unavailable("simulated delivery insert failure")
-        }
-        return try await base.insert(listen, targets: targets)
-    }
-
-    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
-        try await base.page(limit: limit, before: cursor)
-    }
-
-    func count() async throws -> Int {
-        try await base.count()
-    }
-
-    func count(in range: Range<Date>) async throws -> Int {
-        try await base.count(in: range)
-    }
-
-    func connections() async throws -> [Connection] {
-        try await base.connections()
-    }
-
-    func save(_ connection: Connection) async throws -> Connection {
-        try await base.save(connection)
-    }
-
-    func deleteConnection(id: Int64) async throws {
-        try await base.deleteConnection(id: id)
-    }
-
-    func currentConnectionID() async throws -> Int64? {
-        try await base.currentConnectionID()
-    }
-
-    func setCurrentConnectionID(_ id: Int64?) async throws {
-        try await base.setCurrentConnectionID(id)
-    }
-
-    func dueDeliveries(for connectionID: Int64, limit: Int, at date: Date) async throws -> [QueuedDelivery] {
-        try await base.dueDeliveries(for: connectionID, limit: limit, at: date)
-    }
-
-    func deliveries(for listenID: Int64) async throws -> [Delivery] {
-        try await base.deliveries(for: listenID)
-    }
-
-    func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
-        try await base.markDelivered(deliveryID, at: date, reference: reference)
-    }
-
-    func markFailed(
-        _ deliveryID: Int64,
-        attempts: Int,
-        at date: Date,
-        nextAttemptAt: Date,
-        error: String,
-    ) async throws {
-        try await base.markFailed(
-            deliveryID,
-            attempts: attempts,
-            at: date,
-            nextAttemptAt: nextAttemptAt,
-            error: error,
-        )
-    }
-
-    func abandon(_ deliveryID: Int64, attempts: Int, at date: Date, reason: String) async throws {
-        try await base.abandon(deliveryID, attempts: attempts, at: date, reason: reason)
-    }
-
-    func markDue(for connectionID: Int64, at date: Date) async throws {
-        try await base.markDue(for: connectionID, at: date)
-    }
-
-    func earliestNextAttempt(for connectionIDs: [Int64]) async throws -> Date? {
-        try await base.earliestNextAttempt(for: connectionIDs)
-    }
 }
 
 // MARK: - Async waits

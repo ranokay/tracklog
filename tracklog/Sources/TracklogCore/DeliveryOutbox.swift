@@ -1,13 +1,5 @@
 import Foundation
 
-public struct DeliveryOutboxConfiguration: Sendable {
-    public var retry: DeliveryRetrySchedule
-
-    public init(retry: DeliveryRetrySchedule = .standard) {
-        self.retry = retry
-    }
-}
-
 /// Drains durable deliveries, one task per connection, oldest listen first.
 ///
 /// A trigger while a connection is draining sets a run-again flag instead of
@@ -19,15 +11,13 @@ public final class DeliveryOutbox {
     public private(set) var isActive = false
 
     private let store: any DeliveryStore
-    private let connections: ConnectionService
-    private let credentials: any CredentialStore
-    private let adapters: [ServiceKind: any DeliveryAdapter]
+    private let lookup: DeliveryConnectionLookup
     private let clock: any Clock
     private let writer: DeliveryOutboxWriter
     private lazy var scheduler = DeliveryScheduler(
         store: store,
         clock: clock,
-        eligibleConnectionIDs: { [weak self] in self?.eligibleConnectionIDs() ?? [] },
+        eligibleConnectionIDs: { [weak self] in self?.lookup.eligibleConnectionIDs() ?? [] },
         drain: { [weak self] ids in self?.drain(connectionIDs: ids) },
     )
     private var workers: [Int64: ConnectionWorker] = [:]
@@ -35,6 +25,8 @@ public final class DeliveryOutbox {
     /// The last request start per connection, kept across worker lifetimes so
     /// the one-second spacing rule survives a drain ending.
     private var lastRequestAt: [Int64: Date] = [:]
+    /// A local write failed; do not resend the batch while the store is sick.
+    private var blockedUntil: [Int64: Date] = [:]
 
     /// The composition root publishes the connection list after an auth
     /// failure changes it.
@@ -46,24 +38,22 @@ public final class DeliveryOutbox {
         credentials: any CredentialStore,
         adapters: [any DeliveryAdapter],
         clock: any Clock,
-        configuration: DeliveryOutboxConfiguration = DeliveryOutboxConfiguration(),
+        retry: DeliveryRetrySchedule = .standard,
         log: @escaping @MainActor (DeliveryEvent) -> Void = { _ in },
     ) {
         self.store = store
-        self.connections = connections
-        self.credentials = credentials
+        lookup = DeliveryConnectionLookup(
+            connections: connections,
+            credentials: credentials,
+            adapters: adapters,
+        )
         self.clock = clock
         writer = DeliveryOutboxWriter(
             store: store,
             clock: clock,
-            retry: configuration.retry,
+            retry: retry,
             log: log,
         )
-        var byKind: [ServiceKind: any DeliveryAdapter] = [:]
-        for adapter in adapters {
-            byKind[adapter.kind] = adapter
-        }
-        self.adapters = byKind
     }
 
     // MARK: - Lifecycle
@@ -73,7 +63,7 @@ public final class DeliveryOutbox {
     public func activate() {
         guard !isActive else { return }
         isActive = true
-        drain(connectionIDs: eligibleConnectionIDs())
+        drain(connectionIDs: lookup.eligibleConnectionIDs())
         scheduler.reschedule()
     }
 
@@ -83,8 +73,10 @@ public final class DeliveryOutbox {
         guard isActive else { return }
         isActive = false
         scheduler.cancel()
-        workers.values.forEach { $0.task?.cancel() }
-        workers.removeAll()
+        for worker in workers.values {
+            worker.task?.cancel()
+            worker.resetForDeactivation()
+        }
         lastRequestAt.removeAll()
     }
 
@@ -94,15 +86,14 @@ public final class DeliveryOutbox {
     /// connection run once more instead of overlapping.
     public func drain(connectionIDs: [Int64]) {
         guard isActive else { return }
-        for id in Set(connectionIDs) {
-            trigger(id)
-        }
+        Set(connectionIDs).forEach(trigger)
     }
 
     /// Manual retry: makes every pending row for the connection due now and
     /// drains it. Attempts are kept, so repeated failures still reach the cap.
     public func retry(connectionID: Int64) {
         guard isActive else { return }
+        blockedUntil[connectionID] = nil
         Task { @MainActor [weak self] in
             guard let self, isActive else { return }
             try? await store.markDue(for: connectionID, at: clock.now)
@@ -111,21 +102,19 @@ public final class DeliveryOutbox {
     }
 
     /// A successful re-auth, a credential change or re-enabling a connection
-    /// resumes its held rows at once rather than waiting out a backoff.
+    /// drains whatever is already due; a manual retry is the way to make a
+    /// backed-off row due now.
     public func resume(connectionID: Int64) {
-        retry(connectionID: connectionID)
+        drain(connectionIDs: [connectionID])
     }
 
-    /// A fresh network path retries every connection that is eligible.
+    /// A fresh network path drains whatever is already due. It never rewrites
+    /// a backoff or a rate-limit hint; only a manual retry does that.
     public func networkBecameAvailable() {
         guard isActive else { return }
         Task { @MainActor [weak self] in
             guard let self, isActive else { return }
-            let ids = eligibleConnectionIDs()
-            for id in ids {
-                try? await store.markDue(for: id, at: clock.now)
-            }
-            drain(connectionIDs: ids)
+            drain(connectionIDs: lookup.eligibleConnectionIDs())
         }
     }
 
@@ -135,9 +124,8 @@ public final class DeliveryOutbox {
     /// it. Never queued, retried or persisted.
     public func sendNowPlaying(_ track: Track) {
         guard isActive else { return }
-        for connection in connections.connections where isEligible(connection) {
-            guard let id = connection.id,
-                  let adapter = adapters[connection.kind],
+        for connection in lookup.connections.connections where lookup.isEligible(connection) {
+            guard let id = connection.id, let adapter = lookup.adapters[connection.kind],
                   adapter.capabilities.supportsNowPlaying
             else { continue }
             let worker = worker(for: id)
@@ -184,15 +172,21 @@ public final class DeliveryOutbox {
             if workers[id] === worker {
                 workers[id] = nil
             }
+            // A reactivation that arrived while this cancelled task was still
+            // in flight must wait for it, so two drains never overlap.
             if isActive {
-                scheduler.reschedule()
+                if worker.drainRequested {
+                    trigger(id)
+                } else {
+                    scheduler.reschedule()
+                }
             }
         }
 
         while isActive, !Task.isCancelled {
             if let track = worker.nowPlaying {
                 worker.nowPlaying = nil
-                await sendNowPlaying(track, connectionID: id, worker: worker)
+                await sendNowPlaying(track, connectionID: id)
                 continue
             }
 
@@ -210,61 +204,93 @@ public final class DeliveryOutbox {
         // A new now playing jumps ahead of the rest of the backlog; it is a
         // timestamped event, not a queue item.
         while isActive, !Task.isCancelled, worker.nowPlaying == nil {
-            guard let connection = connection(id: id),
-                  let adapter = adapters[connection.kind],
-                  let credential = await credential(for: id) else { return }
-
-            let due: [QueuedDelivery]
-            do {
-                due = try await store.dueDeliveries(
-                    for: id,
-                    limit: adapter.capabilities.maximumBatchSize,
-                    at: clock.now,
-                )
-            } catch {
-                return
-            }
-            guard !due.isEmpty else { return }
-
-            await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
-            guard isActive, !Task.isCancelled else { return }
-            lastRequestAt[id] = clock.now
-
-            do {
-                let results = try await adapter.submit(
-                    due.map(\.listen),
-                    connection: connection,
-                    credential: credential,
-                )
-                guard results.count == due.count else { throw ServiceFailure.retryable }
-                for (queued, result) in zip(due, results) {
-                    await writer.apply(result, to: queued, connection: connection)
-                }
-            } catch {
-                let failure = DeliveryFailure.from(error)
-                if case .auth = failure, let connectionID = due.first?.delivery.connectionID {
-                    await markNeedsSignIn(id: connectionID)
-                }
-                if case .rejected = failure {
-                    await writer.abandon(due, connection: connection, failure: failure)
-                } else {
-                    await writer.backOff(due, connection: connection, failure: failure)
-                }
-                return
-            }
+            guard await drainOnce(connectionID: id, worker: worker) else { return }
         }
     }
 
-    private func sendNowPlaying(
-        _ track: Track,
-        connectionID id: Int64,
-        worker _: ConnectionWorker,
-    ) async {
-        guard let connection = connection(id: id),
-              let adapter = adapters[connection.kind],
+    /// Returns true when another batch may be due.
+    private func drainOnce(connectionID id: Int64, worker _: ConnectionWorker) async -> Bool {
+        guard blockedUntil[id].map({ $0 <= clock.now }) ?? true,
+              let connection = lookup.connection(id: id),
+              let adapter = lookup.adapters[connection.kind],
+              let due = await dueDeliveries(for: id, limit: adapter.capabilities.maximumBatchSize),
+              !due.isEmpty,
+              let token = await token(for: id, due: due, connection: connection)
+        else { return false }
+
+        await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
+        guard isActive, !Task.isCancelled else { return false }
+        lastRequestAt[id] = clock.now
+
+        do {
+            let results = try await adapter.submit(
+                due.map(\.listen),
+                connection: connection,
+                credential: token,
+            )
+            guard results.count == due.count else { throw ServiceFailure.retryable }
+            guard await apply(results, to: due, connection: connection) else {
+                blockedUntil[id] = clock.now.addingTimeInterval(30)
+                return false
+            }
+            return true
+        } catch {
+            let outcome = await writer.handleFailure(
+                error,
+                due: due,
+                connection: connection,
+                markNeedsSignIn: { [weak self] id in await self?.markNeedsSignIn(id: id) },
+            )
+            if !outcome.persisted {
+                blockedUntil[id] = clock.now.addingTimeInterval(30)
+            }
+            return outcome.continueDraining
+        }
+    }
+
+    private func dueDeliveries(for id: Int64, limit: Int) async -> [QueuedDelivery]? {
+        do {
+            return try await store.dueDeliveries(for: id, limit: limit, at: clock.now)
+        } catch {
+            return nil
+        }
+    }
+
+    private func token(for id: Int64, due: [QueuedDelivery], connection: Connection) async -> String? {
+        switch await lookup.credential(for: id) {
+        case let .value(stored):
+            return stored
+        case .missing:
+            await markNeedsSignIn(id: id)
+            return nil
+        case .unavailable:
+            // A local read failure is not a rejected credential. Keep the
+            // connection signed in and let the normal backoff retry it.
+            let persisted = await writer.backOff(due, connection: connection, failure: .retryable)
+            if !persisted {
+                blockedUntil[id] = clock.now.addingTimeInterval(30)
+            }
+            return nil
+        }
+    }
+
+    private func apply(
+        _ results: [DeliveryResult],
+        to due: [QueuedDelivery],
+        connection: Connection,
+    ) async -> Bool {
+        var persisted = true
+        for (queued, result) in zip(due, results) {
+            persisted = await writer.apply(result, to: queued, connection: connection) && persisted
+        }
+        return persisted
+    }
+
+    private func sendNowPlaying(_ track: Track, connectionID id: Int64) async {
+        guard let connection = lookup.connection(id: id),
+              let adapter = lookup.adapters[connection.kind],
               adapter.capabilities.supportsNowPlaying,
-              let credential = await credential(for: id)
-        else { return }
+              case let .value(credential) = await lookup.credential(for: id) else { return }
 
         await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
         guard isActive, !Task.isCancelled else { return }
@@ -291,37 +317,8 @@ public final class DeliveryOutbox {
     }
 
     private func markNeedsSignIn(id: Int64) async {
-        guard await (try? connections.markNeedsSignIn(id: id)) != nil else { return }
+        guard await (try? lookup.connections.markNeedsSignIn(id: id)) != nil else { return }
         onConnectionsChanged?()
-    }
-
-    // MARK: - Connection and credential reads
-
-    private func connection(id: Int64) -> Connection? {
-        guard let connection = connections.connections.first(where: { $0.id == id }),
-              isEligible(connection)
-        else { return nil }
-        return connection
-    }
-
-    private func isEligible(_ connection: Connection) -> Bool {
-        connection.isEnabled && connection.authState == .signedIn && adapters[connection.kind] != nil
-    }
-
-    private func eligibleConnectionIDs() -> [Int64] {
-        connections.connections
-            .filter(isEligible)
-            .compactMap(\.id)
-    }
-
-    private func credential(for id: Int64) async -> String? {
-        guard let credential = try? await credentials.credential(forConnection: id),
-              !credential.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            await markNeedsSignIn(id: id)
-            return nil
-        }
-        return credential
     }
 
     private func waitForSpacing(id: Int64, interval: TimeInterval) async {
@@ -339,4 +336,10 @@ private final class ConnectionWorker {
     var drainRequested = false
     var runAgain = false
     var nowPlaying: Track?
+
+    func resetForDeactivation() {
+        nowPlaying = nil
+        runAgain = false
+        drainRequested = false
+    }
 }

@@ -72,6 +72,51 @@ struct DeliveryTriggerTests {
         #expect(batches.count == 2)
     }
 
+    @Test func deactivationStopsTheScheduler() async throws {
+        let adapter = RecordingDeliveryAdapter(answers: [.failure(.retryable)])
+        let harness = try await makeHarness([adapter])
+        let connection = try await harness.connect(kind: .listenBrainz)
+        let listen = try await harness.insert(
+            deliveryListen(title: "Song", base: harness.clock.now),
+            for: [connection],
+        )
+
+        harness.outbox.activate()
+        _ = await awaitDeliveries(harness.store, listen: listen) {
+            $0.allSatisfy { $0.attempts == 1 }
+        }
+        harness.outbox.deactivate()
+
+        harness.clock.advance(to: harness.clock.now.addingTimeInterval(3600))
+        await turnMainActor()
+        #expect(await adapter.batches.count == 1)
+    }
+
+    @Test func reactivationWaitsForAnInFlightDrainBeforeStartingAnother() async throws {
+        let gate = DeliveryGate()
+        let adapter = RecordingDeliveryAdapter(gate: gate)
+        let harness = try await makeHarness([adapter])
+        let connection = try await harness.connect(kind: .listenBrainz)
+        let listen = try await harness.insert(
+            deliveryListen(title: "Song", base: harness.clock.now),
+            for: [connection],
+        )
+
+        harness.outbox.activate()
+        await gate.waitUntilEntered()
+        harness.outbox.deactivate()
+        harness.outbox.activate()
+        await turnMainActor()
+        #expect(await adapter.batches.count == 1)
+
+        await gate.release()
+        let delivered = await awaitDeliveries(harness.store, listen: listen) {
+            $0.allSatisfy { $0.state == .delivered }
+        }
+        #expect(delivered.map(\.state) == [.delivered])
+        #expect(await adapter.peakBatchesInFlight == 1)
+    }
+
     @Test func spacingSurvivesAFinishedDrain() async throws {
         let adapter = RecordingDeliveryAdapter(
             capabilities: ServiceCapabilities(
@@ -98,7 +143,7 @@ struct DeliveryTriggerTests {
         #expect(await awaitNowPlaying(adapter, count: 1).count == 1)
     }
 
-    @Test func networkReconnectionRetriesHeldRowsAtOnce() async throws {
+    @Test func networkReconnectionDrainsDueRows() async throws {
         let adapter = RecordingDeliveryAdapter(answers: [.failure(.retryable)])
         let harness = try await makeHarness([adapter])
         let connection = try await harness.connect(kind: .listenBrainz)
@@ -111,8 +156,35 @@ struct DeliveryTriggerTests {
         _ = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.attempts == 1 }
         }
+        harness.clock.advance(to: harness.clock.now.addingTimeInterval(30))
         harness.outbox.networkBecameAvailable()
 
+        let delivered = await awaitDeliveries(harness.store, listen: listen) {
+            $0.allSatisfy { $0.state == .delivered }
+        }
+        #expect(delivered.map(\.state) == [.delivered])
+    }
+
+    @Test func networkReconnectionDoesNotOverrideARateLimitHint() async throws {
+        let adapter = RecordingDeliveryAdapter(
+            answers: [.failure(.rateLimited(retryAfter: 120))],
+        )
+        let harness = try await makeHarness([adapter])
+        let connection = try await harness.connect(kind: .listenBrainz)
+        let listen = try await harness.insert(
+            deliveryListen(title: "Song", base: harness.clock.now),
+            for: [connection],
+        )
+
+        harness.outbox.activate()
+        _ = await awaitDeliveries(harness.store, listen: listen) {
+            $0.allSatisfy { $0.attempts == 1 }
+        }
+        harness.outbox.networkBecameAvailable()
+        await turnMainActor()
+        #expect(await adapter.batches.count == 1)
+
+        harness.clock.advance(to: harness.clock.now.addingTimeInterval(120))
         let delivered = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.state == .delivered }
         }

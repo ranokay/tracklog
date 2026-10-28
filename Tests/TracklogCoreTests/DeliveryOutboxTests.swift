@@ -33,10 +33,10 @@ struct DeliveryOutboxTests {
 
         harness.outbox.activate()
 
-        let batches = await waitForBatches(adapter, count: 2)
+        let batches = await awaitBatches(adapter, count: 2)
         #expect(batches.map { $0.map(\.processed.title) } == [["Oldest", "Middle"], ["Newest"]])
         for listen in [oldest, middle, newest] {
-            let deliveries = await waitForDeliveries(harness.store, listen: listen) {
+            let deliveries = await awaitDeliveries(harness.store, listen: listen) {
                 $0.allSatisfy { $0.state == .delivered }
             }
             #expect(deliveries.map(\.state) == [.delivered])
@@ -61,49 +61,30 @@ struct DeliveryOutboxTests {
 
         harness.outbox.activate()
 
-        let failed = await waitForDeliveries(harness.store, listen: first) {
+        let failed = await awaitDeliveries(harness.store, listen: first) {
             $0.allSatisfy { $0.attempts == 1 }
         }
         #expect(failed.map(\.state) == [.retrying])
         #expect(failed.first?.nextAttemptAt == harness.clock.now.addingTimeInterval(30))
-        let secondFailed = await waitForDeliveries(harness.store, listen: second) {
+        let secondFailed = await awaitDeliveries(harness.store, listen: second) {
             $0.allSatisfy { $0.attempts == 1 }
         }
         #expect(secondFailed.map(\.state) == [.retrying])
 
         harness.clock.advance(to: harness.clock.now.addingTimeInterval(29))
-        await yieldABit()
+        await turnMainActor()
         #expect(await adapter.batches.count == 1)
 
         harness.clock.advance(to: harness.clock.now.addingTimeInterval(1))
-        let batches = await waitForBatches(adapter, count: 2)
+        let batches = await awaitBatches(adapter, count: 2)
         #expect(batches.count == 2)
-        let delivered = await waitForDeliveries(harness.store, listen: first) {
+        let delivered = await awaitDeliveries(harness.store, listen: first) {
             $0.allSatisfy { $0.state == .delivered }
         }
         #expect(delivered.map(\.state) == [.delivered])
     }
 
-    @Test func aRateLimitHintWinsOnlyWhenItIsLater() async throws {
-        let adapter = RecordingDeliveryAdapter(
-            answers: [.failure(.rateLimited(retryAfter: 120))],
-        )
-        let harness = try await makeHarness([adapter])
-        let connection = try await harness.connect(kind: .listenBrainz)
-        let listen = try await harness.insert(
-            deliveryListen(title: "Song", base: harness.clock.now),
-            for: [connection],
-        )
-
-        harness.outbox.activate()
-
-        let failed = await waitForDeliveries(harness.store, listen: listen) {
-            $0.allSatisfy { $0.attempts == 1 }
-        }
-        #expect(failed.first?.nextAttemptAt == harness.clock.now.addingTimeInterval(120))
-    }
-
-    @Test func aRejectedItemIsAbandonedAndNeverRetried() async throws {
+    @Test func aRejectedBatchIsAbandonedAndNeverRetried() async throws {
         let adapter = RecordingDeliveryAdapter(
             answers: [.failure(.rejected("Invalid payload"))],
         )
@@ -116,15 +97,40 @@ struct DeliveryOutboxTests {
 
         harness.outbox.activate()
 
-        let abandoned = await waitForDeliveries(harness.store, listen: listen) {
+        let abandoned = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.state == .abandoned }
         }
         #expect(abandoned.first?.abandonedReason == "Invalid payload")
         #expect(abandoned.first?.attempts == 1)
 
         harness.clock.advance(to: harness.clock.now.addingTimeInterval(3600))
-        await yieldABit()
+        await turnMainActor()
         #expect(await adapter.batches.count == 1)
+    }
+
+    @Test func aRejectedBatchAbandonsItsItemsAndTheDrainContinues() async throws {
+        let adapter = RecordingDeliveryAdapter(
+            answers: [.failure(.rejected("Invalid payload"))],
+        )
+        let harness = try await makeHarness([adapter])
+        let connection = try await harness.connect(kind: .listenBrainz)
+        let rejected = try await harness.insert(
+            deliveryListen(title: "Rejected", base: harness.clock.now, start: 0),
+            for: [connection],
+        )
+        let next = try await harness.insert(
+            deliveryListen(title: "Next", base: harness.clock.now, start: 10),
+            for: [connection],
+        )
+
+        harness.outbox.activate()
+
+        let batches = await awaitBatches(adapter, count: 2)
+        #expect(batches.map { $0.map(\.processed.title) } == [["Rejected"], ["Next"]])
+        let rejectedDelivery = try #require(try await harness.deliveries(for: rejected).first)
+        let nextDelivery = try #require(try await harness.deliveries(for: next).first)
+        #expect(rejectedDelivery.state == .abandoned)
+        #expect(nextDelivery.state == .delivered)
     }
 
     @Test func aPerItemRejectionLeavesTheRestOfTheBatchAlone() async throws {
@@ -149,7 +155,7 @@ struct DeliveryOutboxTests {
 
         harness.outbox.activate()
 
-        let batches = await waitForBatches(adapter, count: 2)
+        let batches = await awaitBatches(adapter, count: 2)
         #expect(batches.map { $0.map(\.processed.title) } == [["First", "Rejected"], ["Third"]])
         let firstDelivery = try #require(try await harness.deliveries(for: first).first)
         let rejectedDelivery = try #require(try await harness.deliveries(for: rejected).first)
@@ -171,7 +177,7 @@ struct DeliveryOutboxTests {
 
         harness.outbox.activate()
 
-        let failed = await waitForDeliveries(harness.store, listen: listen) {
+        let failed = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.attempts == 1 }
         }
         #expect(failed.first?.state == .retrying)
@@ -182,7 +188,7 @@ struct DeliveryOutboxTests {
             for: [connection],
         )
         harness.outbox.drain(connectionIDs: [connection.id ?? -1])
-        await yieldABit()
+        await turnMainActor()
         #expect(await adapter.batches.count == 1)
         #expect(try await harness.deliveries(for: later).first?.state == .waiting)
     }
@@ -197,13 +203,14 @@ struct DeliveryOutboxTests {
         )
 
         harness.outbox.activate()
-        _ = await waitForDeliveries(harness.store, listen: listen) {
+        _ = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.attempts == 1 }
         }
         try await harness.service.markSignedIn(id: connection.id ?? -1)
+        harness.clock.advance(to: harness.clock.now.addingTimeInterval(30))
         harness.outbox.resume(connectionID: connection.id ?? -1)
 
-        let delivered = await waitForDeliveries(harness.store, listen: listen) {
+        let delivered = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.state == .delivered }
         }
         #expect(delivered.map(\.state) == [.delivered])
@@ -222,14 +229,14 @@ struct DeliveryOutboxTests {
         )
 
         harness.outbox.activate()
-        let first = await waitForDeliveries(harness.store, listen: listen) {
+        let first = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.attempts == 1 }
         }
         #expect(first.first?.nextAttemptAt == harness.clock.now.addingTimeInterval(30))
 
         harness.outbox.retry(connectionID: connection.id ?? -1)
 
-        let second = await waitForDeliveries(harness.store, listen: listen) {
+        let second = await awaitDeliveries(harness.store, listen: listen) {
             $0.allSatisfy { $0.attempts == 2 }
         }
         #expect(second.first?.nextAttemptAt == harness.clock.now.addingTimeInterval(60))
@@ -256,71 +263,9 @@ struct DeliveryOutboxTests {
         harness.outbox.drain(connectionIDs: [connection.id ?? -1])
         await gate.release()
 
-        let batches = await waitForBatches(adapter, count: 2)
+        let batches = await awaitBatches(adapter, count: 2)
         #expect(batches.count == 2)
         #expect(await adapter.peakBatchesInFlight == 1)
         #expect(await gate.peak == 1)
-    }
-
-    @Test func deactivationStopsTheScheduler() async throws {
-        let adapter = RecordingDeliveryAdapter(answers: [.failure(.retryable)])
-        let harness = try await makeHarness([adapter])
-        let connection = try await harness.connect(kind: .listenBrainz)
-        let listen = try await harness.insert(
-            deliveryListen(title: "Song", base: harness.clock.now),
-            for: [connection],
-        )
-
-        harness.outbox.activate()
-        _ = await waitForDeliveries(harness.store, listen: listen) {
-            $0.allSatisfy { $0.attempts == 1 }
-        }
-        harness.outbox.deactivate()
-
-        harness.clock.advance(to: harness.clock.now.addingTimeInterval(3600))
-        await yieldABit()
-        #expect(await adapter.batches.count == 1)
-    }
-}
-
-// MARK: - Waits
-
-@MainActor
-private func waitForBatches(
-    _ adapter: RecordingDeliveryAdapter,
-    count: Int,
-    timeout: Duration = .seconds(3),
-) async -> [[Listen]] {
-    let clock = ContinuousClock()
-    let deadline = clock.now + timeout
-    var batches = await adapter.batches
-    while batches.count < count, clock.now < deadline {
-        try? await Task.sleep(for: .milliseconds(5))
-        batches = await adapter.batches
-    }
-    return batches
-}
-
-@MainActor
-private func waitForDeliveries(
-    _ store: SQLiteListenStore,
-    listen: Listen,
-    timeout: Duration = .seconds(3),
-    until: ([Delivery]) -> Bool,
-) async -> [Delivery] {
-    let clock = ContinuousClock()
-    let deadline = clock.now + timeout
-    var deliveries = await (try? store.deliveries(for: listen.id ?? -1)) ?? []
-    while !until(deliveries), clock.now < deadline {
-        try? await Task.sleep(for: .milliseconds(5))
-        deliveries = await (try? store.deliveries(for: listen.id ?? -1)) ?? []
-    }
-    return deliveries
-}
-
-@MainActor
-private func yieldABit() async {
-    for _ in 0 ..< 20 {
-        await Task.yield()
     }
 }

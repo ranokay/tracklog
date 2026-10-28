@@ -78,15 +78,14 @@ struct DeliveryStoreTests {
         #expect(try await store.count() == 1)
     }
 
-    @Test func anUnknownTargetRollsBackTheWholeWrite() async throws {
+    @Test func anUnknownTargetIsSkippedWithoutLosingTheListen() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
 
-        await #expect(throws: (any Error).self) {
-            _ = try await store.insert(listen(), targets: [999])
-        }
+        let stored = try #require(try await store.insert(listen(), targets: [999]))
 
-        #expect(try await store.count() == 0)
+        #expect(try await store.count() == 1)
+        #expect(try await store.deliveries(for: stored.id ?? -1).isEmpty)
     }
 
     @Test func dueDeliveriesAreOldestListenFirst() async throws {
