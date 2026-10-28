@@ -286,3 +286,38 @@ actor SuspendingCredentialStore: CredentialStore {
         saveContinuation = nil
     }
 }
+
+/// A memory credential store whose deletion fails a fixed number of times, to
+/// exercise the recovery path that keeps a connection with its credential.
+actor DeleteFailingCredentialStore: CredentialStore {
+    private let base = MemoryCredentialStore()
+    private var deletesToFail: Int
+
+    init(deletesToFail: Int = 1) {
+        self.deletesToFail = deletesToFail
+    }
+
+    func credential(forConnection id: Int64) async throws -> String? {
+        try await base.credential(forConnection: id)
+    }
+
+    func saveCredential(_ credential: String, forConnection id: Int64) async throws {
+        try await base.saveCredential(credential, forConnection: id)
+    }
+
+    func deleteCredential(forConnection id: Int64) async throws {
+        guard deletesToFail == 0 else {
+            deletesToFail -= 1
+            throw DatabaseError.unavailable("simulated credential deletion failure")
+        }
+        try await base.deleteCredential(forConnection: id)
+    }
+
+    func appCredential() async throws -> String? {
+        try await base.appCredential()
+    }
+
+    func saveAppCredential(_ credential: String?) async throws {
+        try await base.saveAppCredential(credential)
+    }
+}

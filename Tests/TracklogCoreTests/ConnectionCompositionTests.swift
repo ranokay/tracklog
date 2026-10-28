@@ -99,7 +99,7 @@ struct ConnectionCompositionTests {
             source: ReplayedNowPlaying(),
             store: store,
             allowlist: InMemoryAppAllowlist(),
-            credentials: MemoryCredentialStore(),
+            credentials: DeleteFailingCredentialStore(deletesToFail: 1),
             serviceAdapters: [
                 ListenBrainzAdapter(transport: ScriptedTransport([listenBrainzValidResponse()])),
             ],

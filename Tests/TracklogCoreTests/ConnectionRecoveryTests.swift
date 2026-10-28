@@ -78,7 +78,7 @@ struct ConnectionRecoveryTests {
     @Test func aCursorCleanupFailureKeepsTheConnectionRecoverable() async throws {
         let database = try TemporaryDatabase()
         let baseStore = try SQLiteListenStore(url: database.url)
-        let credentials = MemoryCredentialStore()
+        let credentials = DeleteFailingCredentialStore(deletesToFail: 1)
         let service = ConnectionService(
             store: RecoveryFailingStore(baseStore, currentWritesToFail: 1, deletesToFail: 1),
             credentials: credentials,
@@ -98,5 +98,36 @@ struct ConnectionRecoveryTests {
         try await service.setCurrent(kept.id)
         #expect(service.currentID == kept.id)
         #expect(try await baseStore.currentConnectionID() == kept.id)
+    }
+
+    @Test func aCredentiallessRowAfterCursorCleanupIsRepairedOnLoad() async throws {
+        let database = try TemporaryDatabase()
+        let baseStore = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let service = ConnectionService(
+            store: RecoveryFailingStore(baseStore, currentWritesToFail: 1, deletesToFail: 1),
+            credentials: credentials,
+            adapters: [ListenBrainzAdapter(transport: ScriptedTransport([listenBrainzValidResponse()]))],
+            clock: FakeClock(base),
+        )
+
+        await #expect(throws: ConnectionError.currentCursor) {
+            _ = try await service.link(kind: .listenBrainz, credential: "token")
+        }
+
+        let orphan = try #require(try await baseStore.connections().first)
+        #expect(service.connections.isEmpty)
+        #expect(try await credentials.credential(forConnection: orphan.id ?? -1) == nil)
+
+        let repaired = ConnectionService(
+            store: baseStore,
+            credentials: credentials,
+            adapters: [],
+            clock: FakeClock(base),
+        )
+        try await repaired.load()
+
+        #expect(try await baseStore.connections().isEmpty)
+        #expect(repaired.connections.isEmpty)
     }
 }

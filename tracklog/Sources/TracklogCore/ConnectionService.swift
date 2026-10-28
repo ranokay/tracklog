@@ -222,12 +222,23 @@ public final class ConnectionService {
         do {
             try await store.setCurrentConnectionID(id)
         } catch {
+            var kept = false
             do {
-                try await store.deleteConnection(id: id)
-                try? await credentials.deleteCredential(forConnection: id)
+                try await credentials.deleteCredential(forConnection: id)
             } catch {
-                // The row and credential are usable; keep the connection
-                // visible so its cursor can be set from the Services page.
+                // The credential is still there, so the row is usable and
+                // stays discoverable for a later cursor choice.
+                kept = true
+            }
+            if !kept {
+                do {
+                    try await store.deleteConnection(id: id)
+                } catch {
+                    // The credential is already gone; load() repairs the
+                    // credentialless row on the next activation.
+                }
+            }
+            if kept {
                 connections.append(connection)
             }
             log(.linkFailed(kind: kind, reason: "current connection could not be saved"))
