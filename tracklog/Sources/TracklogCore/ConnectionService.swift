@@ -23,8 +23,8 @@ private final class ConnectionOperationGate {
     private var isLocked = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    var waiterCount: Int {
-        waiters.count
+    var hasHolder: Bool {
+        isLocked
     }
 
     func acquire() async {
@@ -81,11 +81,9 @@ public final class ConnectionService {
         connections.first { $0.id == currentID }
     }
 
-    /// Test seam for the serialization regression: operations suspended on
-    /// the gate, excluding the current holder.
-    var suspendedGateWaiterCount: Int {
-        gate.waiterCount
-    }
+    /// Test seam for the serialization regression: fired when an operation
+    /// joins the gate behind a holder.
+    var onGateWait: (@MainActor () -> Void)?
 
     /// Loads the durable connections and repairs any credentialless orphan.
     /// Serialized with `link()` so it never observes a half-made link.
@@ -281,6 +279,9 @@ public final class ConnectionService {
     }
 
     private func withGate<T>(_ operation: @MainActor () async throws -> T) async throws -> T {
+        if gate.hasHolder {
+            onGateWait?()
+        }
         await gate.acquire()
         do {
             let result = try await operation()

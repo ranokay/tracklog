@@ -21,14 +21,11 @@ struct ConnectionRecoveryTests {
         let linkTask = Task { try await service.link(kind: .listenBrainz, credential: "token") }
         await credentials.waitUntilSaving()
 
+        let (gateWait, gateWaitContinuation) = AsyncStream.makeStream(of: Void.self)
+        service.onGateWait = { gateWaitContinuation.yield() }
         let loadTask = Task { try await service.load() }
-        for _ in 0 ..< 1000 {
-            if service.suspendedGateWaiterCount == 1 {
-                break
-            }
-            await Task.yield()
-        }
-        #expect(service.suspendedGateWaiterCount == 1)
+        var gateWaitIterator = gateWait.makeAsyncIterator()
+        _ = await gateWaitIterator.next()
         await credentials.resumeSaving()
 
         let linked = try await linkTask.value
