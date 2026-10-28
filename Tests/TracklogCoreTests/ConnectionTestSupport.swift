@@ -142,8 +142,7 @@ actor CleanupFailingStore: ConnectionStore {
 
 /// A real store whose current-cursor write and connection deletion both fail
 /// once, to exercise the recovery path that keeps a saved connection visible.
-actor RecoveryFailingStore: ConnectionStore, ListenStore {
-    private let base: SQLiteListenStore
+actor RecoveryFailingStore: ConnectionStore, ListenStore { private let base: SQLiteListenStore
     private var currentWritesToFail: Int
     private var deletesToFail: Int
 
@@ -194,6 +193,53 @@ actor RecoveryFailingStore: ConnectionStore, ListenStore {
             currentWritesToFail -= 1
             throw DatabaseError.unavailable("simulated current-cursor failure")
         }
+        try await base.setCurrentConnectionID(id)
+    }
+}
+
+/// A real store whose first connection read fails, to exercise a failed load
+/// followed by an unrelated failed operation.
+actor LoadFailingStore: ConnectionStore, ListenStore {
+    private let base: SQLiteListenStore
+    private var connectionReads = 0
+
+    init(_ base: SQLiteListenStore) {
+        self.base = base
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await base.insert(listen)
+    }
+
+    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try await base.page(limit: limit, before: cursor)
+    }
+
+    func count() async throws -> Int {
+        try await base.count()
+    }
+
+    func connections() async throws -> [Connection] {
+        connectionReads += 1
+        guard connectionReads > 1 else {
+            throw DatabaseError.unavailable("simulated connection read failure")
+        }
+        return try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
         try await base.setCurrentConnectionID(id)
     }
 }

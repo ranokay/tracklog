@@ -118,6 +118,38 @@ struct ConnectionCompositionTests {
         #expect(state.currentConnectionID == kept.id)
     }
 
+    @Test func aFailedLinkDoesNotClearAFailedConnectionLoad() async throws {
+        let database = try TemporaryDatabase()
+        let baseStore = try SQLiteListenStore(url: database.url)
+        let store = LoadFailingStore(baseStore)
+        let state = TracklogAppState()
+        let runtime = CaptureRuntime(
+            state: state,
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            credentials: MemoryCredentialStore(),
+            serviceAdapters: [
+                ListenBrainzAdapter(
+                    transport: ScriptedTransport([
+                        HTTPResponse(statusCode: 401, body: Data("{}".utf8)),
+                    ]),
+                ),
+            ],
+            settings: CaptureSettings(scrobblingEnabled: false),
+        )
+        await runtime.start()
+
+        let failure = try #require(state.connectionsFailure)
+        await #expect(throws: ServiceFailure.auth) {
+            _ = try await runtime.link(kind: .listenBrainz, credential: "bad")
+        }
+
+        #expect(state.connectionsFailure == failure)
+        #expect(state.failure?.stage == .connections)
+    }
+
     @Test func withoutACredentialStoreLinkingIsUnavailable() async throws {
         let database = try TemporaryDatabase()
         let state = TracklogAppState()

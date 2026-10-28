@@ -11,6 +11,10 @@ extension CaptureRuntime {
         do {
             try await connectionService.load()
             applyConnectionSnapshot()
+            state.connectionsFailure = nil
+            if state.failure?.stage == .connections {
+                state.failure = nil
+            }
         } catch {
             let failure = CaptureFailure.connections(error: error)
             state.connectionsFailure = failure
@@ -22,10 +26,6 @@ extension CaptureRuntime {
         guard let connectionService else { return }
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
-        state.connectionsFailure = nil
-        if state.failure?.stage == .connections {
-            state.failure = nil
-        }
     }
 }
 
