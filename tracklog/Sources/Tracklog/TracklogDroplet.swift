@@ -30,71 +30,22 @@ public final class TracklogDroplet: NSObject, Droplet {
     private(set) var host: DropletHost?
     private(set) var runtime: CaptureRuntime?
     private var automationGate: HostAutomationPermissionGate?
+    private var networkReachability: NetworkReachability?
     private var activationTask: Task<Void, Never>?
 
     public func activate(host: DropletHost) throws {
         self.host = host
 
         let isHarness = host.environment.isHarness
-        let runtime: CaptureRuntime
-        if isHarness {
-            let store = HarnessDemoStore()
-            runtime = CaptureRuntime(
-                state: state,
-                clock: SystemClock(),
-                source: HarnessDemoSource(),
-                store: store,
-                allowlist: store,
-                edits: store,
-                blocks: store,
-                credentials: MemoryCredentialStore(),
-                serviceAdapters: [HarnessDemoServiceAdapter()],
-                settings: CaptureSettings(scrobblingEnabled: true),
-            )
-        } else {
-            let settings = CaptureSettings(
-                scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
-                nowPlayingEnabled: host.preferences.value(forKey: "nowPlayingEnabled", default: true),
-                pausedUntil: host.preferences.value(forKey: "pausedUntil", as: Date.self),
-                minimumDuration: host.preferences.value(
-                    forKey: "minimumDuration",
-                    default: CaptureSettings.defaultMinimumDuration,
-                ),
-            )
-            let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
-            let gate = HostAutomationPermissionGate(host: host)
-            automationGate = gate
-            let transport = URLSessionTransport()
-            runtime = CaptureRuntime.open(
-                state: state,
-                databaseURL: databaseURL,
-                clock: SystemClock(),
-                source: MediaArbiter(
-                    helper: MediaHelperReader(),
-                    permissions: gate,
-                ),
-                settings: settings,
-                credentials: KeychainCredentialStore(),
-                serviceAdapters: [ListenBrainzAdapter(transport: transport)],
-                connectionLog: { event in
-                    switch event {
-                    case .linked:
-                        host.log.info(event.description)
-                    case .linkFailed:
-                        host.log.notice(event.description)
-                    }
-                },
-                // The delivery outbox (#39) supplies the now-playing sender;
-                // the toggle persists and the gate is ready for it.
-                persistSettings: { settings in
-                    host.preferences.setValue(settings.scrobblingEnabled, forKey: "scrobblingEnabled")
-                    host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")
-                    host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
-                    host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
-                },
-            )
-        }
+        let runtime = isHarness ? makeHarnessRuntime() : makeProductionRuntime(host: host)
         self.runtime = runtime
+        if !isHarness {
+            let reachability = NetworkReachability { [weak runtime] in
+                runtime?.networkBecameAvailable()
+            }
+            networkReachability = reachability
+            reachability.start()
+        }
 
         if let failure = runtime.state.failure {
             host.log.notice(failure.diagnostics)
@@ -112,9 +63,74 @@ public final class TracklogDroplet: NSObject, Droplet {
         host.log.info("Tracklog activated")
     }
 
+    private func makeHarnessRuntime() -> CaptureRuntime {
+        let store = HarnessDemoStore()
+        return CaptureRuntime(
+            state: state,
+            clock: SystemClock(),
+            source: HarnessDemoSource(),
+            store: store,
+            allowlist: store,
+            edits: store,
+            blocks: store,
+            credentials: MemoryCredentialStore(),
+            serviceAdapters: [HarnessDemoServiceAdapter()],
+            settings: CaptureSettings(scrobblingEnabled: true),
+        )
+    }
+
+    private func makeProductionRuntime(host: DropletHost) -> CaptureRuntime {
+        let settings = CaptureSettings(
+            scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
+            nowPlayingEnabled: host.preferences.value(forKey: "nowPlayingEnabled", default: true),
+            pausedUntil: host.preferences.value(forKey: "pausedUntil", as: Date.self),
+            minimumDuration: host.preferences.value(
+                forKey: "minimumDuration",
+                default: CaptureSettings.defaultMinimumDuration,
+            ),
+        )
+        let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
+        let gate = HostAutomationPermissionGate(host: host)
+        automationGate = gate
+        let transport = URLSessionTransport()
+        return CaptureRuntime.open(
+            state: state,
+            databaseURL: databaseURL,
+            clock: SystemClock(),
+            source: MediaArbiter(helper: MediaHelperReader(), permissions: gate),
+            settings: settings,
+            credentials: KeychainCredentialStore(),
+            serviceAdapters: [ListenBrainzAdapter(transport: transport)],
+            connectionLog: { event in
+                switch event {
+                case .linked:
+                    host.log.info(event.description)
+                case .linkFailed:
+                    host.log.notice(event.description)
+                }
+            },
+            deliveryLog: { event in
+                switch event {
+                case .delivered:
+                    host.log.info(event.description)
+                case .failed, .abandoned:
+                    host.log.notice(event.description)
+                }
+            },
+            persistSettings: { settings in
+                host.preferences.setValue(settings.scrobblingEnabled, forKey: "scrobblingEnabled")
+                host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")
+                host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
+                host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
+            },
+        )
+    }
+
     public func deactivate() {
         activationTask?.cancel()
         activationTask = nil
+        networkReachability?.stop()
+        networkReachability = nil
         runtime?.stop()
         runtime = nil
         automationGate = nil

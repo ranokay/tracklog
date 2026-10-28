@@ -51,7 +51,8 @@ public protocol HTTPTransport: Sendable {
 
 /// The identifiers every service request carries.
 public enum TracklogHTTP {
-    /// Named on every request so services can identify and contact the app.
     /// Keep the version in step with `droplet.json`.
-    public static let userAgent = "Tracklog/1.0.0 (+https://github.com/ranokay/tracklog)"
+    public static let version = "1.0.0"
+    /// Named on every request so services can identify and contact the app.
+    public static let userAgent = "Tracklog/\(version) (+https://github.com/ranokay/tracklog)"
 }

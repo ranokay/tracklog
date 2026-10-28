@@ -1,0 +1,386 @@
+import Foundation
+import Testing
+@testable import TracklogCore
+
+/// A delivery adapter whose answers a test scripts. Every batch is recorded
+/// before the answer runs, so an overlap shows up as two recorded batches
+/// while only one request was in flight.
+actor RecordingDeliveryAdapter: DeliveryAdapter {
+    enum Answer: Sendable {
+        case results([DeliveryResult])
+        case failure(ServiceFailure)
+    }
+
+    nonisolated let kind: ServiceKind
+    nonisolated let capabilities: ServiceCapabilities
+    private var answers: [Answer]
+    private let gate: DeliveryGate?
+    private let onSubmit: (@Sendable ([Listen]) async -> Void)?
+    private(set) var batches: [[Listen]] = []
+    private(set) var nowPlaying: [Track] = []
+    private(set) var batchesInFlight = 0
+    private(set) var peakBatchesInFlight = 0
+
+    init(
+        kind: ServiceKind = .listenBrainz,
+        capabilities: ServiceCapabilities = ServiceCapabilities(
+            supportsNowPlaying: true,
+            maximumBatchSize: 1,
+            minimumRequestInterval: 0,
+        ),
+        answers: [Answer] = [],
+        gate: DeliveryGate? = nil,
+        onSubmit: (@Sendable ([Listen]) async -> Void)? = nil,
+    ) {
+        self.kind = kind
+        self.capabilities = capabilities
+        self.answers = answers
+        self.gate = gate
+        self.onSubmit = onSubmit
+    }
+
+    func validate(_: String) async throws -> ServiceIdentity {
+        ServiceIdentity(name: "listener-\(kind.rawValue)")
+    }
+
+    func submit(
+        _ listens: [Listen],
+        connection _: Connection,
+        credential _: String,
+    ) async throws -> [DeliveryResult] {
+        batches.append(listens)
+        if let onSubmit {
+            await onSubmit(listens)
+        }
+        batchesInFlight += 1
+        peakBatchesInFlight = max(peakBatchesInFlight, batchesInFlight)
+        if let gate {
+            await gate.enter()
+        }
+
+        let answer = answers.isEmpty
+            ? .results(listens.map { _ in .delivered(reference: nil) })
+            : answers.removeFirst()
+        do {
+            let results = try resolve(answer, count: listens.count)
+            batchesInFlight -= 1
+            if let gate {
+                await gate.leave()
+            }
+            return results
+        } catch {
+            batchesInFlight -= 1
+            if let gate {
+                await gate.leave()
+            }
+            throw error
+        }
+    }
+
+    func submitNowPlaying(
+        _ track: Track,
+        connection _: Connection,
+        credential _: String,
+    ) async throws -> String? {
+        nowPlaying.append(track)
+        return "msid-\(nowPlaying.count)"
+    }
+
+    private func resolve(_ answer: Answer, count _: Int) throws -> [DeliveryResult] {
+        switch answer {
+        case let .results(results):
+            return results
+        case let .failure(failure):
+            throw failure
+        }
+    }
+}
+
+/// Holds a batch inside `submit` until the test releases it, and records how
+/// many batches were ever inside at once.
+actor DeliveryGate {
+    private var active = 0
+    private(set) var peak = 0
+    private var held: [CheckedContinuation<Void, Never>] = []
+    private var isHolding = true
+
+    func enter() async {
+        active += 1
+        peak = max(peak, active)
+        guard isHolding else { return }
+        await withCheckedContinuation { held.append($0) }
+    }
+
+    func leave() {
+        active -= 1
+    }
+
+    func waitUntilEntered() async {
+        while active == 0 {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        isHolding = false
+        let waiting = held
+        held.removeAll()
+        for continuation in waiting {
+            continuation.resume()
+        }
+    }
+}
+
+/// A real SQLite store, a fake clock, and one outbox for the delivery suites.
+@MainActor
+final class DeliveryHarness {
+    let database: TemporaryDatabase
+    let store: SQLiteListenStore
+    let credentials = MemoryCredentialStore()
+    let clock: FakeClock
+    let service: ConnectionService
+    let outbox: DeliveryOutbox
+
+    init(
+        base: Date = Date(timeIntervalSince1970: 1_000_000),
+        adapters: [any DeliveryAdapter],
+        retry: DeliveryRetrySchedule = DeliveryRetrySchedule(random: { 0.5 }),
+    ) async throws {
+        database = try TemporaryDatabase()
+        store = try SQLiteListenStore(url: database.url)
+        clock = FakeClock(base)
+        service = ConnectionService(
+            store: store,
+            credentials: credentials,
+            adapters: adapters,
+            clock: clock,
+        )
+        outbox = DeliveryOutbox(
+            store: store,
+            connections: service,
+            credentials: credentials,
+            adapters: adapters,
+            clock: clock,
+            configuration: DeliveryOutboxConfiguration(retry: retry),
+        )
+    }
+
+    @discardableResult
+    func connect(
+        kind: ServiceKind,
+        enabled: Bool = true,
+        credential: String = "token",
+        identity: String? = nil,
+        at date: Date? = nil,
+    ) async throws -> Connection {
+        let connection = try await store.save(
+            Connection(
+                kind: kind,
+                endpoint: kind.defaultEndpoint,
+                identity: identity ?? "listener-\(kind.rawValue)",
+                isEnabled: enabled,
+                createdAt: date ?? clock.now,
+            ),
+        )
+        try await credentials.saveCredential(credential, forConnection: connection.id ?? -1)
+        try await service.load()
+        return connection
+    }
+
+    func insert(_ listen: Listen, for connections: [Connection]) async throws -> Listen {
+        let targets = connections.compactMap(\.id)
+        return try #require(try await store.insert(listen, targets: targets))
+    }
+
+    func deliveries(for listen: Listen) async throws -> [Delivery] {
+        try await store.deliveries(for: listen.id ?? -1)
+    }
+}
+
+/// A capture fixture shared by the composition suites.
+@MainActor
+func deliveryListen(
+    title: String,
+    base: Date,
+    start: TimeInterval = 0,
+    captured: TimeInterval = 0,
+) -> Listen {
+    Listen(
+        raw: ListenMetadata(title: title, artist: "Artist"),
+        processed: ListenMetadata(title: title, artist: "Artist"),
+        bundleID: "com.apple.Music",
+        duration: 200,
+        playedDuration: 100,
+        startedAt: base.addingTimeInterval(start),
+        capturedAt: base.addingTimeInterval(captured),
+    )
+}
+
+/// A real store whose combined listen-and-delivery write fails, to prove that
+/// a persist failure never reaches the network.
+actor FailingDeliveryStore: ListenStore, ConnectionStore, DeliveryStore {
+    private let base: SQLiteListenStore
+    private let failInsert: Bool
+
+    init(_ base: SQLiteListenStore, failInsert: Bool = true) {
+        self.base = base
+        self.failInsert = failInsert
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await base.insert(listen)
+    }
+
+    func insert(_ listen: Listen, targets: [Int64]) async throws -> Listen? {
+        guard !failInsert else {
+            throw DatabaseError.unavailable("simulated delivery insert failure")
+        }
+        return try await base.insert(listen, targets: targets)
+    }
+
+    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try await base.page(limit: limit, before: cursor)
+    }
+
+    func count() async throws -> Int {
+        try await base.count()
+    }
+
+    func count(in range: Range<Date>) async throws -> Int {
+        try await base.count(in: range)
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
+        try await base.setCurrentConnectionID(id)
+    }
+
+    func dueDeliveries(for connectionID: Int64, limit: Int, at date: Date) async throws -> [QueuedDelivery] {
+        try await base.dueDeliveries(for: connectionID, limit: limit, at: date)
+    }
+
+    func deliveries(for listenID: Int64) async throws -> [Delivery] {
+        try await base.deliveries(for: listenID)
+    }
+
+    func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
+        try await base.markDelivered(deliveryID, at: date, reference: reference)
+    }
+
+    func markFailed(
+        _ deliveryID: Int64,
+        attempts: Int,
+        at date: Date,
+        nextAttemptAt: Date,
+        error: String,
+    ) async throws {
+        try await base.markFailed(
+            deliveryID,
+            attempts: attempts,
+            at: date,
+            nextAttemptAt: nextAttemptAt,
+            error: error,
+        )
+    }
+
+    func abandon(_ deliveryID: Int64, attempts: Int, at date: Date, reason: String) async throws {
+        try await base.abandon(deliveryID, attempts: attempts, at: date, reason: reason)
+    }
+
+    func markDue(for connectionID: Int64, at date: Date) async throws {
+        try await base.markDue(for: connectionID, at: date)
+    }
+
+    func earliestNextAttempt(for connectionIDs: [Int64]) async throws -> Date? {
+        try await base.earliestNextAttempt(for: connectionIDs)
+    }
+}
+
+// MARK: - Async waits
+
+@MainActor
+func awaitBatches(
+    _ adapter: RecordingDeliveryAdapter,
+    count: Int,
+    timeout: Duration = .seconds(3),
+) async -> [[Listen]] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var batches = await adapter.batches
+    while batches.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        batches = await adapter.batches
+    }
+    return batches
+}
+
+@MainActor
+func awaitNowPlaying(
+    _ adapter: RecordingDeliveryAdapter,
+    count: Int,
+    timeout: Duration = .seconds(3),
+) async -> [Track] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var tracks = await adapter.nowPlaying
+    while tracks.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        tracks = await adapter.nowPlaying
+    }
+    return tracks
+}
+
+@MainActor
+func awaitRequests(
+    _ transport: ScriptedTransport,
+    count: Int,
+    timeout: Duration = .seconds(3),
+) async -> [HTTPRequest] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var requests = await transport.requests
+    while requests.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        requests = await transport.requests
+    }
+    return requests
+}
+
+@MainActor
+func awaitDeliveries(
+    _ store: SQLiteListenStore,
+    listen: Listen,
+    timeout: Duration = .seconds(3),
+    until: ([Delivery]) -> Bool,
+) async -> [Delivery] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var deliveries = await (try? store.deliveries(for: listen.id ?? -1)) ?? []
+    while !until(deliveries), clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        deliveries = await (try? store.deliveries(for: listen.id ?? -1)) ?? []
+    }
+    return deliveries
+}
+
+@MainActor
+func turnMainActor(_ rounds: Int = 20) async {
+    for _ in 0 ..< rounds {
+        await Task.yield()
+    }
+}

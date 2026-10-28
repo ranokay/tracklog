@@ -26,8 +26,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 
 /// One SQLite file in the droplet's container: local history, connections,
 /// versioned migrations, and the durable duplicate key.
-public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore {
-    public static let schemaVersion = 6
+public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore, DeliveryStore {
+    public static let schemaVersion = 7
 
     static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
@@ -48,50 +48,6 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
         if let connection {
             sqlite3_close(connection)
         }
-    }
-
-    public func insert(_ listen: Listen) async throws -> Listen? {
-        let handle = try database()
-        let statement = try prepare(
-            handle,
-            """
-            INSERT OR IGNORE INTO listens (
-                raw_title, raw_artist, raw_album, raw_album_artist,
-                title, artist, album, album_artist,
-                bundle_id, duration, played_duration, started_at, captured_at, dedup_key,
-                artwork_hash, track_identity
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-        )
-        defer { sqlite3_finalize(statement) }
-
-        let fields = [
-            listen.raw.title, listen.raw.artist, listen.raw.album, listen.raw.albumArtist,
-            listen.processed.title, listen.processed.artist, listen.processed.album,
-            listen.processed.albumArtist, listen.bundleID,
-        ]
-        for (offset, value) in fields.enumerated() {
-            try bind(value, at: Int32(offset + 1), in: statement)
-        }
-        sqlite3_bind_double(statement, 10, listen.duration)
-        sqlite3_bind_double(statement, 11, listen.playedDuration)
-        sqlite3_bind_double(statement, 12, listen.startedAt.timeIntervalSince1970)
-        sqlite3_bind_double(statement, 13, listen.capturedAt.timeIntervalSince1970)
-        try bind(listen.dedupKey, at: 14, in: statement)
-        let trackIdentity = listen.raw.identity
-        let artworkHash = try listen.artworkHash ?? existingArtworkHash(handle, forTrack: trackIdentity)
-        if let artworkHash {
-            try bind(artworkHash, at: 15, in: statement)
-        } else {
-            sqlite3_bind_null(statement, 15)
-        }
-        try bind(trackIdentity, at: 16, in: statement)
-
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw DatabaseError.sqlite(errorMessage(handle))
-        }
-        guard sqlite3_changes(handle) > 0 else { return nil }
-        return listen.stored(withID: sqlite3_last_insert_rowid(handle)).withArtworkHash(artworkHash)
     }
 
     public func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
@@ -246,37 +202,41 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
         while true {
             switch sqlite3_step(statement) {
             case SQLITE_ROW:
-                listens.append(
-                    Listen(
-                        id: sqlite3_column_int64(statement, 0),
-                        raw: ListenMetadata(
-                            title: text(statement, 1),
-                            artist: text(statement, 2),
-                            album: text(statement, 3),
-                            albumArtist: text(statement, 4),
-                        ),
-                        processed: ListenMetadata(
-                            title: text(statement, 5),
-                            artist: text(statement, 6),
-                            album: text(statement, 7),
-                            albumArtist: text(statement, 8),
-                        ),
-                        bundleID: text(statement, 9),
-                        duration: sqlite3_column_double(statement, 10),
-                        playedDuration: sqlite3_column_double(statement, 11),
-                        startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
-                        capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
-                        artworkHash: sqlite3_column_type(statement, 14) == SQLITE_NULL
-                            ? nil
-                            : text(statement, 14),
-                    ),
-                )
+                listens.append(readListen(statement, offset: 0))
             case SQLITE_DONE:
                 return listens
             default:
                 throw DatabaseError.sqlite(errorMessage(handle))
             }
         }
+    }
+
+    /// Reads a listen from the columns starting at `offset`, so a query can
+    /// put delivery columns in front of it.
+    func readListen(_ statement: OpaquePointer, offset: Int32) -> Listen {
+        Listen(
+            id: sqlite3_column_int64(statement, offset),
+            raw: ListenMetadata(
+                title: text(statement, offset + 1),
+                artist: text(statement, offset + 2),
+                album: text(statement, offset + 3),
+                albumArtist: text(statement, offset + 4),
+            ),
+            processed: ListenMetadata(
+                title: text(statement, offset + 5),
+                artist: text(statement, offset + 6),
+                album: text(statement, offset + 7),
+                albumArtist: text(statement, offset + 8),
+            ),
+            bundleID: text(statement, offset + 9),
+            duration: sqlite3_column_double(statement, offset + 10),
+            playedDuration: sqlite3_column_double(statement, offset + 11),
+            startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, offset + 12)),
+            capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, offset + 13)),
+            artworkHash: sqlite3_column_type(statement, offset + 14) == SQLITE_NULL
+                ? nil
+                : text(statement, offset + 14),
+        )
     }
 
     func text(_ statement: OpaquePointer, _ index: Int32) -> String {

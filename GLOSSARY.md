@@ -42,7 +42,7 @@ A connection whose credentials the service rejected. It keeps its identity, hold
 
 ## Abandoned
 
-A pending delivery dropped because its connection was explicitly unlinked. The listen remains in local history, marked as not delivered to that service.
+A pending delivery that will not be delivered: its connection was explicitly unlinked, or the service permanently rejected the listen. The listen remains in local history, marked as not delivered to that service.
 
 ## Repeat and duplicate
 

@@ -266,6 +266,43 @@ public final class ConnectionService {
         }
     }
 
+    /// Marks a connection whose credential the service rejected. It keeps its
+    /// identity and its pending deliveries; a later sign-in resumes them.
+    @discardableResult
+    public func markNeedsSignIn(id: Int64) async throws -> Connection {
+        try await withGate {
+            guard let index = connections.firstIndex(where: { $0.id == id }) else {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            guard connections[index].authState != .needsSignIn else {
+                return connections[index]
+            }
+            var updated = connections[index]
+            updated.authState = .needsSignIn
+            let stored = try await store.save(updated)
+            connections[index] = stored
+            return stored
+        }
+    }
+
+    /// Clears a rejected credential after the same identity signs in again.
+    @discardableResult
+    public func markSignedIn(id: Int64) async throws -> Connection {
+        try await withGate {
+            guard let index = connections.firstIndex(where: { $0.id == id }) else {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            guard connections[index].authState != .signedIn else {
+                return connections[index]
+            }
+            var updated = connections[index]
+            updated.authState = .signedIn
+            let stored = try await store.save(updated)
+            connections[index] = stored
+            return stored
+        }
+    }
+
     /// Persists the current-connection read cursor. It never changes a queued
     /// delivery's target and never scopes local history.
     public func setCurrent(_ id: Int64?) async throws {

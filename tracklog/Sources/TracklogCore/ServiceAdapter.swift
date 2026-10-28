@@ -10,6 +10,9 @@ public struct ServiceCapabilities: Equatable, Sendable {
     public let supportsDelete: Bool
     /// Whether this protocol signs its requests (Last.fm, unlike ListenBrainz).
     public let signsRequests: Bool
+    /// The least time between two requests to the same connection. ListenBrainz
+    /// and Libre.fm keep one second; Last.fm has no client-side spacing rule.
+    public let minimumRequestInterval: TimeInterval
 
     public init(
         supportsNowPlaying: Bool = false,
@@ -18,6 +21,7 @@ public struct ServiceCapabilities: Equatable, Sendable {
         supportsHate: Bool = false,
         supportsDelete: Bool = false,
         signsRequests: Bool = false,
+        minimumRequestInterval: TimeInterval = 0,
     ) {
         self.supportsNowPlaying = supportsNowPlaying
         self.maximumBatchSize = max(1, maximumBatchSize)
@@ -25,6 +29,7 @@ public struct ServiceCapabilities: Equatable, Sendable {
         self.supportsHate = supportsHate
         self.supportsDelete = supportsDelete
         self.signsRequests = signsRequests
+        self.minimumRequestInterval = max(0, minimumRequestInterval)
     }
 }
 
@@ -75,4 +80,24 @@ public protocol ServiceAdapter: Sendable {
     var capabilities: ServiceCapabilities { get }
     /// Checks a credential with the service and returns the identity it names.
     func validate(_ credential: String) async throws -> ServiceIdentity
+}
+
+/// The delivery half of a service adapter. A thrown failure backs off the
+/// whole batch; per-item outcomes let one rejection leave the rest alone.
+public protocol DeliveryAdapter: ServiceAdapter {
+    /// Submits one batch, oldest listen first, and returns one outcome per
+    /// listen in the same order.
+    func submit(
+        _ listens: [Listen],
+        connection: Connection,
+        credential: String,
+    ) async throws -> [DeliveryResult]
+
+    /// Sends one now playing. Returns the service reference it names, when the
+    /// service answers with one. Never queued, retried or persisted.
+    func submitNowPlaying(
+        _ track: Track,
+        connection: Connection,
+        credential: String,
+    ) async throws -> String?
 }

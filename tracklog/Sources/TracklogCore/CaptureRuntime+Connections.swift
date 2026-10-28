@@ -22,7 +22,7 @@ extension CaptureRuntime {
         }
     }
 
-    private func applyConnectionSnapshot() {
+    func applyConnectionSnapshot() {
         guard let connectionService else { return }
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
@@ -44,6 +44,11 @@ public extension CaptureRuntime {
         do {
             let connection = try await connectionService.link(kind: kind, credential: credential)
             applyConnectionSnapshot()
+            // A new credential is a delivery trigger. A new connection has no
+            // earlier targets, so this never backfills older listens.
+            if let id = connection.id {
+                deliveryOutbox?.resume(connectionID: id)
+            }
             return connection
         } catch {
             // A failed link may still have kept a recoverable connection when
@@ -57,6 +62,27 @@ public extension CaptureRuntime {
         guard let connectionService else { throw ConnectionError.unavailable }
         try await connectionService.setEnabled(id: id, enabled: enabled)
         applyConnectionSnapshot()
+        if enabled {
+            // Re-enabling resumes rows that were already targeted; it does not
+            // create targets for listens captured while the switch was off.
+            deliveryOutbox?.resume(connectionID: id)
+        }
+    }
+
+    /// Manual retry for one connection. Pending rows become due now and drain;
+    /// attempts are kept.
+    func retryDeliveries(forConnection id: Int64) {
+        deliveryOutbox?.retry(connectionID: id)
+    }
+
+    /// Resumes a connection after a successful re-auth or credential change.
+    func resumeDeliveries(forConnection id: Int64) {
+        deliveryOutbox?.resume(connectionID: id)
+    }
+
+    /// A restored network path drains every eligible connection now.
+    func networkBecameAvailable() {
+        deliveryOutbox?.networkBecameAvailable()
     }
 
     /// Changes the read cursor only. It never touches a queued delivery.
