@@ -104,6 +104,25 @@ public final class DeliveryOutbox {
         Set(connectionIDs).forEach(trigger)
     }
 
+    /// Stops one connection's worker without touching its durable rows, for an
+    /// operation that is about to change its credential or identity. An
+    /// already-sent request finishes; nothing new starts.
+    public func suspend(connectionID: Int64) {
+        workers[connectionID]?.stop()
+        workers[connectionID] = nil
+        nowPlayingReferences[connectionID] = nil
+        if isActive {
+            scheduler.reschedule()
+        }
+    }
+
+    /// Stops one connection's worker after its row is gone.
+    public func connectionRemoved(connectionID: Int64) {
+        suspend(connectionID: connectionID)
+        lastRequestAt[connectionID] = nil
+        blockedUntil[connectionID] = nil
+    }
+
     /// Manual retry: makes every pending row for the connection due now and
     /// drains it. Attempts are kept, so repeated failures still reach the cap.
     public func retry(connectionID: Int64) {

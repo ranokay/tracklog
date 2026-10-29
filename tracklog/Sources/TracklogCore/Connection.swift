@@ -54,6 +54,40 @@ public struct Connection: Identifiable, Equatable, Sendable {
     }
 }
 
+/// One line the composition root may log. It carries no credential by
+/// construction, and none of its descriptions include a service message.
+public enum ConnectionEvent: Equatable, Sendable, CustomStringConvertible {
+    case linked(kind: ServiceKind, identity: String)
+    case linkFailed(kind: ServiceKind, reason: String)
+    case reauthenticated(kind: ServiceKind, identity: String)
+    case unlinked(kind: ServiceKind, identity: String)
+
+    public var description: String {
+        switch self {
+        case let .linked(kind, identity):
+            "Linked \(kind.displayName) as \(identity)"
+        case let .linkFailed(kind, reason):
+            "Linking \(kind.displayName) failed: \(reason)"
+        case let .reauthenticated(kind, identity):
+            "Signed in to \(kind.displayName) as \(identity)"
+        case let .unlinked(kind, identity):
+            "Unlinked \(kind.displayName) as \(identity)"
+        }
+    }
+}
+
+/// One connection removed from the Services list, with the count the unlink
+/// confirmation promised to abandon.
+public struct UnlinkedConnection: Equatable, Sendable {
+    public let connection: Connection
+    public let abandonedDeliveries: Int
+
+    public init(connection: Connection, abandonedDeliveries: Int) {
+        self.connection = connection
+        self.abandonedDeliveries = abandonedDeliveries
+    }
+}
+
 /// What the Services list shows for a connection: connected, paused by its
 /// own switch, or waiting for the same identity to sign in again.
 public enum ConnectionStatus: String, Equatable, Sendable {
@@ -95,6 +129,7 @@ public enum ConnectionError: Error, Equatable, Sendable, LocalizedError {
     case unknownConnection(id: Int64)
     case credentialStorage
     case currentCursor
+    case reauthenticationCancelled
 
     public var errorDescription: String? {
         switch self {
@@ -110,6 +145,8 @@ public enum ConnectionError: Error, Equatable, Sendable, LocalizedError {
             "The token could not be saved in the Keychain."
         case .currentCursor:
             "The connection could not be made current. Check the Services page or try again."
+        case .reauthenticationCancelled:
+            "Signing in was cancelled."
         }
     }
 }

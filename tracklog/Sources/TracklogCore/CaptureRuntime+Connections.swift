@@ -119,6 +119,60 @@ public extension CaptureRuntime {
         deliveryOutbox?.resume(connectionID: id)
     }
 
+    /// Signs an existing connection in again. A same-identity sign-in clears
+    /// needs sign-in, keeps pending deliveries and drains them now; a different
+    /// identity asks through `confirmReplacement`, abandons the old pending
+    /// deliveries and takes over the connection.
+    @discardableResult
+    func reauthenticate(
+        id: Int64,
+        credential: String,
+        identity: ServiceIdentity? = nil,
+        confirmReplacement: @MainActor (Connection, ServiceIdentity, Int) -> Bool,
+    ) async throws -> Connection {
+        guard let connectionService else { throw ConnectionError.unavailable }
+        let connection = try await connectionService.reauthenticate(
+            id: id,
+            credential: credential,
+            identity: identity,
+            confirmReplacement: confirmReplacement,
+        )
+        applyConnectionSnapshot()
+        await reloadDeliveryState()
+        // A re-auth is a delivery trigger. Held rows become due now regardless
+        // of the backoff the rejection scheduled, then drain oldest first.
+        deliveryOutbox?.retry(connectionID: id)
+        return connection
+    }
+
+    /// Removes a connection, abandons its pending deliveries and stops its
+    /// drain. Local history stays; a re-link never resumes abandoned rows.
+    @discardableResult
+    func unlinkConnection(id: Int64) async throws -> UnlinkedConnection {
+        guard let connectionService else { throw ConnectionError.unavailable }
+        // Stop new batches before the credential goes away. An in-flight
+        // request may still finish; nothing after it is sent.
+        deliveryOutbox?.suspend(connectionID: id)
+        let unlinked: UnlinkedConnection
+        do {
+            unlinked = try await connectionService.unlink(id: id)
+        } catch {
+            // The connection is still linked, so let its normal schedule run.
+            deliveryOutbox?.resume(connectionID: id)
+            throw error
+        }
+        deliveryOutbox?.connectionRemoved(connectionID: id)
+        applyConnectionSnapshot()
+        await reloadDeliveryState()
+        return unlinked
+    }
+
+    /// How many deliveries the unlink confirmation will abandon.
+    func pendingDeliveryCount(forConnection id: Int64) async -> Int {
+        guard let deliveryStore else { return 0 }
+        return await (try? deliveryStore.pendingDeliveryCount(forConnection: id)) ?? 0
+    }
+
     /// A restored network path drains every eligible connection now.
     func networkBecameAvailable() {
         deliveryOutbox?.networkBecameAvailable()

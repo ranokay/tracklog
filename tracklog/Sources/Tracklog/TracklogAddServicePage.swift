@@ -18,8 +18,8 @@ struct TracklogAddServicePage: View {
         token.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Until re-auth lands, there is nothing more to add on a connected
-    /// ListenBrainz endpoint.
+    /// One connection per endpoint, so a second ListenBrainz account is only
+    /// reachable by signing the existing connection in again.
     private var listenBrainzIdentity: String? {
         state.connection(kind: .listenBrainz)?.identity
     }

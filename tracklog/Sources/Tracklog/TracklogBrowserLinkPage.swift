@@ -20,7 +20,16 @@ struct TracklogBrowserLinkPage: View {
 
     var body: some View {
         if let link {
-            content(link)
+            DropletSettingsPage {
+                TracklogBrowserLinkFlow(
+                    connection: state.connection(kind: kind, endpoint: endpoint),
+                    serviceName: serviceName,
+                    endpoint: endpoint,
+                    link: link,
+                    doneTitle: "Back to services",
+                    done: { droplet.goBackInSettings() },
+                )
+            }
         } else {
             DropletSettingsPage {
                 DropletSettingsSection {
@@ -35,27 +44,22 @@ struct TracklogBrowserLinkPage: View {
             }
         }
     }
-
-    private func content(_ link: LastFMLinkModel) -> some View {
-        TracklogBrowserLinkContent(
-            droplet: droplet,
-            connection: state.connection(kind: kind, endpoint: endpoint),
-            serviceName: serviceName,
-            endpoint: endpoint,
-            link: link,
-        )
-    }
 }
 
-private struct TracklogBrowserLinkContent: View {
-    let droplet: TracklogDroplet
+/// One browser link's phases. It returns sections rather than its own page, so
+/// a connection page can host a re-auth in place.
+struct TracklogBrowserLinkFlow: View {
+    /// An already-linked connection shows the completed card instead of
+    /// starting a new link. A re-auth passes `nil` and starts its own model.
     let connection: Connection?
     let serviceName: String
     let endpoint: ServiceEndpoint?
     @ObservedObject var link: LastFMLinkModel
+    let doneTitle: String
+    let done: () -> Void
 
     var body: some View {
-        DropletSettingsPage {
+        Group {
             if let connection {
                 connected(connection)
             } else {
@@ -210,8 +214,8 @@ private struct TracklogBrowserLinkContent: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 DropletControlRow(title: "Done") {
-                    Button("Back to services") {
-                        droplet.goBackInSettings()
+                    Button(doneTitle) {
+                        done()
                     }
                     .buttonStyle(DroppyQuietButtonStyle(size: .small))
                 }

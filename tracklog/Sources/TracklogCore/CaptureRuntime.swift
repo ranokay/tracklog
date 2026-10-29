@@ -91,6 +91,7 @@ public final class CaptureRuntime {
             ConnectionService(
                 store: connectionStore,
                 credentials: credentials,
+                deliveries: store as? any DeliveryStore,
                 adapters: serviceAdapters,
                 clock: clock,
                 log: connectionLog ?? { _ in },

@@ -66,7 +66,8 @@ public struct DeliverySummary: Equatable, Sendable {
     ) -> [String] {
         var names: [String] = []
         for delivery in deliveries where matches(delivery.state) {
-            let name = connections.first { $0.id == delivery.connectionID }?.kind.displayName
+            let name = delivery.serviceKind?.displayName
+                ?? connections.first { $0.id == delivery.connectionID }?.kind.displayName
                 ?? "an unknown service"
             if !names.contains(name) {
                 names.append(name)

@@ -166,6 +166,52 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 8) { handle in
+                // An unlinked connection is deleted, but its delivery rows must
+                // survive so local history can still say which service will
+                // never receive the listen. The service kind is denormalized
+                // onto the row, and the connection is cleared rather than the
+                // row cascading away.
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE deliveries_v8 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        listen_id INTEGER NOT NULL REFERENCES listens (id) ON DELETE CASCADE,
+                        connection_id INTEGER REFERENCES connections (id) ON DELETE SET NULL,
+                        service_kind TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        last_attempt_at REAL,
+                        next_attempt_at REAL,
+                        last_error TEXT,
+                        abandoned_reason TEXT,
+                        delivered_at REAL,
+                        service_reference TEXT,
+                        UNIQUE (listen_id, connection_id)
+                    );
+                    INSERT INTO deliveries_v8 (
+                        id, listen_id, connection_id, service_kind, state, attempts,
+                        last_attempt_at, next_attempt_at, last_error, abandoned_reason,
+                        delivered_at, service_reference
+                    )
+                    -- Every v7 row had a live connection: its foreign key
+                    -- cascaded on delete. The join is therefore lossless, and
+                    -- the service kind it copies is what history needs after
+                    -- the connection is gone.
+                    SELECT d.id, d.listen_id, d.connection_id, c.kind, d.state, d.attempts,
+                           d.last_attempt_at, d.next_attempt_at, d.last_error, d.abandoned_reason,
+                           d.delivered_at, d.service_reference
+                    FROM deliveries d
+                    JOIN connections c ON c.id = d.connection_id;
+                    DROP TABLE deliveries;
+                    ALTER TABLE deliveries_v8 RENAME TO deliveries;
+                    CREATE INDEX deliveries_connection_due
+                        ON deliveries (connection_id, state, next_attempt_at);
+                    CREATE INDEX deliveries_next_attempt ON deliveries (next_attempt_at);
+                    """,
+                )
+            },
         ]
     }
 
