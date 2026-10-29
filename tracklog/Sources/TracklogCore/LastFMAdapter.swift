@@ -1,9 +1,16 @@
 import Foundation
 
+/// Checks a candidate application pair before it replaces the pair in use.
+/// The command is `auth.getToken`: it needs no user session and Last.fm
+/// answers 10 for a bad key and 13 for a bad signature.
+public protocol LastFMAppCredentialValidating: Sendable {
+    func validateAppCredentials(_ credentials: LastFMAppCredentials) async throws
+}
+
 /// Last.fm's delivery adapter. The protocol client owns the signed request
 /// shapes; this type maps its failures and per-item outcomes onto the outbox's
 /// vocabulary.
-public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
+public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredentialValidating {
     public let kind = ServiceKind.lastFM
     public let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
@@ -17,6 +24,9 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
 
     public let client: LastFMClient
 
+    private let transport: any HTTPTransport
+    private let userAgent: String
+
     /// Last.fm's endpoint is fixed; only the transport and the app credentials
     /// are injected.
     public init(
@@ -24,11 +34,47 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient {
         appCredentials: LastFMAppCredentials,
         userAgent: String = TracklogHTTP.userAgent,
     ) {
+        self.transport = transport
+        self.userAgent = userAgent
         client = LastFMClient(
             transport: transport,
             appCredentials: appCredentials,
             userAgent: userAgent,
         )
+    }
+
+    /// Reads the effective pair per request, so a saved override takes effect
+    /// without rebuilding the adapter or the outbox.
+    public init(
+        transport: any HTTPTransport,
+        appCredentials provider: any LastFMAppCredentialsProviding,
+        userAgent: String = TracklogHTTP.userAgent,
+    ) {
+        self.transport = transport
+        self.userAgent = userAgent
+        client = LastFMClient(
+            transport: transport,
+            appCredentials: provider,
+            userAgent: userAgent,
+        )
+    }
+
+    /// Checks a candidate pair with Last.fm's token endpoint. It never stores
+    /// anything; the app-credentials page saves only after this returns.
+    public func validateAppCredentials(_ credentials: LastFMAppCredentials) async throws {
+        guard credentials.isConfigured else {
+            throw ServiceFailure.appCredentialAuth(.missing)
+        }
+        let candidate = LastFMClient(
+            transport: transport,
+            appCredentials: credentials,
+            userAgent: userAgent,
+        )
+        do {
+            _ = try await candidate.requestToken()
+        } catch {
+            throw Self.failure(for: error)
+        }
     }
 
     // MARK: - Link

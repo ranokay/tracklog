@@ -14,6 +14,22 @@ extension TracklogDroplet {
         await runtime?.reloadConnections()
     }
 
+    /// Checks and saves the user-supplied Last.fm application pair. The pair
+    /// never enters the view. A changed pair signs every Last.fm connection
+    /// out; the page explains that before the button is pressed.
+    func saveLastFMAppCredentialOverride(apiKey: String, sharedSecret: String) async throws {
+        guard let runtime else { throw ConnectionError.unavailable }
+        try await runtime.saveLastFMAppCredentialOverride(
+            apiKey: apiKey,
+            sharedSecret: sharedSecret,
+        )
+    }
+
+    func removeLastFMAppCredentialOverride() async throws {
+        guard let runtime else { throw ConnectionError.unavailable }
+        try await runtime.removeLastFMAppCredentialOverride()
+    }
+
     func setConnectionEnabled(id: Int64, enabled: Bool) async throws {
         guard let runtime else { throw ConnectionError.unavailable }
         try await runtime.setConnectionEnabled(id: id, enabled: enabled)

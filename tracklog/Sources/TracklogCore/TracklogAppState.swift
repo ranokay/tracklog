@@ -22,9 +22,14 @@ public final class TracklogAppState: ObservableObject {
     /// Set until a connection read succeeds, so the Services page can say the
     /// list is unavailable rather than empty.
     @Published public internal(set) var connectionsFailure: CaptureFailure?
-    /// Why Last.fm rejected Tracklog's own app credentials, if it did. This is
-    /// distinct from a connection's own needs-sign-in state.
+    /// Why Last.fm rejected the app credentials in use, compiled or override.
+    /// This is distinct from a connection's own needs-sign-in state.
     @Published public internal(set) var lastFMAppCredentialProblem: AppCredentialProblem?
+    /// Whether the compiled Last.fm pair has both halves.
+    @Published public internal(set) var lastFMCompiledCredentialsPresent =
+        LastFMAppCredentials.compiled.isConfigured
+    /// Whether a Keychain override is saved. The pair itself is never published.
+    @Published public internal(set) var lastFMOverridePresent = false
     /// Saved blocks, in the order the metadata pipeline evaluates them.
     @Published public internal(set) var blocks: [BlockRule] = []
     /// Set until a block read succeeds, even if a later storage failure
@@ -40,6 +45,20 @@ public final class TracklogAppState: ObservableObject {
     /// status so the two cannot drift apart.
     public var feedAvailable: Bool {
         mediaStatus.isAvailable
+    }
+
+    /// Whether any Last.fm app pair can sign a call. A pair that Last.fm
+    /// rejected is present but unusable, so the remedy check below also reads
+    /// the problem.
+    public var lastFMAppCredentialsAvailable: Bool {
+        lastFMCompiledCredentialsPresent || lastFMOverridePresent
+    }
+
+    /// Whether Add Last.fm must send the listener to the app-credentials page
+    /// instead of a sign-in that would fail. An empty pair and a rejected pair
+    /// share the same remedy.
+    public var lastFMNeedsAppCredentialRemedy: Bool {
+        !lastFMAppCredentialsAvailable || lastFMAppCredentialProblem != nil
     }
 
     /// The connection service-backed reads are scoped to, if one is chosen.

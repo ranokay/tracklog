@@ -66,19 +66,6 @@ public extension CaptureRuntime {
         }
     }
 
-    /// Records why Last.fm rejected the project's own app credentials. The
-    /// reason survives a relaunch so Services can still explain a held queue.
-    func noteLastFMAppCredentialProblem(_ problem: AppCredentialProblem) {
-        state.lastFMAppCredentialProblem = problem
-        persistAppCredentialProblem?(problem)
-    }
-
-    /// Clears the app-credential warning after a successful link or delivery.
-    func clearLastFMAppCredentialProblem() {
-        state.lastFMAppCredentialProblem = nil
-        persistAppCredentialProblem?(nil)
-    }
-
     /// Publishes a linked connection, refreshes the delivery state and triggers
     /// its first drain. A failed link still publishes a recoverable connection
     /// when its cleanup could not complete.

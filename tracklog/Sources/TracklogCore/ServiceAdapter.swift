@@ -65,17 +65,18 @@ public enum AppCredentialProblem: String, Equatable, Sendable {
     public var detail: String {
         switch self {
         case .missing:
-            "Tracklog has no built-in Last.fm API key or shared secret. "
-                + "Last.fm sign-in and scrobbling will fail until the app credentials are added."
+            "No Last.fm API key and shared secret are configured. "
+                + "Last.fm sign-in and scrobbling will fail until a working pair is saved "
+                + "on the Last.fm app credentials page."
         case .invalidKey:
-            "Last.fm did not accept Tracklog's API key. "
-                + "Last.fm sign-in and scrobbling will fail until the app credentials are corrected."
+            "Last.fm did not accept the app key in use. "
+                + "Save a working pair on the Last.fm app credentials page."
         case .suspendedKey:
-            "Last.fm suspended Tracklog's API key. "
-                + "Last.fm sign-in and scrobbling will fail until the app credentials are corrected."
+            "Last.fm suspended the app key in use. It will not accept requests until the key "
+                + "is restored or a different pair is saved."
         case .invalidSignature:
-            "Last.fm did not accept Tracklog's request signature. "
-                + "Check that the API key and shared secret belong together."
+            "Last.fm did not accept the request signature. "
+                + "Check that the API key and shared secret belong together, then save the pair again."
         }
     }
 }

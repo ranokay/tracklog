@@ -1,12 +1,14 @@
 import Foundation
 
-/// The Last.fm application credentials Tracklog compiles in.
+/// One Last.fm application pair: an API key with the shared secret that signs
+/// its requests.
 ///
-/// The pair belongs to the project's Last.fm API account and is public by
-/// design: the protocol needs the shared secret in the client to sign calls.
-/// The provisioning file at `~/.config/tracklog/lastfm.json` is a development
-/// source only; nothing reads it at runtime.
-public struct LastFMAppCredentials: Equatable, Sendable {
+/// ``compiled`` is Tracklog's own registered application. It is public by
+/// design: the protocol needs the shared secret in the client to sign calls. A
+/// listener's Keychain override uses the same type. The provisioning file at
+/// `~/.config/tracklog/lastfm.json` is a development source only; nothing reads
+/// it at runtime.
+public struct LastFMAppCredentials: Equatable, Sendable, CustomStringConvertible {
     public let apiKey: String
     public let sharedSecret: String
 
@@ -19,6 +21,11 @@ public struct LastFMAppCredentials: Equatable, Sendable {
     public var isConfigured: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Redacted so a log line, diagnostic dump or export cannot carry the pair.
+    public var description: String {
+        isConfigured ? "Last.fm app credentials (configured)" : "Last.fm app credentials (missing)"
     }
 
     public static let compiled = LastFMAppCredentials(

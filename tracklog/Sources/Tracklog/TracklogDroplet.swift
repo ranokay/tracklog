@@ -33,6 +33,9 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
     private(set) var lastFMLink: LastFMLinkModel?
+    /// The effective Last.fm pair source shared by the link and the runtime.
+    /// It holds no pair itself, only the credential store it reads.
+    var lastFMAppCredentialsProvider: StoredLastFMAppCredentials?
     var automationGate: HostAutomationPermissionGate?
     private var networkReachability: NetworkReachability?
     private var activationTask: Task<Void, Never>?
@@ -49,11 +52,18 @@ public final class TracklogDroplet: NSObject, Droplet {
         } else {
             let sessionTransport = URLSessionTransport()
             transport = sessionTransport
-            runtime = makeProductionRuntime(host: host, transport: sessionTransport)
+            runtime = makeProductionRuntime(
+                host: host,
+                transport: sessionTransport,
+                credentials: KeychainCredentialStore(),
+            )
         }
         self.runtime = runtime
-        if let transport {
-            lastFMLink = makeLastFMLink(transport: transport)
+        if let transport, let lastFMAppCredentialsProvider {
+            lastFMLink = makeLastFMLink(
+                transport: transport,
+                appCredentials: lastFMAppCredentialsProvider,
+            )
         }
         if !isHarness {
             let reachability = NetworkReachability { [weak runtime] in
@@ -84,6 +94,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         lastFMLink?.cancel()
         lastFMLink = nil
+        lastFMAppCredentialsProvider = nil
         networkReachability?.stop()
         networkReachability = nil
         runtime?.stop()

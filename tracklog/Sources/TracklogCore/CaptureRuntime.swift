@@ -16,8 +16,12 @@ public final class CaptureRuntime {
     let connectionService: ConnectionService?
     let deliveryStore: (any DeliveryStore)?
     let deliveryOutbox: DeliveryOutbox?
+    let credentialStore: (any CredentialStore)?
+    let compiledLastFMAppCredentials: LastFMAppCredentials
+    let lastFMAppCredentialsValidator: (any LastFMAppCredentialValidating)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     let persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)?
+    let persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)?
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
     let historyPageSize: Int
@@ -40,6 +44,9 @@ public final class CaptureRuntime {
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
     var pauseTask: Task<Void, Never>?
+    /// A credential change saved but the connection sign-out failed. A retry
+    /// of the same save must still repair the connections.
+    var lastFMInvalidationPending = false
 
     public init(
         state: TracklogAppState = TracklogAppState(),
@@ -51,6 +58,7 @@ public final class CaptureRuntime {
         blocks: (any BlockStore)? = nil,
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
+        compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
         failure: CaptureFailure? = nil,
@@ -58,6 +66,8 @@ public final class CaptureRuntime {
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
+        lastFMInvalidationPending: Bool = false,
+        persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -66,6 +76,11 @@ public final class CaptureRuntime {
         self.clock = clock
         self.source = source
         self.store = store
+        credentialStore = credentials
+        self.compiledLastFMAppCredentials = compiledLastFMAppCredentials
+        lastFMAppCredentialsValidator = serviceAdapters
+            .compactMap { $0 as? any LastFMAppCredentialValidating }
+            .first
         // The history store also owns the artwork tables. A fake that only
         // implements ListenStore simply has no covers.
         artworkStore = store as? any ArtworkStore
@@ -102,6 +117,8 @@ public final class CaptureRuntime {
         }
         self.persistSettings = persistSettings
         self.persistAppCredentialProblem = persistAppCredentialProblem
+        self.persistLastFMInvalidationPending = persistLastFMInvalidationPending
+        self.lastFMInvalidationPending = lastFMInvalidationPending
         self.sendNowPlaying = sendNowPlaying
 
         var engineConfiguration = configuration
@@ -116,6 +133,8 @@ public final class CaptureRuntime {
         state.captureAvailable = store != nil
         state.failure = failure
         state.lastFMAppCredentialProblem = appCredentialProblem
+        state.lastFMCompiledCredentialsPresent = compiledLastFMAppCredentials.isConfigured
+        state.lastFMOverridePresent = false
         state.mediaStatus = source.mediaStatus
 
         wireOutboxCallbacks()
@@ -132,11 +151,14 @@ public final class CaptureRuntime {
         settings: CaptureSettings = CaptureSettings(),
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
+        compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
+        lastFMInvalidationPending: Bool = false,
+        persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -163,6 +185,7 @@ public final class CaptureRuntime {
             blocks: store,
             credentials: credentials,
             serviceAdapters: serviceAdapters,
+            compiledLastFMAppCredentials: compiledLastFMAppCredentials,
             connectionLog: connectionLog,
             deliveryLog: deliveryLog,
             failure: failure,
@@ -170,59 +193,12 @@ public final class CaptureRuntime {
             persistSettings: persistSettings,
             appCredentialProblem: appCredentialProblem,
             persistAppCredentialProblem: persistAppCredentialProblem,
+            lastFMInvalidationPending: lastFMInvalidationPending,
+            persistLastFMInvalidationPending: persistLastFMInvalidationPending,
             sendNowPlaying: sendNowPlaying,
             configuration: configuration,
             historyPageSize: historyPageSize,
         )
-    }
-
-    public func start() async {
-        guard !Task.isCancelled, !started else { return }
-        started = true
-        startGeneration += 1
-        let generation = startGeneration
-        state.mediaStatus = source.mediaStatus
-        clearExpiredPauseOnActivation()
-
-        if let store {
-            await loadFirstPage(from: store, generation: generation)
-            guard finishStart(generation) else { return }
-        }
-
-        await loadSeenApps()
-        guard finishStart(generation) else { return }
-
-        await loadSimpleEdits()
-        guard finishStart(generation) else { return }
-
-        await loadBlocks()
-        guard finishStart(generation) else { return }
-
-        await loadConnections()
-        guard finishStart(generation) else { return }
-
-        // Deliveries are durable and independent of the capture switches, so a
-        // relaunch resumes the queue even with scrobbling off or paused.
-        deliveryOutbox?.activate()
-
-        if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
-            startFeed()
-        }
-        schedulePauseExpiry()
-    }
-
-    /// Returns false when this start no longer owns the runtime. A cancelled
-    /// start clears `started` only while it is still the current generation.
-    private func finishStart(_ generation: Int) -> Bool {
-        guard started, generation == startGeneration else { return false }
-        if Task.isCancelled {
-            // The switch can start the feed while the history read is
-            // suspended; cancellation must stop it before releasing ownership.
-            stopFeed()
-            started = false
-            return false
-        }
-        return true
     }
 
     public func stop() {
@@ -333,4 +309,61 @@ private struct UnavailableAppAllowlist: AppAllowlistStore {
     }
 
     func setAllowed(_: String, allowed _: Bool) async throws {}
+}
+
+extension CaptureRuntime {
+    public func start() async {
+        guard !Task.isCancelled, !started else { return }
+        started = true
+        startGeneration += 1
+        let generation = startGeneration
+        state.mediaStatus = source.mediaStatus
+        clearExpiredPauseOnActivation()
+
+        if let store {
+            await loadFirstPage(from: store, generation: generation)
+            guard finishStart(generation) else { return }
+        }
+
+        await loadSeenApps()
+        guard finishStart(generation) else { return }
+
+        await loadSimpleEdits()
+        guard finishStart(generation) else { return }
+
+        await loadBlocks()
+        guard finishStart(generation) else { return }
+
+        await loadConnections()
+        guard finishStart(generation) else { return }
+
+        await loadLastFMAppCredentials()
+        guard finishStart(generation) else { return }
+
+        await replayPendingLastFMInvalidation()
+        guard finishStart(generation) else { return }
+
+        // Deliveries are durable and independent of the capture switches, so a
+        // relaunch resumes the queue even with scrobbling off or paused.
+        deliveryOutbox?.activate()
+
+        if state.scrobblingEnabled, state.pausedUntil == nil, store != nil {
+            startFeed()
+        }
+        schedulePauseExpiry()
+    }
+
+    /// Returns false when this start no longer owns the runtime. A cancelled
+    /// start clears `started` only while it is still the current generation.
+    private func finishStart(_ generation: Int) -> Bool {
+        guard started, generation == startGeneration else { return false }
+        if Task.isCancelled {
+            // The switch can start the feed while the history read is
+            // suspended; cancellation must stop it before releasing ownership.
+            stopFeed()
+            started = false
+            return false
+        }
+        return true
+    }
 }
