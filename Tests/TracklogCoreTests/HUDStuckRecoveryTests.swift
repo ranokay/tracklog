@@ -128,6 +128,7 @@ struct HUDStuckRecoveryTests: CaptureTestHelpers {
         )
         await runtime.reloadDeliveryState()
         await eventually { probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1 }
+        #expect(probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1)
 
         runtime.retryDeliveries(forConnection: connection.id ?? -1)
         await eventually { runtime.state.pendingQueue.count == 1 }
@@ -189,6 +190,7 @@ struct HUDStuckRecoveryTests: CaptureTestHelpers {
         )
         await runtime.reloadDeliveryState()
         await eventually { probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1 }
+        #expect(probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1)
 
         runtime.retryDeliveries(forConnection: connection.id ?? -1)
         await eventually { runtime.state.pendingQueue.count == 1 }

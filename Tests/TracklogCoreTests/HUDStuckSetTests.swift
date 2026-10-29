@@ -72,6 +72,10 @@ struct HUDStuckSetTests: CaptureTestHelpers {
         await eventually {
             probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 2
         }
+        #expect(
+            probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 2,
+            "a restarted session presents the same stuck set again",
+        )
     }
 
     @Test func aNewSubsetStuckSetIsPresentedEvenWhenItsIDsWereSeenInALargerSet() async throws {

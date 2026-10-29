@@ -100,6 +100,7 @@ struct HUDSignInRecoveryTests: CaptureTestHelpers {
         await eventually {
             runtime.state.connection(id: connection.id ?? -1)?.identity == "other-listener"
         }
+        #expect(runtime.state.connection(id: connection.id ?? -1)?.identity == "other-listener")
         await turnMainActor(50)
 
         #expect(
