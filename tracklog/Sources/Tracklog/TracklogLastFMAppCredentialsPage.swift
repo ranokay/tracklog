@@ -34,18 +34,13 @@ struct TracklogLastFMAppCredentialsPage: View {
         state.connections.filter { $0.kind == .lastFM }.count
     }
 
-    /// Only offer removal when there is a built-in pair to fall back to.
-    private var canRemoveOverride: Bool {
-        state.lastFMOverridePresent && state.lastFMCompiledCredentialsPresent
-    }
-
     private var overrideSavedText: String {
         if state.lastFMCompiledCredentialsPresent {
             return "Enter both values again to replace it, or remove it to go back to the "
                 + "built-in pair."
         }
-        return "Enter both values again to replace it. There is no built-in pair to fall back "
-            + "to, so keep a working pair saved."
+        return "Enter both values again to replace it, or remove it. Removing leaves Last.fm "
+            + "without app credentials until you save another pair."
     }
 
     var body: some View {
@@ -139,7 +134,7 @@ struct TracklogLastFMAppCredentialsPage: View {
 
                 DropletControlRow(title: "Save") {
                     HStack(spacing: DroppySpacing.sm) {
-                        if canRemoveOverride {
+                        if state.lastFMOverridePresent {
                             Button("Remove override") {
                                 remove()
                             }

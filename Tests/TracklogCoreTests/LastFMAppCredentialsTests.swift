@@ -152,6 +152,25 @@ struct LastFMAppCredentialsTests {
         #expect(!published.contains("secret-leak"))
     }
 
+    @Test func removingTheOnlyPairReturnsToTheRemedyAndClearsTheSlot() async throws {
+        let harness = try await makeHarness(
+            transport: ScriptedTransport([lastFMTokenResponse()]),
+            compiled: LastFMAppCredentials(apiKey: "", sharedSecret: ""),
+        )
+        try await harness.runtime.saveLastFMAppCredentialOverride(
+            apiKey: "only-key",
+            sharedSecret: "only-secret",
+        )
+        #expect(harness.state.lastFMOverridePresent)
+        #expect(!harness.state.lastFMNeedsAppCredentialRemedy)
+
+        try await harness.runtime.removeLastFMAppCredentialOverride()
+
+        #expect(!harness.state.lastFMOverridePresent)
+        #expect(harness.state.lastFMNeedsAppCredentialRemedy)
+        #expect(try await harness.credentials.appCredential() == nil)
+    }
+
     @Test func aStoredOverrideSignsRequestsAfterLaunch() async throws {
         let credentials = MemoryCredentialStore()
         let override = try #require(
