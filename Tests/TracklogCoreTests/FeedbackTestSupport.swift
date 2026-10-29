@@ -34,6 +34,7 @@ func makeFeedbackRuntime(
 actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore, DeliveryStore {
     private let base: SQLiteListenStore
     private var holdNextRead = false
+    private var failNextRead = false
     private var reading = false
     private var held: [CheckedContinuation<Void, Never>] = []
 
@@ -43,6 +44,10 @@ actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore, Deli
 
     func holdNextFeedbackRead() {
         holdNextRead = true
+    }
+
+    func failNextFeedbackRead() {
+        failNextRead = true
     }
 
     func waitUntilReading() async {
@@ -60,6 +65,11 @@ actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore, Deli
     }
 
     func feedback(for identities: [String]) async throws -> [String: TrackFeedback] {
+        let shouldFail = failNextRead
+        failNextRead = false
+        if shouldFail {
+            throw DatabaseError.unavailable("simulated feedback read failure")
+        }
         let shouldHold = holdNextRead
         holdNextRead = false
         let loaded = try await base.feedback(for: identities)

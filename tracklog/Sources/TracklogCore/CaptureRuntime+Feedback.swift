@@ -99,8 +99,9 @@ public extension CaptureRuntime {
         let track = listen.processedTrack
         let identity = listen.processed.identity
         await enqueueFeedback { [weak self] generation in
-            guard let self else { return }
-            let action = await loveAction(for: identity)
+            guard let self,
+                  let action = await loveAction(for: identity, generation: generation)
+            else { return }
             await applyFeedback(
                 action,
                 track: track,
@@ -117,8 +118,9 @@ public extension CaptureRuntime {
         let track = sample.track
         let identity = ListenMetadata(track).identity
         await enqueueFeedback { [weak self] generation in
-            guard let self else { return }
-            let action = await loveAction(for: identity)
+            guard let self,
+                  let action = await loveAction(for: identity, generation: generation)
+            else { return }
             await applyFeedback(
                 action,
                 track: track,
@@ -181,13 +183,31 @@ private extension CaptureRuntime {
     }
 
     /// The latest durable state for an identity that has not been read yet.
-    /// This is an action-path read, never part of capture, so a held initial
-    /// read cannot make a toggle send love again for an already-loved track.
-    func loveAction(for identity: String) async -> FeedbackAction {
-        if !feedbackLoadedIdentities.contains(identity), let feedbackStore,
-           let loaded = try? await feedbackStore.feedback(for: [identity]) {
+    /// This is an action-path read, never part of capture. A read that outlives
+    /// its activation or is overtaken by a newer identity write is discarded,
+    /// and a required read failure aborts the toggle rather than guessing.
+    func loveAction(for identity: String, generation: Int) async -> FeedbackAction? {
+        guard started, startGeneration == generation, !Task.isCancelled else { return nil }
+        if feedbackLoadedIdentities.contains(identity) {
+            return state.feedback(for: identity)?.score == .loved ? .unlove : .love
+        }
+        guard let feedbackStore else { return nil }
+
+        let revision = feedbackWriteRevisions[identity, default: 0]
+        do {
+            let loaded = try await feedbackStore.feedback(for: [identity])
+            guard started,
+                  startGeneration == generation,
+                  !Task.isCancelled,
+                  feedbackWriteRevisions[identity, default: 0] == revision
+            else { return nil }
             state.feedbackByTrack[identity] = loaded[identity]
             feedbackLoadedIdentities.insert(identity)
+            clearFeedbackFailure()
+        } catch {
+            guard started, startGeneration == generation, !Task.isCancelled else { return nil }
+            recordFeedbackFailure(error)
+            return nil
         }
         return state.feedback(for: identity)?.score == .loved ? .unlove : .love
     }

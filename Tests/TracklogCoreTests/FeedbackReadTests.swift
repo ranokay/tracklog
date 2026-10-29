@@ -108,4 +108,46 @@ struct FeedbackReadTests: CaptureTestHelpers {
         #expect(runtime.state.feedback(for: first.processed.identity)?.score == .loved)
         #expect(runtime.state.feedback(for: second.processed.identity)?.score == .loved)
     }
+
+    @Test func aFailedActionReadAbortsTheToggleAndRetriesLater() async throws {
+        let database = try TemporaryDatabase()
+        let sqlite = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let clock = FakeClock(base)
+        let probe = HUDProbe()
+        let store = SuspendingFeedbackStore(sqlite)
+        let brainz = makeFeedbackAdapter(kind: .listenBrainz)
+        _ = try await saveHUDConnection(
+            sqlite,
+            credentials: credentials,
+            kind: .listenBrainz,
+            base: base,
+        )
+        let runtime = makeFeedbackRuntime(
+            store: store,
+            clock: clock,
+            probe: probe,
+            adapters: [brainz],
+            credentials: credentials,
+        )
+        await runtime.start()
+        let listen = try await insertHistoryListen(sqlite, base: base)
+        let identity = listen.processed.identity
+        try await sqlite.setFeedback(.loved, for: identity, at: base)
+
+        await store.failNextFeedbackRead()
+        await runtime.toggleLove(for: listen)
+
+        #expect(await brainz.feedback.isEmpty)
+        #expect(runtime.state.feedback(for: identity) == nil)
+        #expect(runtime.state.failure?.stage == .feedback)
+        #expect(try await sqlite.feedback(for: [identity])[identity]?.score == .loved)
+
+        await runtime.toggleLove(for: listen)
+
+        let feedback = await brainz.feedback
+        #expect(feedback.map(\.action) == [.unlove])
+        #expect(runtime.state.feedback(for: identity) == nil)
+        #expect(runtime.state.failure == nil)
+    }
 }
