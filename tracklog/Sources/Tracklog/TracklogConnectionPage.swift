@@ -33,8 +33,9 @@ struct TracklogConnectionPage: View {
                         }
                         DropletStackedRow(title: "Endpoint") {
                             Text(connection.endpoint.description)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                                 .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                         DropletToggleRow(
                             title: "Enabled",

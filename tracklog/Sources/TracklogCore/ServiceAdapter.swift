@@ -138,7 +138,18 @@ public protocol ServiceAdapter: Sendable {
     var kind: ServiceKind { get }
     var capabilities: ServiceCapabilities { get }
     /// Checks a credential with the service and returns the identity it names.
-    func validate(_ credential: String) async throws -> ServiceIdentity
+    /// `endpoint` is the root the caller is linking: a GNU FM server reports
+    /// its own accounts, while a service whose root is fixed at construction
+    /// ignores it.
+    func validate(_ credential: String, endpoint: ServiceEndpoint) async throws -> ServiceIdentity
+}
+
+public extension ServiceAdapter {
+    /// Validates against the kind's default root, for a caller that holds no
+    /// chosen endpoint.
+    func validate(_ credential: String) async throws -> ServiceIdentity {
+        try await validate(credential, endpoint: kind.defaultEndpoint)
+    }
 }
 
 /// The delivery half of a service adapter. A thrown failure backs off the

@@ -27,7 +27,7 @@ public struct ListenBrainzAdapter: DeliveryAdapter {
         self.userAgent = userAgent
     }
 
-    public func validate(_ credential: String) async throws -> ServiceIdentity {
+    public func validate(_ credential: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         let token = credential.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
         guard let url = URL(string: "\(endpoint.description)/1/validate-token") else {

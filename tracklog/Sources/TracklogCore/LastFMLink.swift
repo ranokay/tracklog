@@ -25,6 +25,9 @@ public final class LastFMLinkModel: ObservableObject {
 
     private let client: any LastFMLinkClient
     private let clock: any Clock
+    /// The name the inline messages use. Libre.fm shares this model, and a
+    /// listener must not read "Last.fm" on a GNU FM server's page.
+    private let serviceName: String
     private let pollInterval: TimeInterval
     private let openAuthorization: @MainActor (URL) -> Bool
     private let complete: @MainActor (LastFMSession) async throws -> Connection
@@ -39,12 +42,14 @@ public final class LastFMLinkModel: ObservableObject {
     /// regular cadence, set by a rate-limited session check.
     private var nextPollDelay: TimeInterval?
 
-    private static let browserOpenFailureNotice =
-        "The browser could not be opened. Choose Open Last.fm again to retry."
+    private var browserOpenFailureNotice: String {
+        "The browser could not be opened. Choose Open \(serviceName) again to retry."
+    }
 
     public init(
         client: any LastFMLinkClient,
         clock: any Clock,
+        serviceName: String = "Last.fm",
         pollInterval: TimeInterval = 3,
         openAuthorization: @escaping @MainActor (URL) -> Bool = { _ in true },
         complete: @escaping @MainActor (LastFMSession) async throws -> Connection,
@@ -52,6 +57,7 @@ public final class LastFMLinkModel: ObservableObject {
     ) {
         self.client = client
         self.clock = clock
+        self.serviceName = serviceName
         self.pollInterval = max(1, pollInterval)
         self.openAuthorization = openAuthorization
         self.complete = complete
@@ -98,7 +104,7 @@ public final class LastFMLinkModel: ObservableObject {
     public func openAuthorizationPage() {
         guard case let .waiting(challenge) = phase else { return }
         if !openAuthorization(challenge.authorizationURL) {
-            notice = Self.browserOpenFailureNotice
+            notice = browserOpenFailureNotice
         }
     }
 
@@ -125,7 +131,7 @@ public final class LastFMLinkModel: ObservableObject {
             guard isCurrent(generation) else { return }
             phase = .waiting(challenge)
             if !openAuthorization(challenge.authorizationURL) {
-                notice = Self.browserOpenFailureNotice
+                notice = browserOpenFailureNotice
             }
             await poll(challenge, generation: generation)
         } catch {
@@ -181,7 +187,7 @@ public final class LastFMLinkModel: ObservableObject {
         }
         if lastFM.isUnauthorizedToken {
             if manual {
-                notice = "Last.fm has not confirmed the sign-in yet. "
+                notice = "\(serviceName) has not confirmed the sign-in yet. "
                     + "Authorize Tracklog in your browser, then choose Check again."
             }
             return
@@ -190,12 +196,12 @@ public final class LastFMLinkModel: ObservableObject {
         case .retryable:
             nextPollDelay = nil
             if manual {
-                notice = "Last.fm is temporarily unavailable. Tracklog will keep checking."
+                notice = "\(serviceName) is temporarily unavailable. Tracklog will keep checking."
             }
         case let .rateLimited(retryAfter):
             nextPollDelay = max(pollInterval, retryAfter ?? pollInterval)
             if manual {
-                notice = "Last.fm is rate limiting requests. Tracklog will keep checking."
+                notice = "\(serviceName) is rate limiting requests. Tracklog will keep checking."
             }
         default:
             fail(error, generation: generation)
@@ -209,7 +215,7 @@ public final class LastFMLinkModel: ObservableObject {
             onAppCredentialProblem?(problem)
         }
         if let lastFM = error as? LastFMError {
-            phase = .failed(lastFM.serviceFailure.errorDescription ?? "Last.fm sign-in failed.")
+            phase = .failed(lastFM.serviceFailure.errorDescription ?? "\(serviceName) sign-in failed.")
         } else {
             phase = .failed(error.localizedDescription)
         }

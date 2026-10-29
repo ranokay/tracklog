@@ -16,34 +16,6 @@ public enum ConnectionEvent: Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-/// Serializes operations that span several awaits. A load must never observe
-/// or repair a link that has saved its row but not its credential or cursor.
-@MainActor
-private final class ConnectionOperationGate {
-    private var isLocked = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    var hasHolder: Bool {
-        isLocked
-    }
-
-    func acquire() async {
-        guard isLocked else {
-            isLocked = true
-            return
-        }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    func release() {
-        if waiters.isEmpty {
-            isLocked = false
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
 /// The link and connection-choice flows over the connection, credential and
 /// adapter ports. A link validates first, so a rejected token cannot disturb
 /// an existing connection.
@@ -133,158 +105,6 @@ public final class ConnectionService {
             return
         }
         currentID = persistedCurrent
-    }
-
-    /// Validates a credential, stores the connection and its credential, and
-    /// makes the new connection current. A credential that cannot be saved
-    /// removes the half-made connection.
-    @discardableResult
-    public func link(kind: ServiceKind, credential: String) async throws -> Connection {
-        try await withGate {
-            try await linkConnection(kind: kind, credential: credential)
-        }
-    }
-
-    /// Stores a credential whose identity the caller already verified, such as
-    /// the session key Last.fm returns from `auth.getSession`. The adapter must
-    /// still exist for the kind; this only skips the duplicate validation call.
-    @discardableResult
-    public func linkVerified(
-        kind: ServiceKind,
-        credential: String,
-        identity: ServiceIdentity,
-    ) async throws -> Connection {
-        try await withGate {
-            try await linkConnection(kind: kind, credential: credential, identity: identity)
-        }
-    }
-
-    private func linkConnection(
-        kind: ServiceKind,
-        credential rawCredential: String,
-        identity verifiedIdentity: ServiceIdentity? = nil,
-    ) async throws -> Connection {
-        let credential = rawCredential.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !credential.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
-        guard let adapter = adapters[kind] else {
-            throw ConnectionError.unsupportedService(kind)
-        }
-
-        let identity: ServiceIdentity
-        if let verifiedIdentity {
-            identity = verifiedIdentity
-        } else {
-            do {
-                identity = try await adapter.validate(credential)
-            } catch let failure as ServiceFailure {
-                log(.linkFailed(kind: kind, reason: connectionFailureReason(failure)))
-                throw failure
-            } catch {
-                log(.linkFailed(kind: kind, reason: "unreadable response"))
-                throw ServiceFailure.retryable
-            }
-        }
-
-        let endpoint = kind.defaultEndpoint
-        if connections.contains(where: { $0.kind == kind && $0.endpoint == endpoint }) {
-            let failure = ConnectionError.duplicateEndpoint(kind: kind, endpoint: endpoint)
-            log(.linkFailed(kind: kind, reason: "endpoint already connected"))
-            throw failure
-        }
-
-        // A page that leaves while the token is being exchanged cancels its
-        // task. Do not start a link the caller no longer wants.
-        try Task.checkCancellation()
-
-        let now = clock.now
-        let candidate = Connection(
-            kind: kind,
-            endpoint: endpoint,
-            identity: identity.name,
-            displayName: identity.displayName,
-            isEnabled: true,
-            authState: .signedIn,
-            createdAt: now,
-            lastUsedAt: now,
-        )
-        let stored: Connection
-        do {
-            stored = try await store.save(candidate)
-        } catch {
-            log(.linkFailed(kind: kind, reason: "connection storage failed"))
-            throw error
-        }
-        guard let id = stored.id else {
-            throw ConnectionError.unavailable
-        }
-
-        try await persistCredentialAndCursor(
-            credential: credential,
-            connection: stored,
-            id: id,
-            kind: kind,
-        )
-        // Cancellation may have landed after the row was written. Remove the
-        // half-made link rather than keeping a connection the page abandoned.
-        if Task.isCancelled {
-            try? await credentials.deleteCredential(forConnection: id)
-            try? await store.deleteConnection(id: id)
-            throw CancellationError()
-        }
-        currentID = id
-        connections.append(stored)
-        log(.linked(kind: kind, identity: identity.name))
-        return stored
-    }
-
-    /// Saves the credential and sets the cursor as one link. If either step
-    /// fails, the half-made connection is removed or kept visible for repair.
-    private func persistCredentialAndCursor(
-        credential: String,
-        connection: Connection,
-        id: Int64,
-        kind: ServiceKind,
-    ) async throws {
-        do {
-            try await credentials.saveCredential(credential, forConnection: id)
-        } catch {
-            do {
-                try await store.deleteConnection(id: id)
-            } catch {
-                // The row has no usable credential. load() repairs it on the
-                // next activation so it cannot block a relink.
-            }
-            log(.linkFailed(kind: kind, reason: "credential storage failed"))
-            throw ConnectionError.credentialStorage
-        }
-
-        // A connection that cannot be made current is not a usable link:
-        // remove the half-made row and its credential, then report failure.
-        do {
-            try await store.setCurrentConnectionID(id)
-        } catch {
-            var kept = false
-            do {
-                try await credentials.deleteCredential(forConnection: id)
-            } catch {
-                // The credential is still there, so the row is usable and
-                // stays discoverable for a later cursor choice.
-                kept = true
-            }
-            if !kept {
-                do {
-                    try await store.deleteConnection(id: id)
-                } catch {
-                    // The credential is already gone; load() repairs the
-                    // credentialless row on the next activation.
-                }
-            }
-            if kept {
-                connections.append(connection)
-            }
-            log(.linkFailed(kind: kind, reason: "current connection could not be saved"))
-            throw ConnectionError.currentCursor
-        }
     }
 
     public func setEnabled(id: Int64, enabled: Bool) async throws {
@@ -393,5 +213,173 @@ private func connectionFailureReason(_ failure: ServiceFailure) -> String {
     case .rateLimited: "rate limited"
     case .retryable: "retryable failure"
     case .rejected: "rejected"
+    }
+}
+
+// MARK: - Link
+
+extension ConnectionService {
+    /// Validates a credential, stores the connection and its credential, and
+    /// makes the new connection current. A credential that cannot be saved
+    /// removes the half-made connection. `endpoint` is the root a
+    /// configurable service was linked against; `nil` uses the kind's default.
+    @discardableResult
+    public func link(
+        kind: ServiceKind,
+        credential: String,
+        endpoint: ServiceEndpoint? = nil,
+    ) async throws -> Connection {
+        try await withGate {
+            try await linkConnection(kind: kind, credential: credential, endpoint: endpoint)
+        }
+    }
+
+    /// Stores a credential whose identity the caller already verified, such as
+    /// the session key Last.fm returns from `auth.getSession`. The adapter must
+    /// still exist for the kind; this only skips the duplicate validation call.
+    @discardableResult
+    public func linkVerified(
+        kind: ServiceKind,
+        credential: String,
+        identity: ServiceIdentity,
+        endpoint: ServiceEndpoint? = nil,
+    ) async throws -> Connection {
+        try await withGate {
+            try await linkConnection(
+                kind: kind,
+                credential: credential,
+                endpoint: endpoint,
+                identity: identity,
+            )
+        }
+    }
+
+    private func linkConnection(
+        kind: ServiceKind,
+        credential rawCredential: String,
+        endpoint: ServiceEndpoint?,
+        identity verifiedIdentity: ServiceIdentity? = nil,
+    ) async throws -> Connection {
+        let credential = rawCredential.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !credential.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
+        guard let adapter = adapters[kind] else {
+            throw ConnectionError.unsupportedService(kind)
+        }
+        let endpoint = endpoint ?? kind.defaultEndpoint
+
+        let identity: ServiceIdentity
+        if let verifiedIdentity {
+            identity = verifiedIdentity
+        } else {
+            do {
+                identity = try await adapter.validate(credential, endpoint: endpoint)
+            } catch let failure as ServiceFailure {
+                log(.linkFailed(kind: kind, reason: connectionFailureReason(failure)))
+                throw failure
+            } catch {
+                log(.linkFailed(kind: kind, reason: "unreadable response"))
+                throw ServiceFailure.retryable
+            }
+        }
+
+        if connections.contains(where: { $0.kind == kind && $0.endpoint == endpoint }) {
+            let failure = ConnectionError.duplicateEndpoint(kind: kind, endpoint: endpoint)
+            log(.linkFailed(kind: kind, reason: "endpoint already connected"))
+            throw failure
+        }
+
+        // A page that leaves while the token is being exchanged cancels its
+        // task. Do not start a link the caller no longer wants.
+        try Task.checkCancellation()
+
+        let now = clock.now
+        let candidate = Connection(
+            kind: kind,
+            endpoint: endpoint,
+            identity: identity.name,
+            displayName: identity.displayName,
+            isEnabled: true,
+            authState: .signedIn,
+            createdAt: now,
+            lastUsedAt: now,
+        )
+        let stored: Connection
+        do {
+            stored = try await store.save(candidate)
+        } catch {
+            log(.linkFailed(kind: kind, reason: "connection storage failed"))
+            throw error
+        }
+        guard let id = stored.id else {
+            throw ConnectionError.unavailable
+        }
+
+        try await persistCredentialAndCursor(
+            credential: credential,
+            connection: stored,
+            id: id,
+            kind: kind,
+        )
+        // Cancellation may have landed after the row was written. Remove the
+        // half-made link rather than keeping a connection the page abandoned.
+        if Task.isCancelled {
+            try? await credentials.deleteCredential(forConnection: id)
+            try? await store.deleteConnection(id: id)
+            throw CancellationError()
+        }
+        currentID = id
+        connections.append(stored)
+        log(.linked(kind: kind, identity: identity.name))
+        return stored
+    }
+
+    /// Saves the credential and sets the cursor as one link. If either step
+    /// fails, the half-made connection is removed or kept visible for repair.
+    private func persistCredentialAndCursor(
+        credential: String,
+        connection: Connection,
+        id: Int64,
+        kind: ServiceKind,
+    ) async throws {
+        do {
+            try await credentials.saveCredential(credential, forConnection: id)
+        } catch {
+            do {
+                try await store.deleteConnection(id: id)
+            } catch {
+                // The row has no usable credential. load() repairs it on the
+                // next activation so it cannot block a relink.
+            }
+            log(.linkFailed(kind: kind, reason: "credential storage failed"))
+            throw ConnectionError.credentialStorage
+        }
+
+        // A connection that cannot be made current is not a usable link:
+        // remove the half-made row and its credential, then report failure.
+        do {
+            try await store.setCurrentConnectionID(id)
+        } catch {
+            var kept = false
+            do {
+                try await credentials.deleteCredential(forConnection: id)
+            } catch {
+                // The credential is still there, so the row is usable and
+                // stays discoverable for a later cursor choice.
+                kept = true
+            }
+            if !kept {
+                do {
+                    try await store.deleteConnection(id: id)
+                } catch {
+                    // The credential is already gone; load() repairs the
+                    // credentialless row on the next activation.
+                }
+            }
+            if kept {
+                connections.append(connection)
+            }
+            log(.linkFailed(kind: kind, reason: "current connection could not be saved"))
+            throw ConnectionError.currentCursor
+        }
     }
 }

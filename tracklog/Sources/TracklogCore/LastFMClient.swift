@@ -24,7 +24,7 @@ public struct LastFMSession: Equatable, Sendable {
     }
 }
 
-/// What Last.fm said about one item in a scrobble batch.
+/// What a Last.fm-protocol service said about one item in a scrobble batch.
 public enum LastFMScrobbleResult: Equatable, Sendable {
     case accepted
     case ignored(code: Int)
@@ -41,28 +41,32 @@ public protocol LastFMLinkClient: Sendable {
 /// endpoint; the signature covers every parameter except `format` and
 /// `callback`.
 public struct LastFMClient: LastFMLinkClient {
-    /// The protocol's hard limit for one `track.scrobble` request.
-    public static let maximumScrobblesPerBatch = 50
+    /// Last.fm's hard limit for one `track.scrobble` request. GNU FM's limit
+    /// comes from ``LastFMProtocolDialect/maximumScrobblesPerBatch``.
+    public static let maximumScrobblesPerBatch = LastFMProtocolDialect.lastFM.maximumScrobblesPerBatch
 
     public let endpoint: ServiceEndpoint
+    public let dialect: LastFMProtocolDialect
     public let userAgent: String
 
     private let transport: any HTTPTransport
     private let credentialsProvider: any LastFMAppCredentialsProviding
 
     /// `endpoint` is fixed to ``ServiceEndpoint/lastFM`` in production. It
-    /// stays injectable for fixtures and for the shared Last.fm-protocol
-    /// dialect Libre.fm will use.
+    /// stays injectable for fixtures and for the GNU FM dialect Libre.fm uses,
+    /// whose root the listener chooses at link time.
     public init(
         transport: any HTTPTransport,
         appCredentials: LastFMAppCredentials,
         endpoint: ServiceEndpoint = .lastFM,
+        dialect: LastFMProtocolDialect = .lastFM,
         userAgent: String = TracklogHTTP.userAgent,
     ) {
         self.init(
             transport: transport,
             appCredentials: FixedLastFMAppCredentials(appCredentials),
             endpoint: endpoint,
+            dialect: dialect,
             userAgent: userAgent,
         )
     }
@@ -73,11 +77,13 @@ public struct LastFMClient: LastFMLinkClient {
         transport: any HTTPTransport,
         appCredentials provider: any LastFMAppCredentialsProviding,
         endpoint: ServiceEndpoint = .lastFM,
+        dialect: LastFMProtocolDialect = .lastFM,
         userAgent: String = TracklogHTTP.userAgent,
     ) {
         self.transport = transport
         credentialsProvider = provider
         self.endpoint = endpoint
+        self.dialect = dialect
         self.userAgent = userAgent
     }
 
@@ -146,7 +152,7 @@ public struct LastFMClient: LastFMLinkClient {
         )
     }
 
-    /// Sends `track.scrobble` for one to ``maximumScrobblesPerBatch`` listens,
+    /// Sends `track.scrobble` for one to the dialect's batch limit listens,
     /// oldest first, in one form post. The response is read per item; a
     /// missing, unreadable or count-mismatched item throws a retryable failure
     /// so no scrobble is marked delivered on a partial answer.
@@ -154,10 +160,11 @@ public struct LastFMClient: LastFMLinkClient {
         _ listens: [Listen],
         sessionKey: String,
     ) async throws -> [LastFMScrobbleResult] {
-        guard !listens.isEmpty, listens.count <= Self.maximumScrobblesPerBatch else {
+        let limit = dialect.maximumScrobblesPerBatch
+        guard !listens.isEmpty, listens.count <= limit else {
             throw LastFMError.service(
                 code: 6,
-                message: "A batch must contain 1 to \(Self.maximumScrobblesPerBatch) scrobbles.",
+                message: "A batch must contain 1 to \(limit) scrobbles.",
             )
         }
         var parameters: [String: String] = [:]
@@ -198,15 +205,7 @@ public struct LastFMClient: LastFMLinkClient {
     }
 
     private func authorizationURL(for token: String, apiKey: String) -> URL? {
-        var components = URLComponents(string: LastFMWebEndpoint.authorizationRoot)
-        components?.queryItems = [
-            URLQueryItem(
-                name: "api_key",
-                value: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
-            ),
-            URLQueryItem(name: "token", value: token),
-        ]
-        return components?.url
+        dialect.authorizationURL(endpoint: endpoint, token: token, apiKey: apiKey)
     }
 
     func identityParameters(title: String, artist: String) throws -> [String: String] {
@@ -361,11 +360,13 @@ extension LastFMClient {
         sessionKey: String?,
         credentials: LastFMAppCredentials,
     ) throws -> HTTPRequest {
-        guard credentials.isConfigured else {
-            throw LastFMError.missingAppCredentials
-        }
         let appKey = credentials.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = credentials.sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A signed dialect needs both halves; an unsigned one is keyed by its
+        // client key alone and never issues a secret.
+        guard !appKey.isEmpty, !dialect.requiresSharedSecret || !secret.isEmpty else {
+            throw LastFMError.missingAppCredentials
+        }
 
         var form = parameters
         form["method"] = method
@@ -376,7 +377,9 @@ extension LastFMClient {
             form["sk"] = key
         }
         form["format"] = "json"
-        form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
+        if dialect.signsRequests {
+            form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
+        }
 
         guard let url = URL(string: "\(endpoint.description)/2.0/") else {
             throw LastFMError.malformedResponse

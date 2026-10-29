@@ -4,8 +4,8 @@ import TracklogCore
 
 // MARK: - Add service
 
-/// Add service: the launch services, with Last.fm's browser link and
-/// ListenBrainz's token link.
+/// Add service: the launch services — Last.fm and Libre.fm through the
+/// browser, ListenBrainz through a token.
 struct TracklogAddServicePage: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -101,6 +101,8 @@ struct TracklogAddServicePage: View {
                 }
             }
 
+            TracklogLibreFMServiceSection(droplet: droplet, state: state)
+
             DropletSettingsSection {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("ListenBrainz")
@@ -181,7 +183,7 @@ struct TracklogAddServicePage: View {
                 "Not connected"
             }
         case .libreFM:
-            "Later update"
+            state.connection(kind: .libreFM)?.status.displayName ?? "Not connected"
         }
     }
 

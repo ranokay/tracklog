@@ -70,7 +70,7 @@ struct StubAdapter: ServiceAdapter {
     let identity: ServiceIdentity
     let capabilities = ServiceCapabilities()
 
-    func validate(_: String) async throws -> ServiceIdentity {
+    func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         identity
     }
 }
