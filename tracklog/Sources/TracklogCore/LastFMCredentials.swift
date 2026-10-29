@@ -1,11 +1,13 @@
 import Foundation
 
-/// The Last.fm application credentials Tracklog compiles in.
+/// One Last.fm application pair: an API key with the shared secret that signs
+/// its requests.
 ///
-/// The pair belongs to the project's Last.fm API account and is public by
-/// design: the protocol needs the shared secret in the client to sign calls.
-/// The provisioning file at `~/.config/tracklog/lastfm.json` is a development
-/// source only; nothing reads it at runtime.
+/// ``compiled`` is Tracklog's own registered application. It is public by
+/// design: the protocol needs the shared secret in the client to sign calls. A
+/// listener's Keychain override uses the same type. The provisioning file at
+/// `~/.config/tracklog/lastfm.json` is a development source only; nothing reads
+/// it at runtime.
 public struct LastFMAppCredentials: Equatable, Sendable, CustomStringConvertible {
     public let apiKey: String
     public let sharedSecret: String

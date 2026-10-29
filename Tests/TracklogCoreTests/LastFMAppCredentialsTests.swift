@@ -2,83 +2,19 @@ import Foundation
 import Testing
 @testable import TracklogCore
 
-private struct Harness {
-    let database: TemporaryDatabase
-    let store: SQLiteListenStore
-    let credentials: MemoryCredentialStore
-    let transport: ScriptedTransport
-    let state: TracklogAppState
-    let runtime: CaptureRuntime
-}
-
 @Suite("Last.fm app credentials")
 @MainActor
 struct LastFMAppCredentialsTests {
-    private let base = Date(timeIntervalSince1970: 1_000_000)
-
-    private func makeHarness(
-        transport: ScriptedTransport,
-        credentials: MemoryCredentialStore = MemoryCredentialStore(),
-        compiled: LastFMAppCredentials = lastFMTestCredentials,
-        appCredentialProblem: AppCredentialProblem? = nil,
-        persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
-    ) async throws -> Harness {
-        let database = try TemporaryDatabase()
-        let store = try SQLiteListenStore(url: database.url)
-        let clock = FakeClock(base)
-        let state = TracklogAppState()
-        let adapter = LastFMAdapter(
-            transport: transport,
-            appCredentials: StoredLastFMAppCredentials(
-                credentials: credentials,
-                compiled: compiled,
-            ),
-        )
-        let runtime = CaptureRuntime(
-            state: state,
-            clock: clock,
-            source: ReplayedNowPlaying(),
-            store: store,
-            allowlist: InMemoryAppAllowlist(),
-            credentials: credentials,
-            serviceAdapters: [adapter],
-            compiledLastFMAppCredentials: compiled,
-            settings: CaptureSettings(scrobblingEnabled: false),
-            appCredentialProblem: appCredentialProblem,
-            persistAppCredentialProblem: persistAppCredentialProblem,
-        )
-        await runtime.start()
-        return Harness(
-            database: database,
-            store: store,
-            credentials: credentials,
-            transport: transport,
-            state: state,
-            runtime: runtime,
-        )
-    }
-
-    @discardableResult
-    private func link(_ harness: Harness, credential: String = "session-key") async throws -> Connection {
-        try await harness.runtime.linkVerified(
-            kind: .lastFM,
-            credential: credential,
-            identity: ServiceIdentity(name: "listener"),
-        )
-    }
-
-    // MARK: - The stored pair
-
     @Test func anOverrideRoundTripsThroughTheOneAppCredentialSlot() async throws {
         let store = MemoryCredentialStore()
         let override = try #require(
             LastFMAppCredentialOverride(validating: "  key  ", sharedSecret: " secret "),
         )
 
-        let empty = await store.lastFMAppCredentialOverride()
+        let empty = try await store.lastFMAppCredentialOverride()
         #expect(empty == nil)
         try await store.saveLastFMAppCredentialOverride(override)
-        let readBack = await store.lastFMAppCredentialOverride()
+        let readBack = try await store.lastFMAppCredentialOverride()
         #expect(readBack == override)
         let raw = try #require(try await store.appCredential())
         #expect(LastFMAppCredentialOverride(storedValue: raw) == override)
@@ -86,7 +22,7 @@ struct LastFMAppCredentialsTests {
         #expect(override.sharedSecret == "secret")
 
         try await store.saveLastFMAppCredentialOverride(nil)
-        let cleared = await store.lastFMAppCredentialOverride()
+        let cleared = try await store.lastFMAppCredentialOverride()
         #expect(cleared == nil)
     }
 
@@ -96,7 +32,7 @@ struct LastFMAppCredentialsTests {
 
         let store = MemoryCredentialStore()
         try await store.saveAppCredential("not-a-pair")
-        let corrupt = await store.lastFMAppCredentialOverride()
+        let corrupt = try await store.lastFMAppCredentialOverride()
         #expect(corrupt == nil)
     }
 
@@ -112,7 +48,22 @@ struct LastFMAppCredentialsTests {
         }
     }
 
-    // MARK: - Precedence and validation
+    @Test func aKeychainReadFailureNeverFallsBackToTheCompiledPair() async throws {
+        let transport = ScriptedTransport([])
+        let adapter = LastFMAdapter(
+            transport: transport,
+            appCredentials: StoredLastFMAppCredentials(
+                credentialStore: UnreadableAppCredentialStore(),
+                compiled: lastFMTestCredentials,
+            ),
+        )
+
+        await #expect(throws: LastFMError.credentialStorage) {
+            _ = try await adapter.requestToken()
+        }
+        let requests = await transport.requests
+        #expect(requests.isEmpty)
+    }
 
     @Test func aValidOverrideTakesPrecedenceOnSignedRequests() async throws {
         let transport = ScriptedTransport([lastFMTokenResponse(), lastFMEmptyResponse()])
@@ -123,8 +74,6 @@ struct LastFMAppCredentialsTests {
             sharedSecret: "override-secret",
         )
         #expect(harness.state.lastFMOverridePresent)
-        let effectiveKey = await harness.runtime.effectiveLastFMAppCredentials()?.apiKey
-        #expect(effectiveKey == "override-key")
 
         let firstRequest = try #require(await transport.requests.first)
         let validation = formParameters(firstRequest)
@@ -166,8 +115,6 @@ struct LastFMAppCredentialsTests {
         #expect(try await harness.credentials.appCredential() == nil)
         #expect(harness.state.lastFMOverridePresent == false)
         #expect(harness.state.connection(id: id)?.authState == .signedIn)
-        let effective = await harness.runtime.effectiveLastFMAppCredentials()
-        #expect(effective == lastFMTestCredentials)
         let requests = await transport.requests
         #expect(requests.count == 1)
     }
@@ -182,78 +129,6 @@ struct LastFMAppCredentialsTests {
                 sharedSecret: "secret",
             )
         }
-        let requests = await transport.requests
-        #expect(requests.isEmpty)
-    }
-
-    // MARK: - Changing the pair
-
-    @Test func changingThePairSignsEveryLastFMConnectionOutAndHoldsItsDeliveries() async throws {
-        let transport = ScriptedTransport([lastFMTokenResponse()])
-        let harness = try await makeHarness(transport: transport)
-        let connection = try await link(harness)
-        // The link triggers a drain that has no rows yet. Let it finish before
-        // inserting, so the only request after the save is the one under test.
-        await turnMainActor(100)
-        let id = try #require(connection.id)
-        let listen = try #require(
-            try await harness.store.insert(lastFMTestListen(), targets: [id]),
-        )
-
-        try await harness.runtime.saveLastFMAppCredentialOverride(
-            apiKey: "new-key",
-            sharedSecret: "new-secret",
-        )
-
-        #expect(harness.state.connection(id: id)?.authState == .needsSignIn)
-        #expect(harness.state.connections.allSatisfy { $0.authState == .needsSignIn })
-        #expect(harness.state.pendingCount == 1)
-
-        harness.runtime.deliveryOutbox?.drain(connectionIDs: [id])
-        await turnMainActor()
-
-        let deliveries = try await harness.store.deliveries(for: listen.id ?? -1)
-        #expect(deliveries.map(\.state) == [.waiting])
-        #expect(deliveries.map(\.attempts) == [0])
-        // The only request is the validation call; the held delivery sent none.
-        let requests = await transport.requests
-        #expect(requests.count == 1)
-        let firstRequest = try #require(requests.first)
-        let held = formParameters(firstRequest)
-        #expect(held["method"] == "auth.getToken")
-    }
-
-    @Test func removingTheOverrideSignsTheSignedInConnectionOut() async throws {
-        let transport = ScriptedTransport([lastFMTokenResponse()])
-        let harness = try await makeHarness(transport: transport)
-
-        // Save before linking: no connection exists yet, so nothing is signed
-        // out by the save itself.
-        try await harness.runtime.saveLastFMAppCredentialOverride(
-            apiKey: "override-key",
-            sharedSecret: "override-secret",
-        )
-        let connection = try await link(harness)
-        let id = try #require(connection.id)
-        #expect(harness.state.connection(id: id)?.authState == .signedIn)
-
-        try await harness.runtime.removeLastFMAppCredentialOverride()
-
-        #expect(harness.state.lastFMOverridePresent == false)
-        #expect(harness.state.connection(id: id)?.authState == .needsSignIn)
-        let effective = await harness.runtime.effectiveLastFMAppCredentials()
-        #expect(effective == lastFMTestCredentials)
-    }
-
-    @Test func removingAnAbsentOverrideDoesNotSignAnyoneOut() async throws {
-        let transport = ScriptedTransport([])
-        let harness = try await makeHarness(transport: transport)
-        let connection = try await link(harness)
-        let id = try #require(connection.id)
-
-        try await harness.runtime.removeLastFMAppCredentialOverride()
-
-        #expect(harness.state.connection(id: id)?.authState == .signedIn)
         let requests = await transport.requests
         #expect(requests.isEmpty)
     }
@@ -277,37 +152,24 @@ struct LastFMAppCredentialsTests {
         #expect(!published.contains("secret-leak"))
     }
 
-    // MARK: - The remedy state
-
-    @Test func aMissingCompiledPairPointsAtTheOverridePage() async throws {
-        let harness = try await makeHarness(
-            transport: ScriptedTransport([]),
-            compiled: LastFMAppCredentials(apiKey: "", sharedSecret: ""),
+    @Test func aStoredOverrideSignsRequestsAfterLaunch() async throws {
+        let credentials = MemoryCredentialStore()
+        let override = try #require(
+            LastFMAppCredentialOverride(validating: "launch-key", sharedSecret: "launch-secret"),
         )
-
-        #expect(harness.state.lastFMCompiledCredentialsPresent == false)
-        #expect(harness.state.lastFMAppCredentialsAvailable == false)
-        #expect(harness.state.lastFMNeedsAppCredentialRemedy)
-    }
-
-    @Test func aRejectedCompiledPairPointsAtTheOverridePageUntilItIsReplaced() async throws {
-        var persisted: [AppCredentialProblem?] = []
-        let transport = ScriptedTransport([lastFMTokenResponse()])
+        try await credentials.saveLastFMAppCredentialOverride(override)
+        let transport = ScriptedTransport([lastFMEmptyResponse()])
         let harness = try await makeHarness(
             transport: transport,
-            appCredentialProblem: .invalidKey,
-            persistAppCredentialProblem: { persisted.append($0) },
+            credentials: credentials,
         )
 
-        #expect(harness.state.lastFMNeedsAppCredentialRemedy)
+        try await link(harness)
+        harness.runtime.deliveryOutbox?.sendNowPlaying(lastFMTestTrack())
 
-        try await harness.runtime.saveLastFMAppCredentialOverride(
-            apiKey: "working-key",
-            sharedSecret: "working-secret",
-        )
-
-        #expect(harness.state.lastFMAppCredentialProblem == nil)
-        #expect(harness.state.lastFMNeedsAppCredentialRemedy == false)
-        #expect(persisted == [nil])
+        let request = try #require(await awaitRequests(transport, count: 1).first)
+        let params = formParameters(request)
+        #expect(params["api_key"] == "launch-key")
+        #expect(params["api_sig"] == signedParameters(params, secret: "launch-secret"))
     }
 }

@@ -7,6 +7,9 @@ public enum LastFMError: Error, Equatable, Sendable {
     case missingAppCredentials
     case missingSessionKey
     case transport
+    /// The credential store could not be read. This is not "no override", so
+    /// a signed call must not fall back to another pair.
+    case credentialStorage
     case http(statusCode: Int, retryAfter: TimeInterval?)
     case service(code: Int, message: String?)
     case malformedResponse
@@ -18,7 +21,7 @@ public enum LastFMError: Error, Equatable, Sendable {
             .appCredentialAuth(.missing)
         case .missingSessionKey:
             .auth
-        case .transport:
+        case .transport, .credentialStorage:
             .retryable
         case let .http(statusCode, retryAfter):
             switch statusCode {

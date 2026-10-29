@@ -56,38 +56,35 @@ public struct LastFMAppCredentialOverride: Equatable, Sendable, CustomStringConv
     }
 }
 
-/// Where the effective Last.fm pair comes from.
-public enum LastFMAppCredentialSource: Equatable, Sendable {
-    case compiled
-    case override
-}
-
 /// The effective Last.fm application pair at request time.
 public protocol LastFMAppCredentialsProviding: Sendable {
-    func appCredentials() async -> LastFMAppCredentials
+    func appCredentials() async throws -> LastFMAppCredentials
 }
 
 /// Resolves the Keychain override when the user saved one and falls back to
-/// the compiled pair. It reads the credential store per request so a change
-/// made on the app-credentials page takes effect without rebuilding adapters.
+/// the compiled pair only when no override is stored. A Keychain read failure
+/// is surfaced rather than mistaken for "no override", so a saved pair can
+/// never be silently replaced by the public compiled one. It reads the
+/// credential store per request, so a change made on the app-credentials page
+/// takes effect without rebuilding adapters.
 public struct StoredLastFMAppCredentials: LastFMAppCredentialsProviding {
-    public let credentials: any CredentialStore
+    public let credentialStore: any CredentialStore
     public let compiled: LastFMAppCredentials
 
     public init(
-        credentials: any CredentialStore,
+        credentialStore: any CredentialStore,
         compiled: LastFMAppCredentials = .compiled,
     ) {
-        self.credentials = credentials
+        self.credentialStore = credentialStore
         self.compiled = compiled
     }
 
-    public func appCredentials() async -> LastFMAppCredentials {
-        await override()?.credentials ?? compiled
+    public func appCredentials() async throws -> LastFMAppCredentials {
+        try await override()?.credentials ?? compiled
     }
 
-    public func override() async -> LastFMAppCredentialOverride? {
-        await credentials.lastFMAppCredentialOverride()
+    public func override() async throws -> LastFMAppCredentialOverride? {
+        try await credentialStore.lastFMAppCredentialOverride()
     }
 }
 
@@ -95,6 +92,7 @@ public struct StoredLastFMAppCredentials: LastFMAppCredentialsProviding {
 public enum LastFMAppCredentialError: Error, Equatable, Sendable, LocalizedError {
     case incomplete
     case storage
+    case invalidation
 
     public var errorDescription: String? {
         switch self {
@@ -102,19 +100,37 @@ public enum LastFMAppCredentialError: Error, Equatable, Sendable, LocalizedError
             "Enter both the Last.fm API key and shared secret."
         case .storage:
             "The Last.fm app credentials could not be saved in the Keychain."
+        case .invalidation:
+            "The credential change was saved, but Last.fm connections could not be recorded "
+                + "as needing sign-in. Try again."
         }
     }
 }
 
 public extension CredentialStore {
-    /// The saved override, when the one app-credential slot holds one.
-    func lastFMAppCredentialOverride() async -> LastFMAppCredentialOverride? {
-        guard let stored = try? await appCredential() else { return nil }
+    /// The saved override, when the one app-credential slot holds one. A
+    /// Keychain read failure throws: it is not the same as no override.
+    func lastFMAppCredentialOverride() async throws -> LastFMAppCredentialOverride? {
+        guard let stored = try await appCredential() else { return nil }
         return LastFMAppCredentialOverride(storedValue: stored)
     }
 
     /// Writes or clears the one app-credential slot.
     func saveLastFMAppCredentialOverride(_ override: LastFMAppCredentialOverride?) async throws {
         try await saveAppCredential(override?.storedValue)
+    }
+}
+
+/// A pair fixed at construction, for fixtures and for callers that hand the
+/// client a value rather than a provider.
+struct FixedLastFMAppCredentials: LastFMAppCredentialsProviding {
+    let value: LastFMAppCredentials
+
+    init(_ value: LastFMAppCredentials) {
+        self.value = value
+    }
+
+    func appCredentials() async throws -> LastFMAppCredentials {
+        value
     }
 }

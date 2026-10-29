@@ -84,7 +84,7 @@ public struct LastFMClient: LastFMLinkClient {
     // MARK: - Link
 
     public func requestToken() async throws -> LastFMLinkChallenge {
-        let credentials = await credentialsProvider.appCredentials()
+        let credentials = try await resolvedCredentials()
         let data = try await perform(
             method: "auth.getToken",
             parameters: [:],
@@ -277,29 +277,25 @@ public struct LastFMClient: LastFMLinkClient {
     )
 }
 
-/// A pair fixed at construction, for fixtures and for callers that hand the
-/// client a value rather than a provider.
-private struct FixedLastFMAppCredentials: LastFMAppCredentialsProviding {
-    let value: LastFMAppCredentials
-
-    init(_ value: LastFMAppCredentials) {
-        self.value = value
-    }
-
-    func appCredentials() async -> LastFMAppCredentials {
-        value
-    }
-}
-
 extension LastFMClient {
     // MARK: - Requests
+
+    /// Reads the effective pair. A credential-store failure is its own error:
+    /// falling back to the compiled pair could sign with the wrong account.
+    private func resolvedCredentials() async throws -> LastFMAppCredentials {
+        do {
+            return try await credentialsProvider.appCredentials()
+        } catch {
+            throw LastFMError.credentialStorage
+        }
+    }
 
     func perform(
         method: String,
         parameters: [String: String] = [:],
         sessionKey: String? = nil,
     ) async throws -> Data {
-        let credentials = await credentialsProvider.appCredentials()
+        let credentials = try await resolvedCredentials()
         return try await perform(
             method: method,
             parameters: parameters,

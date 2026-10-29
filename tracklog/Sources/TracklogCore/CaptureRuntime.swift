@@ -43,6 +43,9 @@ public final class CaptureRuntime {
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
     var pauseTask: Task<Void, Never>?
+    /// A credential change saved but the connection sign-out failed. A retry
+    /// of the same save must still repair the connections.
+    var lastFMInvalidationPending = false
 
     public init(
         state: TracklogAppState = TracklogAppState(),

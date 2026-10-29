@@ -35,7 +35,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     private(set) var lastFMLink: LastFMLinkModel?
     /// The effective Last.fm pair source shared by the link and the runtime.
     /// It holds no pair itself, only the credential store it reads.
-    private(set) var lastFMAppCredentials: StoredLastFMAppCredentials?
+    var lastFMAppCredentialsProvider: StoredLastFMAppCredentials?
     var automationGate: HostAutomationPermissionGate?
     private var networkReachability: NetworkReachability?
     private var activationTask: Task<Void, Never>?
@@ -51,22 +51,18 @@ public final class TracklogDroplet: NSObject, Droplet {
             runtime = makeHarnessRuntime()
         } else {
             let sessionTransport = URLSessionTransport()
-            let credentials = KeychainCredentialStore()
-            let appCredentials = StoredLastFMAppCredentials(credentials: credentials)
             transport = sessionTransport
-            lastFMAppCredentials = appCredentials
             runtime = makeProductionRuntime(
                 host: host,
                 transport: sessionTransport,
-                credentials: credentials,
-                appCredentials: appCredentials,
+                credentials: KeychainCredentialStore(),
             )
         }
         self.runtime = runtime
-        if let transport, let lastFMAppCredentials {
+        if let transport, let lastFMAppCredentialsProvider {
             lastFMLink = makeLastFMLink(
                 transport: transport,
-                appCredentials: lastFMAppCredentials,
+                appCredentials: lastFMAppCredentialsProvider,
             )
         }
         if !isHarness {
@@ -98,7 +94,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         lastFMLink?.cancel()
         lastFMLink = nil
-        lastFMAppCredentials = nil
+        lastFMAppCredentialsProvider = nil
         networkReachability?.stop()
         networkReachability = nil
         runtime?.stop()

@@ -28,7 +28,6 @@ extension TracklogDroplet {
         host: DropletHost,
         transport: URLSessionTransport,
         credentials: KeychainCredentialStore,
-        appCredentials: StoredLastFMAppCredentials,
     ) -> CaptureRuntime {
         let settings = CaptureSettings(
             scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
@@ -45,6 +44,8 @@ extension TracklogDroplet {
         let appCredentialProblem = AppCredentialProblem(
             rawValue: host.preferences.value(forKey: "lastFMAppCredentialProblem", default: ""),
         )
+        let appCredentials = StoredLastFMAppCredentials(credentialStore: credentials)
+        lastFMAppCredentialsProvider = appCredentials
         return CaptureRuntime.open(
             state: state,
             databaseURL: databaseURL,

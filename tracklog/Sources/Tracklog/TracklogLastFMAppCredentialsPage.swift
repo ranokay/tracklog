@@ -34,11 +34,25 @@ struct TracklogLastFMAppCredentialsPage: View {
         state.connections.filter { $0.kind == .lastFM }.count
     }
 
+    /// Only offer removal when there is a built-in pair to fall back to.
+    private var canRemoveOverride: Bool {
+        state.lastFMOverridePresent && state.lastFMCompiledCredentialsPresent
+    }
+
+    private var overrideSavedText: String {
+        if state.lastFMCompiledCredentialsPresent {
+            return "Enter both values again to replace it, or remove it to go back to the "
+                + "built-in pair."
+        }
+        return "Enter both values again to replace it. There is no built-in pair to fall back "
+            + "to, so keep a working pair saved."
+    }
+
     var body: some View {
         DropletSettingsPage {
             DropletSettingsSection {
                 VStack(alignment: .leading, spacing: 2) {
-                    settingsSectionHeader("Last.fm app credentials")
+                    settingsSectionHeader("Current credentials")
                     Text(
                         "Tracklog signs every Last.fm request with its own application key and "
                             + "shared secret. If you registered your own Last.fm API application, "
@@ -72,18 +86,6 @@ struct TracklogLastFMAppCredentialsPage: View {
             accountSection
             warningSection
 
-            if let errorMessage {
-                DropletSettingsSection {
-                    settingsSectionHeader("Not saved")
-                } content: {
-                    DropletSettingsCard {
-                        Text(errorMessage)
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
             DropletSettingsSection {
                 settingsSectionHeader("Done")
             } content: {
@@ -115,12 +117,9 @@ struct TracklogLastFMAppCredentialsPage: View {
             DropletSettingsCard {
                 if state.lastFMOverridePresent {
                     DropletStackedRow(title: "Override saved") {
-                        Text(
-                            "Enter both values again to replace it, or remove it to go back to "
-                                + "the built-in pair.",
-                        )
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text(overrideSavedText)
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -140,7 +139,7 @@ struct TracklogLastFMAppCredentialsPage: View {
 
                 DropletControlRow(title: "Save") {
                     HStack(spacing: DroppySpacing.sm) {
-                        if state.lastFMOverridePresent {
+                        if canRemoveOverride {
                             Button("Remove override") {
                                 remove()
                             }
@@ -153,6 +152,14 @@ struct TracklogLastFMAppCredentialsPage: View {
                         .buttonStyle(DroppyAccentButtonStyle(size: .small))
                         .disabled(isWorking || trimmedKey.isEmpty || trimmedSecret.isEmpty)
                         .keyboardShortcut(.defaultAction)
+                    }
+                }
+
+                if let errorMessage {
+                    DropletStackedRow(title: "Needs attention") {
+                        Text(errorMessage)
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

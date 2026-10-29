@@ -344,7 +344,8 @@ struct LastFMLinkTests {
             Issue.record("expected an inline failure")
             return
         }
-        #expect(message.contains("API key"))
+        #expect(message.contains("app key"))
+        #expect(message.contains("credentials page"))
         #expect(reported == [.invalidKey])
     }
 

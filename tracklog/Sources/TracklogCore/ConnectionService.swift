@@ -361,22 +361,26 @@ public extension ConnectionService {
     /// application's own credentials change and every stored session key stops
     /// matching. Pending deliveries stay queued; the outbox's eligibility gate
     /// holds them until each connection signs in again.
-    @discardableResult
-    func markNeedsSignIn(kind: ServiceKind) async throws -> [Connection] {
+    func markNeedsSignIn(kind: ServiceKind) async throws {
         try await withGate {
-            var updated: [Connection] = []
+            var firstError: (any Error)?
             for index in connections.indices where connections[index].kind == kind {
-                guard connections[index].authState != .needsSignIn else {
-                    updated.append(connections[index])
-                    continue
-                }
                 var connection = connections[index]
                 connection.authState = .needsSignIn
-                let stored = try await store.save(connection)
-                connections[index] = stored
-                updated.append(stored)
+                // Publish the state before the write so a storage failure still
+                // holds this connection's deliveries for the rest of the run.
+                connections[index] = connection
+                do {
+                    // Write even a connection already in memory as needs-sign-in:
+                    // a previous write may have failed, and this call is the retry.
+                    connections[index] = try await store.save(connection)
+                } catch {
+                    firstError = firstError ?? error
+                }
             }
-            return updated
+            if let firstError {
+                throw firstError
+            }
         }
     }
 }

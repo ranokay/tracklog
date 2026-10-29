@@ -59,16 +59,16 @@ struct TracklogAddServicePage: View {
             } content: {
                 DropletSettingsCard {
                     if let lastFMConnection {
-                        DropletControlRow(title: "Connected") {
+                        DropletControlRow(title: "Account") {
                             DropletValuePill(text: lastFMConnection.identity)
                         }
+                        DropletControlRow(title: "Status") {
+                            DropletValuePill(text: lastFMConnection.status.displayName)
+                        }
                         DropletStackedRow(title: "Session") {
-                            Text(
-                                "The session key is in the Keychain. "
-                                    + "The connection is listed on the Services page.",
-                            )
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
+                            Text(sessionText(for: lastFMConnection))
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
@@ -136,6 +136,15 @@ struct TracklogAddServicePage: View {
         }
     }
 
+    private func sessionText(for connection: Connection) -> String {
+        if connection.authState == .needsSignIn {
+            return "Last.fm needs this connection to sign in again. "
+                + "Its pending scrobbles are held until it does."
+        }
+        return "The session key is in the Keychain. "
+            + "The connection is listed on the Services page."
+    }
+
     private var lastFMIntro: String {
         if state.lastFMNeedsAppCredentialRemedy {
             return "Tracklog cannot sign in to Last.fm until its app credentials work. "
@@ -164,8 +173,8 @@ struct TracklogAddServicePage: View {
         case .listenBrainz:
             listenBrainzIdentity == nil ? "Not connected" : "Connected"
         case .lastFM:
-            if lastFMConnection != nil {
-                "Connected"
+            if let lastFMConnection {
+                lastFMConnection.status.displayName
             } else if state.lastFMNeedsAppCredentialRemedy {
                 "Needs app credentials"
             } else {
