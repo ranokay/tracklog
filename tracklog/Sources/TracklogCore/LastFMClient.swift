@@ -37,51 +37,6 @@ public protocol LastFMLinkClient: Sendable {
     func session(token: String) async throws -> LastFMSession
 }
 
-/// The protocol's failures before they are mapped onto ``ServiceFailure``.
-/// The link flow needs to distinguish code 14 (not authorized yet) from a
-/// rejected session, so the raw service codes stay available here.
-public enum LastFMError: Error, Equatable, Sendable {
-    case missingAppCredentials
-    case missingSessionKey
-    case transport
-    case http(statusCode: Int, retryAfter: TimeInterval?)
-    case service(code: Int, message: String?)
-    case malformedResponse
-
-    /// The one failure taxonomy the rest of the engine speaks.
-    public var serviceFailure: ServiceFailure {
-        switch self {
-        case .missingAppCredentials:
-            .appCredentialAuth(.missing)
-        case .missingSessionKey:
-            .auth
-        case .transport:
-            .retryable
-        case let .http(statusCode, retryAfter):
-            switch statusCode {
-            case 429: .rateLimited(retryAfter: retryAfter)
-            case 401, 403: .auth
-            case 500 ..< 600: .retryable
-            case 400 ..< 500: .rejected(nil)
-            default: .retryable
-            }
-        case let .service(code, message):
-            switch code {
-            case 4, 9, 14, 15: .auth
-            case 10: .appCredentialAuth(.invalidKey)
-            case 13: .appCredentialAuth(.invalidSignature)
-            case 26: .appCredentialAuth(.suspendedKey)
-            case 8, 11, 16: .retryable
-            case 29: .rateLimited(retryAfter: nil)
-            case 6, 7: .rejected(message)
-            default: .rejected(message)
-            }
-        case .malformedResponse:
-            .retryable
-        }
-    }
-}
-
 /// Last.fm's signed form-post protocol. Every call is a POST to the same
 /// endpoint; the signature covers every parameter except `format` and
 /// `callback`.
@@ -89,11 +44,11 @@ public struct LastFMClient: LastFMLinkClient {
     /// The protocol's hard limit for one `track.scrobble` request.
     public static let maximumScrobblesPerBatch = 50
 
-    public let appCredentials: LastFMAppCredentials
     public let endpoint: ServiceEndpoint
     public let userAgent: String
 
     private let transport: any HTTPTransport
+    private let credentialsProvider: any LastFMAppCredentialsProviding
 
     /// `endpoint` is fixed to ``ServiceEndpoint/lastFM`` in production. It
     /// stays injectable for fixtures and for the shared Last.fm-protocol
@@ -104,8 +59,24 @@ public struct LastFMClient: LastFMLinkClient {
         endpoint: ServiceEndpoint = .lastFM,
         userAgent: String = TracklogHTTP.userAgent,
     ) {
+        self.init(
+            transport: transport,
+            appCredentials: FixedLastFMAppCredentials(appCredentials),
+            endpoint: endpoint,
+            userAgent: userAgent,
+        )
+    }
+
+    /// Reads the effective pair through a provider, so a Keychain override
+    /// saved while the client is alive is used by the next signed call.
+    public init(
+        transport: any HTTPTransport,
+        appCredentials provider: any LastFMAppCredentialsProviding,
+        endpoint: ServiceEndpoint = .lastFM,
+        userAgent: String = TracklogHTTP.userAgent,
+    ) {
         self.transport = transport
-        self.appCredentials = appCredentials
+        credentialsProvider = provider
         self.endpoint = endpoint
         self.userAgent = userAgent
     }
@@ -113,9 +84,17 @@ public struct LastFMClient: LastFMLinkClient {
     // MARK: - Link
 
     public func requestToken() async throws -> LastFMLinkChallenge {
-        let data = try await perform(method: "auth.getToken")
+        let credentials = await credentialsProvider.appCredentials()
+        let data = try await perform(
+            method: "auth.getToken",
+            parameters: [:],
+            sessionKey: nil,
+            credentials: credentials,
+        )
         let payload = try decode(TokenPayload.self, from: data)
-        guard let token = trimmed(payload.token), !token.isEmpty, let url = authorizationURL(for: token) else {
+        guard let token = trimmed(payload.token), !token.isEmpty,
+              let url = authorizationURL(for: token, apiKey: credentials.apiKey)
+        else {
             throw LastFMError.malformedResponse
         }
         return LastFMLinkChallenge(token: token, authorizationURL: url)
@@ -218,102 +197,13 @@ public struct LastFMClient: LastFMLinkClient {
         }
     }
 
-    // MARK: - Requests
-
-    func perform(
-        method: String,
-        parameters: [String: String] = [:],
-        sessionKey: String? = nil,
-    ) async throws -> Data {
-        let request = try makeRequest(method: method, parameters: parameters, sessionKey: sessionKey)
-        let response: HTTPResponse
-        do {
-            response = try await transport.send(request)
-        } catch {
-            throw LastFMError.transport
-        }
-
-        // A 429 is a rate limit even when the body also names a service error,
-        // and its Retry-After header is the hint the outbox needs.
-        if response.statusCode == 429 {
-            throw LastFMError.http(statusCode: 429, retryAfter: retryAfter(from: response))
-        }
-
-        // A 5xx is a server failure even when the body names a service error.
-        // The body's code must not turn a retryable outage into an auth or
-        // rejection decision.
-        if (500 ..< 600).contains(response.statusCode) {
-            throw LastFMError.http(
-                statusCode: response.statusCode,
-                retryAfter: retryAfter(from: response),
-            )
-        }
-
-        // Last.fm can answer HTTP 200 with an error document. Inspect the body
-        // before trusting the status code.
-        if let payload = try? JSONDecoder().decode(ErrorPayload.self, from: response.body),
-           let code = payload.error, code != 0 {
-            throw LastFMError.service(code: code, message: trimmed(payload.message))
-        }
-
-        if (200 ..< 300).contains(response.statusCode) {
-            return response.body
-        }
-        throw LastFMError.http(
-            statusCode: response.statusCode,
-            retryAfter: retryAfter(from: response),
-        )
-    }
-
-    private func makeRequest(
-        method: String,
-        parameters: [String: String],
-        sessionKey: String?,
-    ) throws -> HTTPRequest {
-        guard appCredentials.isConfigured else {
-            throw LastFMError.missingAppCredentials
-        }
-        let appKey = apiKey
-        let secret = sharedSecret
-
-        var form = parameters
-        form["method"] = method
-        form["api_key"] = appKey
-        if let sessionKey {
-            let key = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !key.isEmpty else { throw LastFMError.missingSessionKey }
-            form["sk"] = key
-        }
-        form["format"] = "json"
-        form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
-
-        guard let url = URL(string: "\(endpoint.description)/2.0/") else {
-            throw LastFMError.malformedResponse
-        }
-        return HTTPRequest(
-            method: .post,
-            url: url,
-            headers: [
-                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-                "User-Agent": userAgent,
-                "Accept": "application/json",
-            ],
-            body: Data(Self.formEncode(form).utf8),
-        )
-    }
-
-    private var apiKey: String {
-        appCredentials.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var sharedSecret: String {
-        appCredentials.sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func authorizationURL(for token: String) -> URL? {
+    private func authorizationURL(for token: String, apiKey: String) -> URL? {
         var components = URLComponents(string: LastFMWebEndpoint.authorizationRoot)
         components?.queryItems = [
-            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(
+                name: "api_key",
+                value: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            ),
             URLQueryItem(name: "token", value: token),
         ]
         return components?.url
@@ -385,4 +275,125 @@ public struct LastFMClient: LastFMLinkClient {
     private static let formAllowed = CharacterSet(
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~",
     )
+}
+
+/// A pair fixed at construction, for fixtures and for callers that hand the
+/// client a value rather than a provider.
+private struct FixedLastFMAppCredentials: LastFMAppCredentialsProviding {
+    let value: LastFMAppCredentials
+
+    init(_ value: LastFMAppCredentials) {
+        self.value = value
+    }
+
+    func appCredentials() async -> LastFMAppCredentials {
+        value
+    }
+}
+
+extension LastFMClient {
+    // MARK: - Requests
+
+    func perform(
+        method: String,
+        parameters: [String: String] = [:],
+        sessionKey: String? = nil,
+    ) async throws -> Data {
+        let credentials = await credentialsProvider.appCredentials()
+        return try await perform(
+            method: method,
+            parameters: parameters,
+            sessionKey: sessionKey,
+            credentials: credentials,
+        )
+    }
+
+    private func perform(
+        method: String,
+        parameters: [String: String],
+        sessionKey: String?,
+        credentials: LastFMAppCredentials,
+    ) async throws -> Data {
+        let request = try makeRequest(
+            method: method,
+            parameters: parameters,
+            sessionKey: sessionKey,
+            credentials: credentials,
+        )
+        let response: HTTPResponse
+        do {
+            response = try await transport.send(request)
+        } catch {
+            throw LastFMError.transport
+        }
+
+        // A 429 is a rate limit even when the body also names a service error,
+        // and its Retry-After header is the hint the outbox needs.
+        if response.statusCode == 429 {
+            throw LastFMError.http(statusCode: 429, retryAfter: retryAfter(from: response))
+        }
+
+        // A 5xx is a server failure even when the body names a service error.
+        // The body's code must not turn a retryable outage into an auth or
+        // rejection decision.
+        if (500 ..< 600).contains(response.statusCode) {
+            throw LastFMError.http(
+                statusCode: response.statusCode,
+                retryAfter: retryAfter(from: response),
+            )
+        }
+
+        // Last.fm can answer HTTP 200 with an error document. Inspect the body
+        // before trusting the status code.
+        if let payload = try? JSONDecoder().decode(ErrorPayload.self, from: response.body),
+           let code = payload.error, code != 0 {
+            throw LastFMError.service(code: code, message: trimmed(payload.message))
+        }
+
+        if (200 ..< 300).contains(response.statusCode) {
+            return response.body
+        }
+        throw LastFMError.http(
+            statusCode: response.statusCode,
+            retryAfter: retryAfter(from: response),
+        )
+    }
+
+    private func makeRequest(
+        method: String,
+        parameters: [String: String],
+        sessionKey: String?,
+        credentials: LastFMAppCredentials,
+    ) throws -> HTTPRequest {
+        guard credentials.isConfigured else {
+            throw LastFMError.missingAppCredentials
+        }
+        let appKey = credentials.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = credentials.sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var form = parameters
+        form["method"] = method
+        form["api_key"] = appKey
+        if let sessionKey {
+            let key = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { throw LastFMError.missingSessionKey }
+            form["sk"] = key
+        }
+        form["format"] = "json"
+        form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
+
+        guard let url = URL(string: "\(endpoint.description)/2.0/") else {
+            throw LastFMError.malformedResponse
+        }
+        return HTTPRequest(
+            method: .post,
+            url: url,
+            headers: [
+                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+                "User-Agent": userAgent,
+                "Accept": "application/json",
+            ],
+            body: Data(Self.formEncode(form).utf8),
+        )
+    }
 }

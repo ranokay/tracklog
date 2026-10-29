@@ -6,7 +6,7 @@ import Foundation
 /// design: the protocol needs the shared secret in the client to sign calls.
 /// The provisioning file at `~/.config/tracklog/lastfm.json` is a development
 /// source only; nothing reads it at runtime.
-public struct LastFMAppCredentials: Equatable, Sendable {
+public struct LastFMAppCredentials: Equatable, Sendable, CustomStringConvertible {
     public let apiKey: String
     public let sharedSecret: String
 
@@ -19,6 +19,11 @@ public struct LastFMAppCredentials: Equatable, Sendable {
     public var isConfigured: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Redacted so a log line, diagnostic dump or export cannot carry the pair.
+    public var description: String {
+        isConfigured ? "Last.fm app credentials (configured)" : "Last.fm app credentials (missing)"
     }
 
     public static let compiled = LastFMAppCredentials(

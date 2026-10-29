@@ -7,6 +7,7 @@ import TracklogCore
 let tracklogServicesPageID = "services"
 let tracklogAddServicePageID = "add-service"
 let tracklogLastFMLinkPageID = "lastfm-link"
+let tracklogLastFMAppCredentialsPageID = "lastfm-app-credentials"
 
 private let tracklogConnectionPagePrefix = "connection-"
 
@@ -76,16 +77,35 @@ struct TracklogServicesPage: View {
                 }
             }
 
-            if let problem = state.lastFMAppCredentialProblem {
-                DropletSettingsSection {
+            DropletSettingsSection {
+                VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Last.fm app credentials")
-                } content: {
-                    DropletSettingsCard {
+                    Text(
+                        "Use your own API key and shared secret when the built-in pair is "
+                            + "missing or rejected by Last.fm.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                }
+            } content: {
+                DropletSettingsCard {
+                    if let problem = state.lastFMAppCredentialProblem {
                         DropletStackedRow(title: problem.title) {
                             Text(problem.detail)
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
+                    }
+                    DropletSettingsPageLink(
+                        state.lastFMOverridePresent
+                            ? "Last.fm app credentials"
+                            : "Set up Last.fm app credentials",
+                        subtitle: state.lastFMOverridePresent
+                            ? "Stored in the Keychain and used instead of the built-in pair."
+                            : "Add your own API key and shared secret.",
+                        page: tracklogLastFMAppCredentialsPageID,
+                    ) {
+                        SettingsLinkTile(systemImage: "key")
                     }
                 }
             }
@@ -157,196 +177,6 @@ struct TracklogServicesPage: View {
         case .lastFM: "music.note"
         case .libreFM: "dot.radiowaves.left.and.right"
         case .listenBrainz: "brain"
-        }
-    }
-}
-
-// MARK: - Add service
-
-/// Add service: the launch services, with Last.fm's browser link and
-/// ListenBrainz's token link.
-struct TracklogAddServicePage: View {
-    let droplet: TracklogDroplet
-    @ObservedObject var state: TracklogAppState
-
-    @State private var token = ""
-    @State private var errorMessage: String?
-    @State private var isLinking = false
-
-    private var trimmedToken: String {
-        token.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Until re-auth lands, there is nothing more to add on a connected
-    /// ListenBrainz endpoint.
-    private var listenBrainzIdentity: String? {
-        state.connection(kind: .listenBrainz)?.identity
-    }
-
-    private var lastFMConnection: Connection? {
-        state.connection(kind: .lastFM)
-    }
-
-    var body: some View {
-        DropletSettingsPage {
-            DropletSettingsSection {
-                VStack(alignment: .leading, spacing: 2) {
-                    settingsSectionHeader("Add a service")
-                    Text(
-                        "Tracklog will send every listen to each service you connect and enable.",
-                    )
-                    .font(.body)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                }
-            } content: {
-                DropletSettingsCard {
-                    ForEach(ServiceKind.allCases) { kind in
-                        DropletControlRow(title: kind.displayName) {
-                            DropletValuePill(text: status(for: kind))
-                        }
-                    }
-                }
-            }
-
-            DropletSettingsSection {
-                VStack(alignment: .leading, spacing: 2) {
-                    settingsSectionHeader("Last.fm")
-                    Text(
-                        "Sign in through your browser. Tracklog never sees your Last.fm password, "
-                            + "and the session key is kept in the Keychain.",
-                    )
-                    .font(.body)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                }
-            } content: {
-                DropletSettingsCard {
-                    if let lastFMConnection {
-                        DropletControlRow(title: "Connected") {
-                            DropletValuePill(text: lastFMConnection.identity)
-                        }
-                        DropletStackedRow(title: "Session") {
-                            Text(
-                                "The session key is in the Keychain. "
-                                    + "The connection is listed on the Services page.",
-                            )
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
-                    } else if droplet.lastFMLink != nil {
-                        DropletSettingsPageLink(
-                            "Sign in with Last.fm",
-                            subtitle: "Opens Last.fm in your browser and waits for you to authorize Tracklog.",
-                            page: tracklogLastFMLinkPageID,
-                        ) {
-                            SettingsLinkTile(systemImage: "music.note")
-                        }
-                    } else {
-                        DropletStackedRow(title: "Last.fm sign-in is unavailable in the harness.") {
-                            EmptyView()
-                        }
-                    }
-                }
-            }
-
-            DropletSettingsSection {
-                VStack(alignment: .leading, spacing: 2) {
-                    settingsSectionHeader("ListenBrainz")
-                    Text(
-                        "Paste the user token from your ListenBrainz settings. "
-                            + "The token is checked with ListenBrainz before the connection is saved, "
-                            + "then kept in the Keychain rather than the local database.",
-                    )
-                    .font(.body)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                }
-            } content: {
-                DropletSettingsCard {
-                    if let listenBrainzIdentity {
-                        linkedRows(identity: listenBrainzIdentity)
-                    } else {
-                        tokenForm
-                    }
-                }
-            }
-
-            if let errorMessage {
-                DropletSettingsSection {
-                    settingsSectionHeader("Needs attention")
-                } content: {
-                    DropletSettingsCard {
-                        Text(errorMessage)
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-    }
-
-    private func status(for kind: ServiceKind) -> String {
-        switch kind {
-        case .listenBrainz:
-            listenBrainzIdentity == nil ? "Not connected" : "Connected"
-        case .lastFM:
-            lastFMConnection == nil ? "Not connected" : "Connected"
-        case .libreFM:
-            "Later update"
-        }
-    }
-
-    private var tokenForm: some View {
-        DropletStackedRow(title: "User token") {
-            VStack(alignment: .leading, spacing: DroppySpacing.sm) {
-                SecureField("Paste your ListenBrainz user token", text: $token)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("ListenBrainz user token")
-                Text("The field is secure. A saved token is never shown again.")
-                    .font(.callout)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                HStack(spacing: DroppySpacing.sm) {
-                    Spacer(minLength: 0)
-                    Button("Link") {
-                        link()
-                    }
-                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
-                    .disabled(isLinking || trimmedToken.isEmpty)
-                    .keyboardShortcut(.defaultAction)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func linkedRows(identity: String) -> some View {
-        DropletControlRow(title: "Connected") {
-            DropletValuePill(text: identity)
-        }
-        DropletStackedRow(title: "Saved") {
-            Text("The token is in the Keychain. The connection is listed on the Services page.")
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        DropletControlRow(title: "Done") {
-            Button("Back to services") {
-                droplet.goBackInSettings()
-            }
-            .buttonStyle(DroppyQuietButtonStyle(size: .small))
-        }
-    }
-
-    private func link() {
-        guard !isLinking, !trimmedToken.isEmpty else { return }
-        isLinking = true
-        errorMessage = nil
-        let candidate = trimmedToken
-        Task {
-            do {
-                _ = try await droplet.linkListenBrainz(token: candidate)
-                token = ""
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isLinking = false
         }
     }
 }

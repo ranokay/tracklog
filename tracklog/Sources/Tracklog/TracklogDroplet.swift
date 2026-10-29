@@ -33,6 +33,9 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
     private(set) var lastFMLink: LastFMLinkModel?
+    /// The effective Last.fm pair source shared by the link and the runtime.
+    /// It holds no pair itself, only the credential store it reads.
+    private(set) var lastFMAppCredentials: StoredLastFMAppCredentials?
     var automationGate: HostAutomationPermissionGate?
     private var networkReachability: NetworkReachability?
     private var activationTask: Task<Void, Never>?
@@ -48,12 +51,23 @@ public final class TracklogDroplet: NSObject, Droplet {
             runtime = makeHarnessRuntime()
         } else {
             let sessionTransport = URLSessionTransport()
+            let credentials = KeychainCredentialStore()
+            let appCredentials = StoredLastFMAppCredentials(credentials: credentials)
             transport = sessionTransport
-            runtime = makeProductionRuntime(host: host, transport: sessionTransport)
+            lastFMAppCredentials = appCredentials
+            runtime = makeProductionRuntime(
+                host: host,
+                transport: sessionTransport,
+                credentials: credentials,
+                appCredentials: appCredentials,
+            )
         }
         self.runtime = runtime
-        if let transport {
-            lastFMLink = makeLastFMLink(transport: transport)
+        if let transport, let lastFMAppCredentials {
+            lastFMLink = makeLastFMLink(
+                transport: transport,
+                appCredentials: lastFMAppCredentials,
+            )
         }
         if !isHarness {
             let reachability = NetworkReachability { [weak runtime] in
@@ -84,6 +98,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         lastFMLink?.cancel()
         lastFMLink = nil
+        lastFMAppCredentials = nil
         networkReachability?.stop()
         networkReachability = nil
         runtime?.stop()

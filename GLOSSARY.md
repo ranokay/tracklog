@@ -8,6 +8,10 @@ One authenticated identity at one service endpoint: a service kind, the endpoint
 
 The protocol family a connection speaks: Last.fm, Libre.fm/GNU FM, ListenBrainz, or Pleroma. One kind can have several endpoints — a GNU FM root, a custom ListenBrainz-compatible server.
 
+## App credentials
+
+The Last.fm application's API key and shared secret, which sign every request. Tracklog compiles in the project's own public pair; a listener may save an override in the Keychain, and the override takes precedence. The pair is never shown back, written to the database, logged or exported. Changing it invalidates every Last.fm session, so every Last.fm connection becomes needs sign-in and its pending deliveries are held until it reconnects.
+
 ## Identity
 
 The account identifier a service reports — a Last.fm, Libre.fm or ListenBrainz username, a Pleroma account id — scoped to the endpoint. Re-signing in with the same identity resumes a paused connection; a different identity replaces it.

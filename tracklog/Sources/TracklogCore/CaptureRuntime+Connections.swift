@@ -28,6 +28,17 @@ extension CaptureRuntime {
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
     }
+
+    /// Reports presence, never the pair. A corrupt slot is treated as no
+    /// override, the same way the provider treats it.
+    func loadLastFMAppCredentials() async {
+        state.lastFMCompiledCredentialsPresent = compiledLastFMAppCredentials.isConfigured
+        guard let credentialStore else {
+            state.lastFMOverridePresent = false
+            return
+        }
+        state.lastFMOverridePresent = await credentialStore.lastFMAppCredentialOverride() != nil
+    }
 }
 
 public extension CaptureRuntime {
@@ -77,6 +88,89 @@ public extension CaptureRuntime {
     func clearLastFMAppCredentialProblem() {
         state.lastFMAppCredentialProblem = nil
         persistAppCredentialProblem?(nil)
+    }
+
+    /// The pair the next signed Last.fm call would use. Callers that expose it
+    /// must not show or log it.
+    func effectiveLastFMAppCredentials() async -> LastFMAppCredentials? {
+        guard let credentialStore else { return nil }
+        return await StoredLastFMAppCredentials(
+            credentials: credentialStore,
+            compiled: compiledLastFMAppCredentials,
+        ).appCredentials()
+    }
+
+    /// Checks a candidate pair with Last.fm, then saves it in the Keychain.
+    /// A changed pair invalidates every Last.fm session key: every Last.fm
+    /// connection becomes needs sign-in and its pending deliveries stay
+    /// queued until it reconnects.
+    func saveLastFMAppCredentialOverride(apiKey: String, sharedSecret: String) async throws {
+        guard let override = LastFMAppCredentialOverride(
+            validating: apiKey,
+            sharedSecret: sharedSecret,
+        ) else {
+            throw LastFMAppCredentialError.incomplete
+        }
+        guard let credentialStore else { throw ConnectionError.unavailable }
+        guard let lastFMAppCredentialsValidator else {
+            throw ConnectionError.unsupportedService(.lastFM)
+        }
+
+        let provider = StoredLastFMAppCredentials(
+            credentials: credentialStore,
+            compiled: compiledLastFMAppCredentials,
+        )
+        let previous = await provider.appCredentials()
+        // Validate before writing anything: a rejected pair must leave the
+        // connection list and the old credentials untouched.
+        try await lastFMAppCredentialsValidator.validateAppCredentials(override.credentials)
+        do {
+            try await credentialStore.saveLastFMAppCredentialOverride(override)
+        } catch {
+            throw LastFMAppCredentialError.storage
+        }
+        await loadLastFMAppCredentials()
+        clearLastFMAppCredentialProblem()
+        if override.credentials != previous {
+            try await signOutLastFMSessions()
+        }
+    }
+
+    /// Clears the Keychain override and returns to the compiled pair. Removing
+    /// a pair also changes the credentials, so every Last.fm session is
+    /// invalidated the same way.
+    func removeLastFMAppCredentialOverride() async throws {
+        guard let credentialStore else { throw ConnectionError.unavailable }
+        let provider = StoredLastFMAppCredentials(
+            credentials: credentialStore,
+            compiled: compiledLastFMAppCredentials,
+        )
+        let previous = await provider.appCredentials()
+        guard await provider.override() != nil else { return }
+        do {
+            try await credentialStore.saveLastFMAppCredentialOverride(nil)
+        } catch {
+            throw LastFMAppCredentialError.storage
+        }
+        await loadLastFMAppCredentials()
+        // An override that repeated the compiled pair never changed the
+        // effective credentials, so removing it invalidates nothing.
+        guard await provider.appCredentials() != previous else { return }
+        clearLastFMAppCredentialProblem()
+        try await signOutLastFMSessions()
+    }
+
+    private func signOutLastFMSessions() async throws {
+        guard let connectionService else { return }
+        do {
+            try await connectionService.markNeedsSignIn(kind: .lastFM)
+            applyConnectionSnapshot()
+            await reloadDeliveryState()
+        } catch {
+            // Publish the rows that did change before reporting the failure.
+            applyConnectionSnapshot()
+            throw error
+        }
     }
 
     /// Publishes a linked connection, refreshes the delivery state and triggers

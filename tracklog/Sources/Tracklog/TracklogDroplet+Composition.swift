@@ -6,6 +6,7 @@ import TracklogMedia
 extension TracklogDroplet {
     func makeHarnessRuntime() -> CaptureRuntime {
         let store = HarnessDemoStore()
+        let credentials = MemoryCredentialStore()
         return CaptureRuntime(
             state: state,
             clock: SystemClock(),
@@ -14,13 +15,21 @@ extension TracklogDroplet {
             allowlist: store,
             edits: store,
             blocks: store,
-            credentials: MemoryCredentialStore(),
-            serviceAdapters: [HarnessDemoServiceAdapter()],
+            credentials: credentials,
+            serviceAdapters: [
+                HarnessDemoServiceAdapter(),
+                HarnessDemoLastFMAdapter(),
+            ],
             settings: CaptureSettings(scrobblingEnabled: true),
         )
     }
 
-    func makeProductionRuntime(host: DropletHost, transport: URLSessionTransport) -> CaptureRuntime {
+    func makeProductionRuntime(
+        host: DropletHost,
+        transport: URLSessionTransport,
+        credentials: KeychainCredentialStore,
+        appCredentials: StoredLastFMAppCredentials,
+    ) -> CaptureRuntime {
         let settings = CaptureSettings(
             scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
             nowPlayingEnabled: host.preferences.value(forKey: "nowPlayingEnabled", default: true),
@@ -42,10 +51,10 @@ extension TracklogDroplet {
             clock: SystemClock(),
             source: MediaArbiter(helper: MediaHelperReader(), permissions: gate),
             settings: settings,
-            credentials: KeychainCredentialStore(),
+            credentials: credentials,
             serviceAdapters: [
                 ListenBrainzAdapter(transport: transport),
-                LastFMAdapter(transport: transport, appCredentials: .compiled),
+                LastFMAdapter(transport: transport, appCredentials: appCredentials),
             ],
             connectionLog: { event in
                 switch event {
@@ -82,9 +91,12 @@ extension TracklogDroplet {
     /// One page model for the browser link. It shares the runtime's transport,
     /// opens the authorization page through AppKit, and stores the session key
     /// through the runtime's connection service.
-    func makeLastFMLink(transport: URLSessionTransport) -> LastFMLinkModel {
+    func makeLastFMLink(
+        transport: URLSessionTransport,
+        appCredentials: StoredLastFMAppCredentials,
+    ) -> LastFMLinkModel {
         LastFMLinkModel(
-            client: LastFMAdapter(transport: transport, appCredentials: .compiled),
+            client: LastFMAdapter(transport: transport, appCredentials: appCredentials),
             clock: SystemClock(),
             openAuthorization: { NSWorkspace.shared.open($0) },
             complete: { [weak self] session in

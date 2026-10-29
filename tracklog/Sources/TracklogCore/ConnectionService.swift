@@ -356,6 +356,31 @@ public final class ConnectionService {
     }
 }
 
+public extension ConnectionService {
+    /// Marks every connection of one kind as needing sign-in, as when the
+    /// application's own credentials change and every stored session key stops
+    /// matching. Pending deliveries stay queued; the outbox's eligibility gate
+    /// holds them until each connection signs in again.
+    @discardableResult
+    func markNeedsSignIn(kind: ServiceKind) async throws -> [Connection] {
+        try await withGate {
+            var updated: [Connection] = []
+            for index in connections.indices where connections[index].kind == kind {
+                guard connections[index].authState != .needsSignIn else {
+                    updated.append(connections[index])
+                    continue
+                }
+                var connection = connections[index]
+                connection.authState = .needsSignIn
+                let stored = try await store.save(connection)
+                connections[index] = stored
+                updated.append(stored)
+            }
+            return updated
+        }
+    }
+}
+
 /// A link log line's reason. It names the failure class, never a credential.
 private func connectionFailureReason(_ failure: ServiceFailure) -> String {
     switch failure {
