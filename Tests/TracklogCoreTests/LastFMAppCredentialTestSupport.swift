@@ -27,6 +27,32 @@ struct UnreadableAppCredentialStore: CredentialStore {
     func saveAppCredential(_: String?) async throws {}
 }
 
+/// A memory credential store whose application-slot write always fails, so
+/// the pre-write invalidation marker can be observed.
+actor SaveFailingAppCredentialStore: CredentialStore {
+    private let base = MemoryCredentialStore()
+
+    func credential(forConnection id: Int64) async throws -> String? {
+        try await base.credential(forConnection: id)
+    }
+
+    func saveCredential(_ credential: String, forConnection id: Int64) async throws {
+        try await base.saveCredential(credential, forConnection: id)
+    }
+
+    func deleteCredential(forConnection id: Int64) async throws {
+        try await base.deleteCredential(forConnection: id)
+    }
+
+    func appCredential() async throws -> String? {
+        try await base.appCredential()
+    }
+
+    func saveAppCredential(_: String?) async throws {
+        throw URLError(.cannotWriteToFile)
+    }
+}
+
 /// A real store whose first needs-sign-in write fails, so the invalidation
 /// repair path can be exercised without a second database.
 actor SignOutFailingStore: ListenStore, ConnectionStore {

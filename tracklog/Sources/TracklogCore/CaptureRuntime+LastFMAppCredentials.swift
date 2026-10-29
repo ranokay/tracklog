@@ -117,9 +117,19 @@ private extension CaptureRuntime {
         } catch {
             throw LastFMAppCredentialError.storage
         }
+        let next = override?.credentials ?? compiledLastFMAppCredentials
+        let changed = next != previous
+        // Record the obligation before the new pair can be observed. A crash
+        // or a failed read after this write then still replays on launch.
+        if changed || lastFMInvalidationPending {
+            lastFMInvalidationPending = true
+            persistLastFMInvalidationPending?(true)
+        }
         do {
             try await credentialStore.saveLastFMAppCredentialOverride(override)
         } catch {
+            // The write may have landed; keep the obligation rather than trust
+            // the old session state.
             throw LastFMAppCredentialError.storage
         }
         // A validated save, or a removal, retires any rejection recorded for
@@ -127,17 +137,8 @@ private extension CaptureRuntime {
         // warning even though the effective pair did not change.
         clearLastFMAppCredentialProblem()
         await loadLastFMAppCredentials()
-        let current: LastFMAppCredentials
-        do {
-            current = try await provider.appCredentials()
-        } catch {
-            throw LastFMAppCredentialError.storage
-        }
 
-        let changed = current != previous
         guard changed || lastFMInvalidationPending else { return }
-        lastFMInvalidationPending = true
-        persistLastFMInvalidationPending?(true)
         do {
             try await signOutLastFMSessions()
             lastFMInvalidationPending = false
