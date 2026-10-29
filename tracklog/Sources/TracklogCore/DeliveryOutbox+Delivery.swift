@@ -39,7 +39,8 @@ extension DeliveryOutbox {
     }
 
     func sendNowPlaying(_ track: Track, connectionID id: Int64) async {
-        guard let connection = lookup.connection(id: id),
+        guard !isInCooldown(id),
+              let connection = lookup.connection(id: id),
               let adapter = lookup.adapters[connection.kind],
               adapter.capabilities.supportsNowPlaying,
               case let .value(credential) = await lookup.credential(for: id) else { return }

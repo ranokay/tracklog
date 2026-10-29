@@ -155,7 +155,16 @@ extension DeliveryOutbox {
             && isActive
             && !Task.isCancelled
             && !suspended.contains(id)
+            && !isInCooldown(id)
             && eligibleFeedbackConnection(id: id, action: action) != nil
+    }
+
+    /// A feedback 429 carries the server's reset hint. The same per-connection
+    /// cooldown holds now playing and due deliveries, so no request reaches the
+    /// service before the hinted time.
+    func isInCooldown(_ id: Int64) -> Bool {
+        guard let until = blockedUntil[id] else { return false }
+        return until > clock.now
     }
 
     private func eligibleFeedbackConnection(id: Int64, action: FeedbackAction) -> Connection? {
@@ -220,6 +229,14 @@ extension DeliveryOutbox {
         }
         if let problem = failure.appCredentialProblem {
             onAppCredentialProblem?(connection.kind, problem)
+        }
+        if case let .rateLimited(retryAfter) = failure,
+           let retryAfter, retryAfter > 0, let id = connection.id {
+            let until = clock.now.addingTimeInterval(retryAfter)
+            if let existing = blockedUntil[id], existing > until {
+                return
+            }
+            blockedUntil[id] = until
         }
     }
 

@@ -16,6 +16,7 @@ func makeBrainzAdapter(
     lookupGate: DeliveryGate? = nil,
     feedbackGate: DeliveryGate? = nil,
     minimumRequestInterval: TimeInterval = 0,
+    feedbackAnswer: ServiceFailure? = nil,
 ) -> RecordingDeliveryAdapter {
     RecordingDeliveryAdapter(
         kind: .listenBrainz,
@@ -30,6 +31,7 @@ func makeBrainzAdapter(
         reference: reference,
         lookupGate: lookupGate,
         feedbackGate: feedbackGate,
+        feedbackAnswer: feedbackAnswer,
     )
 }
 
