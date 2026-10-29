@@ -110,8 +110,9 @@ extension TracklogDroplet {
         _ = try await runtime.unlinkConnection(id: id)
     }
 
-    func pendingDeliveryCount(forConnection id: Int64) async -> Int {
-        await runtime?.pendingDeliveryCount(forConnection: id) ?? 0
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
+        guard let runtime else { throw ConnectionError.unavailable }
+        return try await runtime.pendingDeliveryCount(forConnection: id)
     }
 
     private func makeReauthLink(for connection: Connection) -> LastFMLinkModel? {

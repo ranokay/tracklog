@@ -247,7 +247,13 @@ struct TracklogConnectionPage: View {
     private func confirmUnlink(_ connection: Connection) {
         actionError = nil
         Task {
-            let pending = await droplet.pendingDeliveryCount(forConnection: connectionID)
+            let pending: Int
+            do {
+                pending = try await droplet.pendingDeliveryCount(forConnection: connectionID)
+            } catch {
+                actionError = error.localizedDescription
+                return
+            }
             let confirmed = DropletConfirmationDialog.present(
                 title: "Unlink \(connection.kind.displayName)?",
                 message: unlinkMessage(pending: pending, service: connection.kind.displayName),

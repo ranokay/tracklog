@@ -122,7 +122,7 @@ public extension ConnectionService {
         confirmReplacement: @MainActor (Connection, ServiceIdentity, Int) -> Bool,
     ) async throws -> Connection {
         guard let id = existing.id else { throw ConnectionError.unknownConnection(id: -1) }
-        let pending = await pendingDeliveryCount(forConnection: id)
+        let pending = try await pendingDeliveryCount(forConnection: id)
         guard confirmReplacement(existing, identity, pending) else {
             throw ConnectionError.reauthenticationCancelled
         }
@@ -203,24 +203,32 @@ public extension ConnectionService {
             }
             let connection = connections[index]
 
-            // Deleting the credential first makes a failed unlink leave the
-            // connection signed in but credentialless: the outbox holds its
-            // rows instead of finding them abandoned while the connection is
-            // still working.
+            // Read the credential so a failed store operation can put it back:
+            // the connection is still linked, and the outbox should not treat
+            // it as signed out. Deleting first keeps a failed unlink from
+            // finding its queue abandoned while the connection still works.
+            let previousCredential = try? await credentials.credential(forConnection: id)
             try await credentials.deleteCredential(forConnection: id)
             let abandoned: Int
-            if let atomicStore = store as? any ConnectionUnlinkStore {
-                // One transaction: a failure leaves the queue pending.
-                abandoned = try await atomicStore.unlinkConnection(
-                    id: id,
-                    reason: Self.unlinkReason,
-                )
-            } else {
-                // Stores without the atomic operation are tests and the
-                // harness. Abandon before deleting so no drain resurrects a
-                // row that was meant to stay behind.
-                abandoned = try await abandonPending(forConnection: id, reason: Self.unlinkReason)
-                try await store.deleteConnection(id: id)
+            do {
+                if let atomicStore = store as? any ConnectionUnlinkStore {
+                    // One transaction: a failure leaves the queue pending.
+                    abandoned = try await atomicStore.unlinkConnection(
+                        id: id,
+                        reason: Self.unlinkReason,
+                    )
+                } else {
+                    // Stores without the atomic operation are tests and the
+                    // harness. Abandon before deleting so no drain resurrects
+                    // a row that was meant to stay behind.
+                    abandoned = try await abandonPending(forConnection: id, reason: Self.unlinkReason)
+                    try await store.deleteConnection(id: id)
+                }
+            } catch {
+                if let previousCredential {
+                    try? await credentials.saveCredential(previousCredential, forConnection: id)
+                }
+                throw error
             }
             connections.remove(at: index)
 
@@ -246,8 +254,8 @@ public extension ConnectionService {
         return try await deliveries.abandonPending(forConnection: id, reason: reason)
     }
 
-    private func pendingDeliveryCount(forConnection id: Int64) async -> Int {
+    private func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
         guard let deliveries else { return 0 }
-        return await (try? deliveries.pendingDeliveryCount(forConnection: id)) ?? 0
+        return try await deliveries.pendingDeliveryCount(forConnection: id)
     }
 }

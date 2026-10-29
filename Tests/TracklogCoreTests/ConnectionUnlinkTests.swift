@@ -151,8 +151,8 @@ struct ConnectionUnlinkTests {
         )
         await runtime.start()
 
-        #expect(await runtime.pendingDeliveryCount(forConnection: first.id ?? -1) == 2)
-        #expect(await runtime.pendingDeliveryCount(forConnection: second.id ?? -1) == 1)
+        #expect(try await runtime.pendingDeliveryCount(forConnection: first.id ?? -1) == 2)
+        #expect(try await runtime.pendingDeliveryCount(forConnection: second.id ?? -1) == 1)
     }
 
     @Test func unlinkingTheCurrentConnectionFallsBackToTheMostRecentlyUsedOne() async throws {

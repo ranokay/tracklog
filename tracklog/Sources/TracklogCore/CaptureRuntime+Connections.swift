@@ -179,10 +179,12 @@ public extension CaptureRuntime {
         return unlinked
     }
 
-    /// How many deliveries the unlink confirmation will abandon.
-    func pendingDeliveryCount(forConnection id: Int64) async -> Int {
+    /// How many deliveries the unlink confirmation will abandon. A read failure
+    /// is surfaced rather than shown as zero, because the confirm dialog would
+    /// then understate what unlink destroys.
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
         guard let deliveryStore else { return 0 }
-        return await (try? deliveryStore.pendingDeliveryCount(forConnection: id)) ?? 0
+        return try await deliveryStore.pendingDeliveryCount(forConnection: id)
     }
 
     /// A restored network path drains every eligible connection now.

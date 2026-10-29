@@ -73,12 +73,20 @@ public final class ConnectionService {
             }
             do {
                 // A row left by a failed credential save has no usable secret
-                // and would block a new link to its endpoint.
-                try await deliveries?.abandonPending(
-                    forConnection: id,
-                    reason: Self.lostCredentialReason,
-                )
-                try await store.deleteConnection(id: id)
+                // and would block a new link to its endpoint. The cleanup and
+                // its queue abandonment commit together when the store can.
+                if let atomicStore = store as? any ConnectionUnlinkStore {
+                    _ = try await atomicStore.unlinkConnection(
+                        id: id,
+                        reason: Self.lostCredentialReason,
+                    )
+                } else {
+                    try await deliveries?.abandonPending(
+                        forConnection: id,
+                        reason: Self.lostCredentialReason,
+                    )
+                    try await store.deleteConnection(id: id)
+                }
             } catch {
                 var orphan = connection
                 orphan.authState = .needsSignIn
