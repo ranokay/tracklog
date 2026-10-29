@@ -14,7 +14,9 @@ public extension ConnectionService {
     /// A different identity asks first, abandons the old pending deliveries and
     /// takes the new identity on the same connection. `identity` is the one a
     /// browser flow already verified; `nil` validates the credential with the
-    /// service first.
+    /// service first. The caller must suspend this connection's drain before
+    /// calling, so the new credential never meets the old queue; the runtime
+    /// does.
     @discardableResult
     func reauthenticate(
         id: Int64,
@@ -126,13 +128,6 @@ public extension ConnectionService {
         }
         try Task.checkCancellation()
 
-        // The user just confirmed abandoning these rows, and they must be gone
-        // before the new account's credential lands: no listen from the old
-        // identity may ever be sent to the new one. A later write failure
-        // leaves the old connection linked with an empty queue rather than
-        // risking that.
-        _ = try await abandonPending(forConnection: id, reason: Self.replacementReason)
-
         let previousCredential = try? await credentials.credential(forConnection: id)
         do {
             try await credentials.saveCredential(credential, forConnection: id)
@@ -141,6 +136,9 @@ public extension ConnectionService {
             throw ConnectionError.credentialStorage
         }
 
+        // The runtime suspended this connection's drain, so the new credential
+        // cannot meet the old queue. The identity change and the abandonment
+        // commit together: a failure leaves the old row and its queue intact.
         let replaced = Connection(
             id: id,
             kind: existing.kind,
@@ -153,15 +151,28 @@ public extension ConnectionService {
             lastUsedAt: clock.now,
         )
         do {
-            let stored = try await store.save(replaced)
+            let stored: Connection
+            if let atomicStore = store as? any ConnectionReplaceStore {
+                stored = try await atomicStore.replaceConnection(
+                    replaced,
+                    reason: Self.replacementReason,
+                ).connection
+            } else {
+                // Stores without the atomic operation are tests and the
+                // harness.
+                _ = try await abandonPending(forConnection: id, reason: Self.replacementReason)
+                stored = try await store.save(replaced)
+            }
             connections[index] = stored
             log(.reauthenticated(kind: stored.kind, identity: stored.identity))
             return stored
         } catch {
-            // The new credential names an account the store does not hold.
-            // Put the old one back so the old identity keeps working.
+            // A thrown write leaves the stored row unchanged, so put the old
+            // credential back and let the old identity keep working.
             if let previousCredential {
                 try? await credentials.saveCredential(previousCredential, forConnection: id)
+            } else {
+                try? await credentials.deleteCredential(forConnection: id)
             }
             throw error
         }

@@ -32,28 +32,21 @@ public extension SQLiteListenStore {
     func save(_ connection: Connection) async throws -> Connection {
         let handle = try database()
         if let id = connection.id {
-            guard try readConnection(id: id, handle: handle) != nil else {
-                throw ConnectionError.unknownConnection(id: id)
+            // The update and its readback are one unit: a thrown error must
+            // leave the stored row exactly as it was.
+            try Self.execute(handle, "BEGIN IMMEDIATE")
+            do {
+                guard try readConnection(id: id, handle: handle) != nil else {
+                    throw ConnectionError.unknownConnection(id: id)
+                }
+                try updateConnectionRow(connection, id: id, handle: handle)
+                let stored = try readConnection(id: id, handle: handle) ?? connection
+                try Self.execute(handle, "COMMIT")
+                return stored
+            } catch {
+                try? Self.execute(handle, "ROLLBACK")
+                throw error
             }
-            let statement = try prepare(
-                handle,
-                """
-                UPDATE connections
-                SET identity = ?, display_name = ?, enabled = ?, auth_state = ?, last_used_at = ?
-                WHERE id = ?
-                """,
-            )
-            defer { sqlite3_finalize(statement) }
-            try bind(connection.identity, at: 1, in: statement)
-            try bind(connection.displayName, at: 2, in: statement)
-            sqlite3_bind_int(statement, 3, connection.isEnabled ? 1 : 0)
-            try bind(connection.authState.rawValue, at: 4, in: statement)
-            sqlite3_bind_double(statement, 5, connection.lastUsedAt.timeIntervalSince1970)
-            sqlite3_bind_int64(statement, 6, id)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-            return try readConnection(id: id, handle: handle) ?? connection
         }
 
         let statement = try prepare(
@@ -85,6 +78,25 @@ public extension SQLiteListenStore {
             throw DatabaseError.sqlite(errorMessage(handle))
         }
         return connection.stored(withID: sqlite3_last_insert_rowid(handle))
+    }
+
+    func replaceConnection(_ connection: Connection, reason: String) async throws -> ReplacedConnection {
+        guard let id = connection.id else { throw ConnectionError.unknownConnection(id: -1) }
+        let handle = try database()
+        try Self.execute(handle, "BEGIN IMMEDIATE")
+        do {
+            guard try readConnection(id: id, handle: handle) != nil else {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            try updateConnectionRow(connection, id: id, handle: handle)
+            let abandoned = try abandonPending(forConnection: id, reason: reason, handle: handle)
+            let stored = try readConnection(id: id, handle: handle) ?? connection
+            try Self.execute(handle, "COMMIT")
+            return ReplacedConnection(connection: stored, abandonedDeliveries: abandoned)
+        } catch {
+            try? Self.execute(handle, "ROLLBACK")
+            throw error
+        }
     }
 
     func deleteConnection(id: Int64) async throws {
@@ -208,6 +220,28 @@ private extension SQLiteListenStore {
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 7)),
             lastUsedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 8)),
         )
+    }
+
+    /// Writes the mutable connection fields. The caller owns the transaction.
+    func updateConnectionRow(_ connection: Connection, id: Int64, handle: OpaquePointer) throws {
+        let statement = try prepare(
+            handle,
+            """
+            UPDATE connections
+            SET identity = ?, display_name = ?, enabled = ?, auth_state = ?, last_used_at = ?
+            WHERE id = ?
+            """,
+        )
+        defer { sqlite3_finalize(statement) }
+        try bind(connection.identity, at: 1, in: statement)
+        try bind(connection.displayName, at: 2, in: statement)
+        sqlite3_bind_int(statement, 3, connection.isEnabled ? 1 : 0)
+        try bind(connection.authState.rawValue, at: 4, in: statement)
+        sqlite3_bind_double(statement, 5, connection.lastUsedAt.timeIntervalSince1970)
+        sqlite3_bind_int64(statement, 6, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
     }
 
     /// Deletes one connection row and clears the cursor when it pointed at it.

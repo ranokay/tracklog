@@ -120,6 +120,38 @@ struct ConnectionReauthenticationTests {
         #expect(try await store.connections().map(\.identity) == ["new-listener"])
     }
 
+    @Test func aFailedCredentialSaveLeavesTheOldQueueAndIdentity() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let connection = try await savedConnection(store, identity: "old-listener")
+        let credentials = SaveFailingCredentialStore()
+        try await credentials.seed("old-token", forConnection: connection.id ?? -1)
+        let listen = try await holdPendingDelivery(store, connection: connection)
+        let state = TracklogAppState()
+        let runtime = makeConnectionRuntime(
+            store: store,
+            credentials: credentials,
+            adapters: [RecordingDeliveryAdapter()],
+            state: state,
+        )
+        await runtime.start()
+
+        await #expect(throws: ConnectionError.credentialStorage) {
+            _ = try await runtime.reauthenticate(
+                id: connection.id ?? -1,
+                credential: "new-token",
+                identity: ServiceIdentity(name: "new-listener"),
+                confirmReplacement: { _, _, _ in true },
+            )
+        }
+
+        #expect(state.connections.map(\.identity) == ["old-listener"])
+        let deliveries = try await store.deliveries(for: listen.id ?? -1)
+        #expect(deliveries.map(\.state) == [.retrying], "a credential failure never abandons the queue")
+        #expect(deliveries.first?.abandonedReason == nil)
+        #expect(try await store.connections().map(\.identity) == ["old-listener"])
+    }
+
     @Test func refusingTheReplacementChangesNothing() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
@@ -149,5 +181,35 @@ struct ConnectionReauthenticationTests {
         #expect(try await credentials.credential(forConnection: connection.id ?? -1) == "old-token")
         let deliveries = try await store.deliveries(for: listen.id ?? -1)
         #expect(deliveries.map(\.state) == [.retrying])
+    }
+}
+
+/// A credential store whose writes fail, so a re-auth can be shown to leave
+/// the old queue and identity alone.
+private actor SaveFailingCredentialStore: CredentialStore {
+    private let base = MemoryCredentialStore()
+
+    func seed(_ credential: String, forConnection id: Int64) async throws {
+        try await base.saveCredential(credential, forConnection: id)
+    }
+
+    func credential(forConnection id: Int64) async throws -> String? {
+        try await base.credential(forConnection: id)
+    }
+
+    func saveCredential(_: String, forConnection _: Int64) async throws {
+        throw DatabaseError.unavailable("simulated Keychain write failure")
+    }
+
+    func deleteCredential(forConnection id: Int64) async throws {
+        try await base.deleteCredential(forConnection: id)
+    }
+
+    func appCredential() async throws -> String? {
+        try await base.appCredential()
+    }
+
+    func saveAppCredential(_ credential: String?) async throws {
+        try await base.saveAppCredential(credential)
     }
 }
