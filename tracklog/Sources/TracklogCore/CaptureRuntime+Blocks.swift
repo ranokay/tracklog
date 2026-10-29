@@ -32,7 +32,17 @@ public extension CaptureRuntime {
         }
         let saved = try await blockStore.save(block)
         await loadBlocks()
+        if let title = blockHUDTitle(saved) {
+            showHUD(.blocked(title: title))
+        }
         return saved
+    }
+
+    private func blockHUDTitle(_ block: BlockRule) -> String? {
+        [block.track, block.artist, block.album, block.albumArtist]
+            .lazy
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 
     func deleteBlock(id: Int64) async throws {

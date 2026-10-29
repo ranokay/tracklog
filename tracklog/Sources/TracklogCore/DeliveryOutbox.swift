@@ -41,8 +41,8 @@ public final class DeliveryOutbox {
     /// page shows the reason; this is not a per-account sign-in problem.
     var onAppCredentialProblem: (@MainActor (ServiceKind, AppCredentialProblem) -> Void)?
     /// One item reached its service, so a stale app-credential warning can
-    /// clear.
-    var onDeliverySucceeded: (@MainActor (ServiceKind) -> Void)?
+    /// clear and a recovery HUD can count what was actually delivered.
+    var onDeliverySucceeded: (@MainActor (ServiceKind, Int64) -> Void)?
 
     public init(
         store: any DeliveryStore,
@@ -342,8 +342,8 @@ private extension DeliveryOutbox {
                 continueDraining = false
             }
             let written = await writer.apply(result, to: queued, connection: connection)
-            if written, case .delivered = result {
-                onDeliverySucceeded?(connection.kind)
+            if written, case .delivered = result, let id = connection.id {
+                onDeliverySucceeded?(connection.kind, id)
             }
             persisted = written && persisted
         }

@@ -17,6 +17,7 @@ public final class CaptureRuntime {
     let deliveryStore: (any DeliveryStore)?
     let deliveryOutbox: DeliveryOutbox?
     let credentialStore: (any CredentialStore)?
+    let hudSession: HUDHostSession?
     let compiledLastFMAppCredentials: LastFMAppCredentials
     let lastFMAppCredentialsValidator: (any LastFMAppCredentialValidating)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
@@ -40,6 +41,12 @@ public final class CaptureRuntime {
     /// Identifies the newest delivery read, so an older suspended read cannot
     /// overwrite a newer queue or row snapshot.
     var deliveryReloadGeneration = 0
+    /// Wakes when the oldest pending delivery crosses the stuck threshold, so
+    /// a quiet queue ages without requiring user activity.
+    var stuckEvaluationTask: Task<Void, Never>?
+    /// The activation baseline and transition bookkeeping behind every HUD
+    /// event.
+    var hudTracking = HUDTracking()
     private var feedRunning = false
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
@@ -61,6 +68,7 @@ public final class CaptureRuntime {
         compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
+        hud: HUDHostSession? = nil,
         failure: CaptureFailure? = nil,
         settings: CaptureSettings = CaptureSettings(),
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
@@ -76,6 +84,7 @@ public final class CaptureRuntime {
         self.clock = clock
         self.source = source
         self.store = store
+        hudSession = hud
         credentialStore = credentials
         self.compiledLastFMAppCredentials = compiledLastFMAppCredentials
         lastFMAppCredentialsValidator = serviceAdapters
@@ -155,6 +164,7 @@ public final class CaptureRuntime {
         compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
+        hud: HUDHostSession? = nil,
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
@@ -189,6 +199,7 @@ public final class CaptureRuntime {
             compiledLastFMAppCredentials: compiledLastFMAppCredentials,
             connectionLog: connectionLog,
             deliveryLog: deliveryLog,
+            hud: hud,
             failure: failure,
             settings: settings,
             persistSettings: persistSettings,
@@ -207,6 +218,9 @@ public final class CaptureRuntime {
         pauseTask = nil
         deliveryRefreshTask?.cancel()
         deliveryRefreshTask = nil
+        stuckEvaluationTask?.cancel()
+        stuckEvaluationTask = nil
+        hudTracking.primed = false
         deliveryOutbox?.deactivate()
         stopFeed()
         started = false
@@ -282,15 +296,20 @@ private extension CaptureRuntime {
             guard kind == .lastFM else { return }
             self?.noteLastFMAppCredentialProblem(problem)
         }
-        deliveryOutbox?.onDeliverySucceeded = { [weak self] kind in
-            guard kind == .lastFM else { return }
-            self?.clearLastFMAppCredentialProblem()
+        deliveryOutbox?.onDeliverySucceeded = { [weak self] kind, connectionID in
+            guard let self else { return }
+            if kind == .lastFM {
+                clearLastFMAppCredentialProblem()
+            }
+            noteDelivered(connectionID: connectionID)
         }
     }
 
     func applyMediaStatus(_ status: MediaStatus) {
         guard status != state.mediaStatus else { return }
+        let wasAvailable = state.mediaStatus.isAvailable
         state.mediaStatus = status
+        evaluateMediaHUD(wasAvailable: wasAvailable, isAvailable: status.isAvailable)
     }
 }
 
@@ -343,6 +362,12 @@ extension CaptureRuntime {
 
         await replayPendingLastFMInvalidation()
         guard finishStart(generation) else { return }
+
+        // Record the standing state before the activation drain. A queue that
+        // was already stuck or a connection that already needs sign-in is
+        // carried by the widget and banner, never by a launch HUD.
+        primeHUDBaselines()
+        scheduleStuckEvaluation()
 
         // Deliveries are durable and independent of the capture switches, so a
         // relaunch resumes the queue even with scrobbling off or paused.
