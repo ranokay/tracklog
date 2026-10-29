@@ -3,14 +3,14 @@ import Testing
 @testable import TracklogCore
 
 @MainActor
-private func feedbackHarness(
+func feedbackHarness(
     base: Date,
     adapter: RecordingDeliveryAdapter,
 ) async throws -> DeliveryHarness {
     try await DeliveryHarness(base: base, adapters: [adapter])
 }
 
-private func makeBrainzAdapter(
+func makeBrainzAdapter(
     requiresReference: Bool = true,
     reference: RecordingReference? = .mbid("mbid-lookup"),
     lookupGate: DeliveryGate? = nil,

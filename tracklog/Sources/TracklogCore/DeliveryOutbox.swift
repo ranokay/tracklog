@@ -212,6 +212,11 @@ public final class DeliveryOutbox {
 
     private func run(_ worker: ConnectionWorker, connectionID id: Int64) async {
         defer {
+            // Feedback queued after this worker was cancelled never runs.
+            // Resume it so its caller finishes without a leaked continuation.
+            let orphaned = worker.feedback
+            worker.feedback.removeAll()
+            orphaned.forEach { $0.resume(nil) }
             worker.task = nil
             if workers[id] === worker {
                 workers[id] = nil

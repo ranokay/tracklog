@@ -80,7 +80,13 @@ private struct TracklogHistory: View {
             }
             content
             if state.scrobblingEnabled, let sample = state.nowPlaying {
-                NowPlayingStrip(droplet: droplet, sample: sample, status: state.status)
+                NowPlayingStrip(
+                    droplet: droplet,
+                    sample: sample,
+                    status: state.status,
+                    isLoved: state.nowPlayingIsLoved,
+                    canLove: state.feedbackSupport.canLove,
+                )
             }
         }
         .frame(

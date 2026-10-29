@@ -210,6 +210,8 @@ struct NowPlayingStrip: View {
     let droplet: TracklogDroplet
     let sample: MediaSample
     let status: ScrobbleStatus
+    let isLoved: Bool
+    let canLove: Bool
 
     var body: some View {
         VStack(spacing: DroppySpacing.sm) {
@@ -268,25 +270,25 @@ struct NowPlayingStrip: View {
         Button {
             droplet.toggleLoveForCurrentTrack()
         } label: {
-            Image(systemName: droplet.state.nowPlayingIsLoved ? "heart.fill" : "heart")
+            Image(systemName: isLoved ? "heart.fill" : "heart")
         }
         .buttonStyle(DroppyCircleButtonStyle(size: 24))
-        .disabled(!droplet.state.feedbackSupport.canLove)
+        .disabled(!canLove)
         .help(loveHelp)
-        .accessibilityLabel(droplet.state.nowPlayingIsLoved ? "Unlove this track" : "Love this track")
+        .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
         .accessibilityHint(loveHint)
         .transition(DroppyTransition.compactContent)
     }
 
     private var loveHelp: String {
-        guard droplet.state.feedbackSupport.canLove else {
+        guard canLove else {
             return "Connect a service that supports love"
         }
-        return droplet.state.nowPlayingIsLoved ? "Unlove this track" : "Love this track"
+        return isLoved ? "Unlove this track" : "Love this track"
     }
 
     private var loveHint: String {
-        droplet.state.feedbackSupport.canLove ? "" : "Connect a service that supports love."
+        canLove ? "" : "Connect a service that supports love."
     }
 
     private var elapsedText: String {
