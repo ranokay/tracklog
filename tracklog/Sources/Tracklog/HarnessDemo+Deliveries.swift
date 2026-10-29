@@ -52,12 +52,17 @@ extension HarnessDemoStore {
             }
     }
 
+    func pendingDeliveryCount(forConnection connectionID: Int64) async throws -> Int {
+        deliveryRows.filter { $0.connectionID == connectionID && $0.state.isPending }.count
+    }
+
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
         updateDelivery(deliveryID) { delivery in
             Delivery(
                 id: delivery.id,
                 listenID: delivery.listenID,
                 connectionID: delivery.connectionID,
+                serviceKind: delivery.serviceKind,
                 state: .delivered,
                 attempts: delivery.attempts,
                 lastAttemptAt: date,
@@ -82,6 +87,7 @@ extension HarnessDemoStore {
                 id: delivery.id,
                 listenID: delivery.listenID,
                 connectionID: delivery.connectionID,
+                serviceKind: delivery.serviceKind,
                 state: .retrying,
                 attempts: attempts,
                 lastAttemptAt: date,
@@ -100,6 +106,7 @@ extension HarnessDemoStore {
                 id: delivery.id,
                 listenID: delivery.listenID,
                 connectionID: delivery.connectionID,
+                serviceKind: delivery.serviceKind,
                 state: .abandoned,
                 attempts: attempts,
                 lastAttemptAt: lastAttemptAt,
@@ -112,6 +119,30 @@ extension HarnessDemoStore {
         }
     }
 
+    func abandonPending(forConnection connectionID: Int64, reason: String) async throws -> Int {
+        var abandoned = 0
+        for delivery in deliveryRows where delivery.connectionID == connectionID && delivery.state.isPending {
+            abandoned += 1
+            updateDelivery(delivery.id) { current in
+                Delivery(
+                    id: current.id,
+                    listenID: current.listenID,
+                    connectionID: current.connectionID,
+                    serviceKind: current.serviceKind,
+                    state: .abandoned,
+                    attempts: current.attempts,
+                    lastAttemptAt: current.lastAttemptAt,
+                    nextAttemptAt: nil,
+                    lastError: current.lastError,
+                    abandonedReason: reason,
+                    deliveredAt: nil,
+                    serviceReference: current.serviceReference,
+                )
+            }
+        }
+        return abandoned
+    }
+
     func markDue(for connectionID: Int64, at date: Date) async throws {
         for delivery in deliveryRows where delivery.connectionID == connectionID && delivery.state.isPending {
             updateDelivery(delivery.id) { current in
@@ -119,6 +150,7 @@ extension HarnessDemoStore {
                     id: current.id,
                     listenID: current.listenID,
                     connectionID: current.connectionID,
+                    serviceKind: current.serviceKind,
                     state: current.state,
                     attempts: current.attempts,
                     lastAttemptAt: current.lastAttemptAt,
@@ -134,7 +166,9 @@ extension HarnessDemoStore {
 
     func earliestNextAttempt(for connectionIDs: [Int64]) async throws -> Date? {
         deliveryRows
-            .filter { connectionIDs.contains($0.connectionID) && $0.state.isPending }
+            .filter {
+                $0.connectionID.map(connectionIDs.contains) == true && $0.state.isPending
+            }
             .compactMap(\.nextAttemptAt)
             .min()
     }

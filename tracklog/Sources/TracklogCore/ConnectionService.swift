@@ -1,45 +1,32 @@
 import Foundation
 
-/// One line the composition root may log. It carries no credential by
-/// construction, and none of its descriptions include a service message.
-public enum ConnectionEvent: Equatable, Sendable, CustomStringConvertible {
-    case linked(kind: ServiceKind, identity: String)
-    case linkFailed(kind: ServiceKind, reason: String)
-
-    public var description: String {
-        switch self {
-        case let .linked(kind, identity):
-            "Linked \(kind.displayName) as \(identity)"
-        case let .linkFailed(kind, reason):
-            "Linking \(kind.displayName) failed: \(reason)"
-        }
-    }
-}
-
 /// The link and connection-choice flows over the connection, credential and
 /// adapter ports. A link validates first, so a rejected token cannot disturb
 /// an existing connection.
 @MainActor
 public final class ConnectionService {
-    public private(set) var connections: [Connection] = []
-    public private(set) var currentID: Int64?
+    public internal(set) var connections: [Connection] = []
+    public internal(set) var currentID: Int64?
 
-    private let store: any ConnectionStore
-    private let credentials: any CredentialStore
-    private let adapters: [ServiceKind: any ServiceAdapter]
-    private let clock: any Clock
-    private let log: @MainActor (ConnectionEvent) -> Void
-    private let gate = ConnectionOperationGate()
+    let store: any ConnectionStore
+    let credentials: any CredentialStore
+    let deliveries: (any DeliveryStore)?
+    let adapters: [ServiceKind: any ServiceAdapter]
+    let clock: any Clock
+    let log: @MainActor (ConnectionEvent) -> Void
+    let gate = ConnectionOperationGate()
 
     public init(
         store: any ConnectionStore,
         credentials: any CredentialStore,
+        deliveries: (any DeliveryStore)? = nil,
         adapters: [any ServiceAdapter],
         clock: any Clock,
         log: @escaping @MainActor (ConnectionEvent) -> Void = { _ in },
     ) {
         self.store = store
         self.credentials = credentials
+        self.deliveries = deliveries
         self.clock = clock
         self.log = log
         var byKind: [ServiceKind: any ServiceAdapter] = [:]
@@ -86,8 +73,20 @@ public final class ConnectionService {
             }
             do {
                 // A row left by a failed credential save has no usable secret
-                // and would block a new link to its endpoint.
-                try await store.deleteConnection(id: id)
+                // and would block a new link to its endpoint. The cleanup and
+                // its queue abandonment commit together when the store can.
+                if let atomicStore = store as? any ConnectionUnlinkStore {
+                    _ = try await atomicStore.unlinkConnection(
+                        id: id,
+                        reason: Self.lostCredentialReason,
+                    )
+                } else {
+                    try await deliveries?.abandonPending(
+                        forConnection: id,
+                        reason: Self.lostCredentialReason,
+                    )
+                    try await store.deleteConnection(id: id)
+                }
             } catch {
                 var orphan = connection
                 orphan.authState = .needsSignIn
@@ -149,18 +148,28 @@ public final class ConnectionService {
     }
 
     /// Persists the current-connection read cursor. It never changes a queued
-    /// delivery's target and never scopes local history.
+    /// delivery's target and never scopes local history. Choosing a connection
+    /// counts as using it, so an unlink falls back to the most recently chosen
+    /// one.
     public func setCurrent(_ id: Int64?) async throws {
         try await withGate {
-            if let id, !connections.contains(where: { $0.id == id }) {
+            guard let id else {
+                try await store.setCurrentConnectionID(nil)
+                currentID = nil
+                return
+            }
+            guard let index = connections.firstIndex(where: { $0.id == id }) else {
                 throw ConnectionError.unknownConnection(id: id)
             }
+            var selected = connections[index]
+            selected.lastUsedAt = clock.now
+            connections[index] = try await store.save(selected)
             try await store.setCurrentConnectionID(id)
             currentID = id
         }
     }
 
-    private func withGate<T>(_ operation: @MainActor () async throws -> T) async throws -> T {
+    func withGate<T>(_ operation: @MainActor () async throws -> T) async throws -> T {
         if gate.hasHolder {
             onGateWait?()
         }
@@ -206,7 +215,7 @@ public extension ConnectionService {
 }
 
 /// A link log line's reason. It names the failure class, never a credential.
-private func connectionFailureReason(_ failure: ServiceFailure) -> String {
+func connectionFailureReason(_ failure: ServiceFailure) -> String {
     switch failure {
     case .auth: "authentication failed"
     case .appCredentialAuth: "app credentials rejected"

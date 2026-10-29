@@ -33,6 +33,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
     private(set) var lastFMLink: LastFMLinkModel?
+    /// The browser re-auth in flight, bound to the connection page that
+    /// started it. The model survives a page rebuild while that page stays
+    /// open, the same way a first link does.
+    var reauthLink: TracklogReauthLink?
+    /// The transport the production runtime and its link models share.
+    var serviceTransport: URLSessionTransport?
     /// The Libre.fm browser link in flight, with the root it was started
     /// against. Kept in the droplet for the same reason as Last.fm's model.
     var libreFMLink: TracklogLibreFMLink?
@@ -81,6 +87,7 @@ public final class TracklogDroplet: NSObject, Droplet {
                 appCredentials: lastFMAppCredentialsProvider,
             )
         }
+        serviceTransport = transport
         if !isHarness {
             let reachability = NetworkReachability { [weak runtime] in
                 runtime?.networkBecameAvailable()
@@ -110,6 +117,10 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         lastFMLink?.cancel()
         lastFMLink = nil
+        reauthLink?.model.cancel()
+        reauthLink = nil
+        state.setReauthConnection(nil)
+        serviceTransport = nil
         libreFMLink?.model.cancel()
         libreFMLink = nil
         libreFMAdapter = nil
@@ -350,5 +361,11 @@ extension TracklogDroplet: ShelfWidgetProviding {
 /// together, so a model can never outlive the server it was started against.
 struct TracklogLibreFMLink {
     let endpoint: ServiceEndpoint
+    let model: LastFMLinkModel
+}
+
+/// A browser re-auth in flight on one connection's page.
+struct TracklogReauthLink {
+    let connectionID: Int64
     let model: LastFMLinkModel
 }

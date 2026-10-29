@@ -17,7 +17,12 @@ public enum DeliveryState: String, CaseIterable, Equatable, Sendable {
 public struct Delivery: Identifiable, Equatable, Sendable {
     public let id: Int64
     public let listenID: Int64
-    public let connectionID: Int64
+    /// The target connection. It is `nil` once that connection is unlinked:
+    /// the row stays so local history keeps naming the service.
+    public let connectionID: Int64?
+    /// The service the listen was sent to, kept after an unlink. `nil` only on
+    /// a row assembled without a store read, such as a test fixture.
+    public let serviceKind: ServiceKind?
     public let state: DeliveryState
     /// Failed attempts so far. A manual retry never resets it.
     public let attempts: Int
@@ -34,7 +39,8 @@ public struct Delivery: Identifiable, Equatable, Sendable {
     public init(
         id: Int64,
         listenID: Int64,
-        connectionID: Int64,
+        connectionID: Int64?,
+        serviceKind: ServiceKind? = nil,
         state: DeliveryState,
         attempts: Int,
         lastAttemptAt: Date? = nil,
@@ -47,6 +53,7 @@ public struct Delivery: Identifiable, Equatable, Sendable {
         self.id = id
         self.listenID = listenID
         self.connectionID = connectionID
+        self.serviceKind = serviceKind
         self.state = state
         self.attempts = attempts
         self.lastAttemptAt = lastAttemptAt
@@ -112,6 +119,9 @@ public protocol DeliveryStore: Sendable {
     /// retries are included; the pending list is not only the due set.
     func pendingDeliveries() async throws -> [QueuedDelivery]
 
+    /// How many deliveries for one connection are still waiting or retrying.
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int
+
     func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws
 
     /// Records one failed attempt and when the next one is due.
@@ -131,6 +141,10 @@ public protocol DeliveryStore: Sendable {
         lastAttemptAt: Date?,
         reason: String,
     ) async throws
+
+    /// Abandons every pending delivery for one unlinked connection and returns
+    /// how many rows changed. The listens stay in local history.
+    func abandonPending(forConnection id: Int64, reason: String) async throws -> Int
 
     /// Makes every pending delivery for one connection due now, without
     /// touching attempts.

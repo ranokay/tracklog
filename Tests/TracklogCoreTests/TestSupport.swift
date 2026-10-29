@@ -106,6 +106,20 @@ final class TemporaryDatabase {
         try data.write(to: url)
     }
 
+    /// Inserts a delivery the way a build before unlink support wrote one,
+    /// when the table had no denormalized service kind.
+    func insertLegacyDelivery(listenID: Int64, connectionID: Int64, state: String = "waiting") throws {
+        try withSQLite { handle in
+            try SQLiteListenStore.execute(
+                handle,
+                """
+                INSERT INTO deliveries (listen_id, connection_id, state, attempts, next_attempt_at)
+                VALUES (\(listenID), \(connectionID), '\(state)', 0, 1000000)
+                """,
+            )
+        }
+    }
+
     private func withSQLite<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
         var handle: OpaquePointer?
         guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let handle else {

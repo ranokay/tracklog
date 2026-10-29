@@ -1,3 +1,4 @@
+import AppKit
 import DroppyKit
 import TracklogCore
 
@@ -47,6 +48,135 @@ extension TracklogDroplet {
             host.log.notice("Opening the connection page was refused")
             return
         }
+    }
+
+    // MARK: - Re-auth and unlink
+
+    /// Whether the connection page can start a browser sign-in for this
+    /// service. ListenBrainz signs in with a token instead; the harness has no
+    /// transport, so it never offers a dead browser flow.
+    func canStartBrowserSignIn(_ connection: Connection) -> Bool {
+        switch connection.kind {
+        case .lastFM:
+            serviceTransport != nil && lastFMAppCredentialsProvider != nil
+        case .libreFM:
+            libreFMAdapter != nil
+        case .listenBrainz:
+            false
+        }
+    }
+
+    /// The browser model bound to one connection page, if a re-auth is open.
+    func reauthLink(for connectionID: Int64) -> LastFMLinkModel? {
+        guard reauthLink?.connectionID == connectionID else { return nil }
+        return reauthLink?.model
+    }
+
+    /// Starts the same browser flow a first link uses, bound to the existing
+    /// connection. The page renders the flow in place.
+    func startReauth(for connection: Connection) {
+        guard let id = connection.id, let model = makeReauthLink(for: connection) else {
+            host?.log.notice("Signing in again is unavailable")
+            return
+        }
+        cancelReauth()
+        reauthLink = TracklogReauthLink(connectionID: id, model: model)
+        state.setReauthConnection(id)
+    }
+
+    /// Clears the re-auth flow. A completed connection is already published by
+    /// the runtime, so dropping the page model never changes it.
+    func cancelReauth() {
+        reauthLink?.model.cancel()
+        reauthLink = nil
+        state.setReauthConnection(nil)
+    }
+
+    /// ListenBrainz signs in with a token rather than a browser. The credential
+    /// is validated by the adapter inside the runtime.
+    func reauthenticateListenBrainz(connectionID: Int64, token: String) async throws {
+        guard let runtime else { throw ConnectionError.unavailable }
+        _ = try await runtime.reauthenticate(
+            id: connectionID,
+            credential: token,
+            confirmReplacement: confirmReplacement,
+        )
+    }
+
+    /// Removes a connection. Pending deliveries are abandoned; the page's
+    /// dialog has already stated their count.
+    func unlinkConnection(id: Int64) async throws {
+        guard let runtime else { throw ConnectionError.unavailable }
+        _ = try await runtime.unlinkConnection(id: id)
+    }
+
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
+        guard let runtime else { throw ConnectionError.unavailable }
+        return try await runtime.pendingDeliveryCount(forConnection: id)
+    }
+
+    private func makeReauthLink(for connection: Connection) -> LastFMLinkModel? {
+        guard let id = connection.id, let runtime else { return nil }
+        switch connection.kind {
+        case .lastFM:
+            guard let serviceTransport, let lastFMAppCredentialsProvider else { return nil }
+            return LastFMLinkModel(
+                client: LastFMAdapter(
+                    transport: serviceTransport,
+                    appCredentials: lastFMAppCredentialsProvider,
+                ),
+                clock: SystemClock(),
+                openAuthorization: { NSWorkspace.shared.open($0) },
+                complete: { session in
+                    let updated = try await runtime.reauthenticate(
+                        id: id,
+                        credential: session.key,
+                        identity: ServiceIdentity(name: session.name),
+                        confirmReplacement: self.confirmReplacement,
+                    )
+                    runtime.clearLastFMAppCredentialProblem()
+                    return updated
+                },
+                onAppCredentialProblem: { [weak self] problem in
+                    self?.runtime?.noteLastFMAppCredentialProblem(problem)
+                },
+            )
+        case .libreFM:
+            guard let libreFMAdapter else { return nil }
+            return LastFMLinkModel(
+                client: libreFMAdapter.linkClient(for: connection.endpoint),
+                clock: SystemClock(),
+                serviceName: "Libre.fm",
+                openAuthorization: { NSWorkspace.shared.open($0) },
+                complete: { session in
+                    try await runtime.reauthenticate(
+                        id: id,
+                        credential: session.key,
+                        identity: ServiceIdentity(name: session.name),
+                        confirmReplacement: self.confirmReplacement,
+                    )
+                },
+            )
+        case .listenBrainz:
+            return nil
+        }
+    }
+
+    /// The host's own confirmation before a different identity takes over a
+    /// connection. The pending rows are named so the count is not a surprise.
+    private func confirmReplacement(
+        existing: Connection,
+        identity: ServiceIdentity,
+        pending: Int,
+    ) -> Bool {
+        DropletConfirmationDialog.present(
+            title: "Sign in as \(identity.name)?",
+            message: "\(existing.kind.displayName) is connected as \(existing.identity). "
+                + "\(TracklogConnectionCopy.pendingScrobbles(pending)) will be abandoned. "
+                + "The new account is used instead, and local history is kept.",
+            confirmTitle: "Replace",
+            symbol: "person.crop.circle.badge.xmark",
+        )
     }
 
     /// Starts a Libre.fm link against the root the listener typed and opens its

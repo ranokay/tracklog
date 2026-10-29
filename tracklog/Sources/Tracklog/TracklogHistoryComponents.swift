@@ -161,7 +161,8 @@ struct HistoryRow: View {
     }
 
     private func deliveryMenuText(_ delivery: Delivery) -> String {
-        let name = connections.first { $0.id == delivery.connectionID }?.kind.displayName
+        let name = delivery.serviceKind?.displayName
+            ?? connections.first { $0.id == delivery.connectionID }?.kind.displayName
             ?? "Unknown service"
         switch delivery.state {
         case .waiting, .retrying:

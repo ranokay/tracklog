@@ -138,6 +138,7 @@ enum HarnessDemoData {
                 id: id,
                 listenID: listenID,
                 connectionID: 1,
+                serviceKind: .listenBrainz,
                 state: state,
                 attempts: attempts,
                 lastAttemptAt: lastAttemptAt,

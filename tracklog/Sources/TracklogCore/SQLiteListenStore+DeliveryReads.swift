@@ -45,11 +45,33 @@ public extension SQLiteListenStore {
             if left.listenID != right.listenID {
                 return left.listenID < right.listenID
             }
-            if left.connectionID != right.connectionID {
-                return left.connectionID < right.connectionID
+            let leftConnection = left.connectionID ?? Int64.max
+            let rightConnection = right.connectionID ?? Int64.max
+            if leftConnection != rightConnection {
+                return leftConnection < rightConnection
             }
             return left.id < right.id
         }
+    }
+}
+
+public extension SQLiteListenStore {
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
+        let handle = try database()
+        let statement = try prepare(
+            handle,
+            """
+            SELECT COUNT(*)
+            FROM deliveries
+            WHERE connection_id = ? AND state IN ('waiting', 'retrying')
+            """,
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, id)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
+        return Int(sqlite3_column_int64(statement, 0))
     }
 }
 

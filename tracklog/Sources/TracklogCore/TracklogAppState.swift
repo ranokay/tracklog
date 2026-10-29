@@ -19,6 +19,9 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var connections: [Connection] = []
     /// The read cursor. It never scopes local history or redirects a delivery.
     @Published public internal(set) var currentConnectionID: Int64?
+    /// The connection whose browser sign-in is open on its page. The page
+    /// model itself lives in the droplet.
+    @Published public internal(set) var reauthConnectionID: Int64?
     /// Set until a connection read succeeds, so the Services page can say the
     /// list is unavailable rather than empty.
     @Published public internal(set) var connectionsFailure: CaptureFailure?
@@ -134,6 +137,10 @@ public final class TracklogAppState: ObservableObject {
 
     public func setPendingListExpanded(_ expanded: Bool) {
         pendingListExpanded = expanded
+    }
+
+    public func setReauthConnection(_ id: Int64?) {
+        reauthConnectionID = id
     }
 
     public func togglePendingList() {

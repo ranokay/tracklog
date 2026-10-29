@@ -231,6 +231,35 @@ public extension SQLiteListenStore {
         }
     }
 
+    func abandonPending(forConnection id: Int64, reason: String) async throws -> Int {
+        let handle = try database()
+        return try abandonPending(forConnection: id, reason: reason, handle: handle)
+    }
+
+    func abandonPending(
+        forConnection id: Int64,
+        reason: String,
+        handle: OpaquePointer,
+    ) throws -> Int {
+        let statement = try prepare(
+            handle,
+            """
+            UPDATE deliveries
+            SET state = 'abandoned',
+                next_attempt_at = NULL,
+                abandoned_reason = ?
+            WHERE connection_id = ? AND state IN ('waiting', 'retrying')
+            """,
+        )
+        defer { sqlite3_finalize(statement) }
+        try bind(reason, at: 1, in: statement)
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
+        return Int(sqlite3_changes(handle))
+    }
+
     func markDue(for connectionID: Int64, at date: Date) async throws {
         let handle = try database()
         let statement = try prepare(
@@ -278,10 +307,11 @@ public extension SQLiteListenStore {
 extension SQLiteListenStore {
     /// The number of columns in `deliveryColumns`, so a query can place the
     /// listen columns immediately after them without a second literal.
-    static let deliveryColumnCount = 11
+    static let deliveryColumnCount = 12
     static let deliveryColumns = """
     d.id, d.listen_id, d.connection_id, d.state, d.attempts, d.last_attempt_at,
-    d.next_attempt_at, d.last_error, d.abandoned_reason, d.delivered_at, d.service_reference
+    d.next_attempt_at, d.last_error, d.abandoned_reason, d.delivered_at, d.service_reference,
+    d.service_kind
     """
 
     private func readQueuedDeliveries(
@@ -318,8 +348,8 @@ extension SQLiteListenStore {
         let statement = try prepare(
             handle,
             """
-            INSERT INTO deliveries (listen_id, connection_id, state, attempts, next_attempt_at)
-            SELECT ?, id, 'waiting', 0, ?
+            INSERT INTO deliveries (listen_id, connection_id, service_kind, state, attempts, next_attempt_at)
+            SELECT ?, id, kind, 'waiting', 0, ?
             FROM connections
             WHERE id = ?
             """,
@@ -340,7 +370,10 @@ extension SQLiteListenStore {
         return Delivery(
             id: sqlite3_column_int64(statement, offset),
             listenID: sqlite3_column_int64(statement, offset + 1),
-            connectionID: sqlite3_column_int64(statement, offset + 2),
+            connectionID: sqlite3_column_type(statement, offset + 2) == SQLITE_NULL
+                ? nil
+                : sqlite3_column_int64(statement, offset + 2),
+            serviceKind: optionalText(statement, offset + 11).flatMap(ServiceKind.init(rawValue:)),
             state: state,
             attempts: Int(sqlite3_column_int64(statement, offset + 4)),
             lastAttemptAt: optionalDate(statement, offset + 5),

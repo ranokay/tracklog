@@ -40,8 +40,10 @@ public struct PendingQueue: Equatable, Sendable {
         )
         var grouped: [Int64: [PendingDeliveryItem]] = [:]
         for queued in pending {
-            guard let connection = byID[queued.delivery.connectionID] else { continue }
-            grouped[queued.delivery.connectionID, default: []].append(
+            guard let connectionID = queued.delivery.connectionID,
+                  let connection = byID[connectionID]
+            else { continue }
+            grouped[connectionID, default: []].append(
                 PendingDeliveryItem(
                     delivery: queued.delivery,
                     listen: queued.listen,

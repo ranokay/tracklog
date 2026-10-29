@@ -18,3 +18,34 @@ public protocol ConnectionStore: Sendable {
     /// refused rather than silently ignored.
     func setCurrentConnectionID(_ id: Int64?) async throws
 }
+
+/// A connection store that can remove a connection and abandon its pending
+/// deliveries in one durable operation, so a failure leaves both unchanged.
+public protocol ConnectionUnlinkStore: Sendable {
+    /// Abandons every waiting or retrying delivery for the connection, deletes
+    /// the connection, and clears the cursor when it pointed at it. Returns the
+    /// number of abandoned rows. A thrown error rolls everything back.
+    func unlinkConnection(id: Int64, reason: String) async throws -> Int
+}
+
+/// The stored result of replacing a connection's identity.
+public struct ReplacedConnection: Equatable, Sendable {
+    public let connection: Connection
+    public let abandonedDeliveries: Int
+
+    public init(connection: Connection, abandonedDeliveries: Int) {
+        self.connection = connection
+        self.abandonedDeliveries = abandonedDeliveries
+    }
+}
+
+/// A connection store that can change a connection's identity and abandon its
+/// pending deliveries in one durable operation. The old queue must never be
+/// left pending under the new identity.
+public protocol ConnectionReplaceStore: Sendable {
+    /// Writes the connection's new identity and abandons every waiting or
+    /// retrying delivery for it in one transaction. Returns the stored
+    /// connection and how many rows were abandoned. A thrown error changes
+    /// neither table.
+    func replaceConnection(_ connection: Connection, reason: String) async throws -> ReplacedConnection
+}

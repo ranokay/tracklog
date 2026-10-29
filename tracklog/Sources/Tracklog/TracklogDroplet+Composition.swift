@@ -65,9 +65,9 @@ extension TracklogDroplet {
             ],
             connectionLog: { event in
                 switch event {
-                case .linked:
+                case .linked, .reauthenticated:
                     host.log.info(event.description)
-                case .linkFailed:
+                case .linkFailed, .unlinked:
                     host.log.notice(event.description)
                 }
             },

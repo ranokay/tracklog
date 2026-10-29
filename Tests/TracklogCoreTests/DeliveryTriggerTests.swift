@@ -190,4 +190,28 @@ struct DeliveryTriggerTests {
         }
         #expect(delivered.map(\.state) == [.delivered])
     }
+
+    @Test func aSuspendDuringADrainNeverStartsASecondUntilTheWorkerEnds() async throws {
+        let gate = DeliveryGate()
+        let adapter = RecordingDeliveryAdapter(gate: gate)
+        let harness = try await makeHarness([adapter])
+        let connection = try await harness.connect(kind: .listenBrainz)
+        for start in [0, 10] {
+            _ = try await harness.insert(
+                deliveryListen(title: "Song \(start)", base: harness.clock.now, start: TimeInterval(start)),
+                for: [connection],
+            )
+        }
+
+        harness.outbox.activate()
+        await gate.waitUntilEntered()
+        harness.outbox.suspend(connectionID: connection.id ?? -1)
+        harness.outbox.resume(connectionID: connection.id ?? -1)
+        await gate.release()
+
+        let batches = await awaitBatches(adapter, count: 2)
+        #expect(batches.count == 2)
+        #expect(await adapter.peakBatchesInFlight == 1)
+        #expect(await gate.peak == 1)
+    }
 }
