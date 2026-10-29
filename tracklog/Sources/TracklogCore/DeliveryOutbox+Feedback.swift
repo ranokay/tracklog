@@ -29,8 +29,6 @@ public extension DeliveryOutbox {
     }
 }
 
-// MARK: - Feedback
-
 extension DeliveryOutbox {
     private func enqueueFeedback(
         _ action: FeedbackAction,
@@ -74,7 +72,9 @@ extension DeliveryOutbox {
                   adapter: adapter,
                   connection: connection,
                   credential: credential,
-              ), !adapter.requiresReference || reference != nil
+              ),
+              canContinueFeedback(pending, id: id, action: pending.action),
+              !adapter.requiresReference || reference != nil
         else { return nil }
 
         await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
