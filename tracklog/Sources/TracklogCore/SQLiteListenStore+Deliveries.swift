@@ -233,6 +233,14 @@ public extension SQLiteListenStore {
 
     func abandonPending(forConnection id: Int64, reason: String) async throws -> Int {
         let handle = try database()
+        return try abandonPending(forConnection: id, reason: reason, handle: handle)
+    }
+
+    func abandonPending(
+        forConnection id: Int64,
+        reason: String,
+        handle: OpaquePointer,
+    ) throws -> Int {
         let statement = try prepare(
             handle,
             """

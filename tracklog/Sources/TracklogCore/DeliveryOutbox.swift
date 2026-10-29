@@ -1,13 +1,5 @@
 import Foundation
 
-/// The result of applying one batch's per-item outcomes.
-struct DeliveryApplyOutcome {
-    /// False when a daily limit says the next batch would be refused too.
-    let continueDraining: Bool
-    /// False when a local row could not record its outcome.
-    let persisted: Bool
-}
-
 /// Drains durable deliveries, one task per connection, oldest listen first.
 ///
 /// A trigger while a connection is draining sets a run-again flag instead of
@@ -29,12 +21,16 @@ public final class DeliveryOutbox {
         drain: { [weak self] ids in self?.drain(connectionIDs: ids) },
     )
     private var workers: [Int64: ConnectionWorker] = [:]
-    private var nowPlayingReferences: [Int64: String] = [:]
+    /// The recording reference the last now playing returned, per connection.
+    var nowPlayingReferences: [Int64: String] = [:]
     /// The last request start per connection, kept across worker lifetimes so
     /// the one-second spacing rule survives a drain ending.
     private var lastRequestAt: [Int64: Date] = [:]
     /// A local write failed; do not resend the batch while the store is sick.
     private var blockedUntil: [Int64: Date] = [:]
+    /// Connections held while a credential or identity operation runs. Their
+    /// workers may still be finishing a cancellation; a new drain must wait.
+    private var suspended: Set<Int64> = []
 
     /// The composition root publishes the connection list after an auth
     /// failure changes it.
@@ -81,6 +77,7 @@ public final class DeliveryOutbox {
     public func activate() {
         guard !isActive else { return }
         isActive = true
+        suspended.removeAll()
         drain(connectionIDs: lookup.eligibleConnectionIDs())
         scheduler.reschedule()
     }
@@ -105,28 +102,35 @@ public final class DeliveryOutbox {
     }
 
     /// Stops one connection's worker without touching its durable rows, for an
-    /// operation that is about to change its credential or identity. An
-    /// already-sent request finishes; nothing new starts.
-    public func suspend(connectionID: Int64) {
-        workers[connectionID]?.stop()
-        workers[connectionID] = nil
-        nowPlayingReferences[connectionID] = nil
+    /// operation that is about to change its credential or identity. The
+    /// worker stays registered until its cancelled task ends, so a later
+    /// trigger cannot start a second drain beside it.
+    public func suspend(connectionID id: Int64) {
+        suspended.insert(id)
+        stopWorker(id)
+        nowPlayingReferences[id] = nil
         if isActive {
             scheduler.reschedule()
         }
     }
 
     /// Stops one connection's worker after its row is gone.
-    public func connectionRemoved(connectionID: Int64) {
-        suspend(connectionID: connectionID)
-        lastRequestAt[connectionID] = nil
-        blockedUntil[connectionID] = nil
+    public func connectionRemoved(connectionID id: Int64) {
+        suspended.remove(id)
+        stopWorker(id)
+        nowPlayingReferences[id] = nil
+        lastRequestAt[id] = nil
+        blockedUntil[id] = nil
+        if isActive {
+            scheduler.reschedule()
+        }
     }
 
     /// Manual retry: makes every pending row for the connection due now and
     /// drains it. Attempts are kept, so repeated failures still reach the cap.
     public func retry(connectionID: Int64) {
         guard isActive else { return }
+        suspended.remove(connectionID)
         blockedUntil[connectionID] = nil
         Task { @MainActor [weak self] in
             guard let self, isActive else { return }
@@ -139,6 +143,7 @@ public final class DeliveryOutbox {
     /// drains whatever is already due; a manual retry is the way to make a
     /// backed-off row due now.
     public func resume(connectionID: Int64) {
+        suspended.remove(connectionID)
         drain(connectionIDs: [connectionID])
     }
 
@@ -159,7 +164,8 @@ public final class DeliveryOutbox {
     public func sendNowPlaying(_ track: Track) {
         guard isActive else { return }
         for connection in lookup.connections.connections where lookup.isEligible(connection) {
-            guard let id = connection.id, let adapter = lookup.adapters[connection.kind],
+            guard let id = connection.id, !suspended.contains(id),
+                  let adapter = lookup.adapters[connection.kind],
                   adapter.capabilities.supportsNowPlaying
             else { continue }
             let worker = worker(for: id)
@@ -170,18 +176,25 @@ public final class DeliveryOutbox {
         }
     }
 
-    /// The recording reference the last now playing returned, when one did.
-    public func nowPlayingReference(forConnection id: Int64) -> String? {
-        nowPlayingReferences[id]
-    }
-
     // MARK: - Worker
 
     private func trigger(_ id: Int64) {
+        guard !suspended.contains(id) else { return }
         let worker = worker(for: id)
         worker.drainRequested = true
         worker.runAgain = worker.task != nil
         start(worker, connectionID: id)
+    }
+
+    /// Cancels a worker without dropping its entry while the task is still
+    /// running. The task's own defer removes it when it ends.
+    private func stopWorker(_ id: Int64) {
+        guard let worker = workers[id] else { return }
+        if worker.task == nil {
+            workers[id] = nil
+        } else {
+            worker.stop()
+        }
     }
 
     private func worker(for id: Int64) -> ConnectionWorker {
@@ -380,21 +393,5 @@ private extension DeliveryOutbox {
         let due = last.addingTimeInterval(interval)
         guard due > clock.now else { return }
         try? await clock.sleep(until: due)
-    }
-}
-
-/// One connection's in-memory work. Never holds a credential.
-@MainActor
-private final class ConnectionWorker {
-    var task: Task<Void, Never>?
-    var drainRequested = false
-    var runAgain = false
-    var nowPlaying: Track?
-
-    func stop() {
-        task?.cancel()
-        nowPlaying = nil
-        runAgain = false
-        drainRequested = false
     }
 }

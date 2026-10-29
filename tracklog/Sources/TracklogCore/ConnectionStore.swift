@@ -18,3 +18,12 @@ public protocol ConnectionStore: Sendable {
     /// refused rather than silently ignored.
     func setCurrentConnectionID(_ id: Int64?) async throws
 }
+
+/// A connection store that can remove a connection and abandon its pending
+/// deliveries in one durable operation, so a failure leaves both unchanged.
+public protocol ConnectionUnlinkStore: Sendable {
+    /// Abandons every waiting or retrying delivery for the connection, deletes
+    /// the connection, and clears the cursor when it pointed at it. Returns the
+    /// number of abandoned rows. A thrown error rolls everything back.
+    func unlinkConnection(id: Int64, reason: String) async throws -> Int
+}

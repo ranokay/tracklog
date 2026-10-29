@@ -26,7 +26,8 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 
 /// One SQLite file in the droplet's container: local history, connections,
 /// versioned migrations, and the durable duplicate key.
-public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore, DeliveryStore {
+public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore, ConnectionUnlinkStore,
+    DeliveryStore {
     public static let schemaVersion = 8
 
     static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

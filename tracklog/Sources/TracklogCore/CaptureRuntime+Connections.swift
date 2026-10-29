@@ -131,12 +131,24 @@ public extension CaptureRuntime {
         confirmReplacement: @MainActor (Connection, ServiceIdentity, Int) -> Bool,
     ) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
-        let connection = try await connectionService.reauthenticate(
-            id: id,
-            credential: credential,
-            identity: identity,
-            confirmReplacement: confirmReplacement,
-        )
+        // No drain may read the old rows and then submit them with the new
+        // account's credential. The worker is stopped before the service call
+        // and resumed either way.
+        deliveryOutbox?.suspend(connectionID: id)
+        let connection: Connection
+        do {
+            connection = try await connectionService.reauthenticate(
+                id: id,
+                credential: credential,
+                identity: identity,
+                confirmReplacement: confirmReplacement,
+            )
+        } catch {
+            // The connection may still be linked with its old credential, so
+            // return it to its normal schedule.
+            deliveryOutbox?.resume(connectionID: id)
+            throw error
+        }
         applyConnectionSnapshot()
         await reloadDeliveryState()
         // A re-auth is a delivery trigger. Held rows become due now regardless

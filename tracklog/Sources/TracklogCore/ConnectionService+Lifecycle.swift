@@ -197,8 +197,20 @@ public extension ConnectionService {
             // rows instead of finding them abandoned while the connection is
             // still working.
             try await credentials.deleteCredential(forConnection: id)
-            let abandoned = try await abandonPending(forConnection: id, reason: Self.unlinkReason)
-            try await store.deleteConnection(id: id)
+            let abandoned: Int
+            if let atomicStore = store as? any ConnectionUnlinkStore {
+                // One transaction: a failure leaves the queue pending.
+                abandoned = try await atomicStore.unlinkConnection(
+                    id: id,
+                    reason: Self.unlinkReason,
+                )
+            } else {
+                // Stores without the atomic operation are tests and the
+                // harness. Abandon before deleting so no drain resurrects a
+                // row that was meant to stay behind.
+                abandoned = try await abandonPending(forConnection: id, reason: Self.unlinkReason)
+                try await store.deleteConnection(id: id)
+            }
             connections.remove(at: index)
 
             if currentID == id {

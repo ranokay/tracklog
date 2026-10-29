@@ -91,15 +91,22 @@ public extension SQLiteListenStore {
         let handle = try database()
         try Self.execute(handle, "BEGIN IMMEDIATE")
         do {
-            let statement = try prepare(handle, "DELETE FROM connections WHERE id = ?")
-            defer { sqlite3_finalize(statement) }
-            sqlite3_bind_int64(statement, 1, id)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-
-            try clearCurrentConnection(id: id, handle: handle)
+            try deleteConnectionRow(id: id, handle: handle)
             try Self.execute(handle, "COMMIT")
+        } catch {
+            try? Self.execute(handle, "ROLLBACK")
+            throw error
+        }
+    }
+
+    func unlinkConnection(id: Int64, reason: String) async throws -> Int {
+        let handle = try database()
+        try Self.execute(handle, "BEGIN IMMEDIATE")
+        do {
+            let abandoned = try abandonPending(forConnection: id, reason: reason, handle: handle)
+            try deleteConnectionRow(id: id, handle: handle)
+            try Self.execute(handle, "COMMIT")
+            return abandoned
         } catch {
             try? Self.execute(handle, "ROLLBACK")
             throw error
@@ -201,6 +208,19 @@ private extension SQLiteListenStore {
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 7)),
             lastUsedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 8)),
         )
+    }
+
+    /// Deletes one connection row and clears the cursor when it pointed at it.
+    /// The caller owns the transaction, so unlink can abandon its deliveries in
+    /// the same commit.
+    func deleteConnectionRow(id: Int64, handle: OpaquePointer) throws {
+        let statement = try prepare(handle, "DELETE FROM connections WHERE id = ?")
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
+        try clearCurrentConnection(id: id, handle: handle)
     }
 
     /// Deletes the cursor only when it still points at the deleted connection,
