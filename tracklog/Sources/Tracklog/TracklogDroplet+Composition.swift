@@ -44,6 +44,10 @@ extension TracklogDroplet {
         let appCredentialProblem = AppCredentialProblem(
             rawValue: host.preferences.value(forKey: "lastFMAppCredentialProblem", default: ""),
         )
+        let lastFMInvalidationPending = host.preferences.value(
+            forKey: "lastFMInvalidationPending",
+            default: false,
+        )
         let appCredentials = StoredLastFMAppCredentials(credentialStore: credentials)
         lastFMAppCredentialsProvider = appCredentials
         return CaptureRuntime.open(
@@ -85,6 +89,10 @@ extension TracklogDroplet {
                     problem?.rawValue ?? "",
                     forKey: "lastFMAppCredentialProblem",
                 )
+            },
+            lastFMInvalidationPending: lastFMInvalidationPending,
+            persistLastFMInvalidationPending: { pending in
+                host.preferences.setValue(pending, forKey: "lastFMInvalidationPending")
             },
         )
     }

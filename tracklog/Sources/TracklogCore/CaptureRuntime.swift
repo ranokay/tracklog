@@ -21,6 +21,7 @@ public final class CaptureRuntime {
     let lastFMAppCredentialsValidator: (any LastFMAppCredentialValidating)?
     let persistSettings: (@MainActor (CaptureSettings) -> Void)?
     let persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)?
+    let persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)?
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
     let historyPageSize: Int
@@ -65,6 +66,8 @@ public final class CaptureRuntime {
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
+        lastFMInvalidationPending: Bool = false,
+        persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -114,6 +117,8 @@ public final class CaptureRuntime {
         }
         self.persistSettings = persistSettings
         self.persistAppCredentialProblem = persistAppCredentialProblem
+        self.persistLastFMInvalidationPending = persistLastFMInvalidationPending
+        self.lastFMInvalidationPending = lastFMInvalidationPending
         self.sendNowPlaying = sendNowPlaying
 
         var engineConfiguration = configuration
@@ -152,6 +157,8 @@ public final class CaptureRuntime {
         persistSettings: (@MainActor (CaptureSettings) -> Void)? = nil,
         appCredentialProblem: AppCredentialProblem? = nil,
         persistAppCredentialProblem: (@MainActor (AppCredentialProblem?) -> Void)? = nil,
+        lastFMInvalidationPending: Bool = false,
+        persistLastFMInvalidationPending: (@MainActor (Bool) -> Void)? = nil,
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
@@ -186,6 +193,8 @@ public final class CaptureRuntime {
             persistSettings: persistSettings,
             appCredentialProblem: appCredentialProblem,
             persistAppCredentialProblem: persistAppCredentialProblem,
+            lastFMInvalidationPending: lastFMInvalidationPending,
+            persistLastFMInvalidationPending: persistLastFMInvalidationPending,
             sendNowPlaying: sendNowPlaying,
             configuration: configuration,
             historyPageSize: historyPageSize,
@@ -329,6 +338,9 @@ extension CaptureRuntime {
         guard finishStart(generation) else { return }
 
         await loadLastFMAppCredentials()
+        guard finishStart(generation) else { return }
+
+        await replayPendingLastFMInvalidation()
         guard finishStart(generation) else { return }
 
         // Deliveries are durable and independent of the capture switches, so a

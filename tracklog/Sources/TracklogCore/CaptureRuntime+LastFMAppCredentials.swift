@@ -84,6 +84,23 @@ public extension CaptureRuntime {
     }
 }
 
+extension CaptureRuntime {
+    /// Reapplies a credential change whose sign-out did not finish before the
+    /// last shutdown. Runs before the outbox activates, so a row still stored
+    /// as signed in cannot deliver under the new pair.
+    func replayPendingLastFMInvalidation() async {
+        guard lastFMInvalidationPending else { return }
+        do {
+            try await signOutLastFMSessions()
+            lastFMInvalidationPending = false
+            persistLastFMInvalidationPending?(false)
+        } catch {
+            // Keep the durable marker; the next launch retries before the
+            // outbox activates.
+        }
+    }
+}
+
 private extension CaptureRuntime {
     /// Writes or clears the slot, then signs every Last.fm connection out when
     /// the effective pair changed. A failed sign-out leaves the invalidation
@@ -120,9 +137,11 @@ private extension CaptureRuntime {
         let changed = current != previous
         guard changed || lastFMInvalidationPending else { return }
         lastFMInvalidationPending = true
+        persistLastFMInvalidationPending?(true)
         do {
             try await signOutLastFMSessions()
             lastFMInvalidationPending = false
+            persistLastFMInvalidationPending?(false)
         } catch {
             throw LastFMAppCredentialError.invalidation
         }
