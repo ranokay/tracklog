@@ -4,7 +4,7 @@ extension HUD {
     // MARK: - Card builders
 
     static func needsSignIn(_ rawServices: [String]) -> HUDPresentation {
-        let services = uniqueServices(rawServices)
+        let services = serviceNames(rawServices)
         let many = services.count > 1
         let subject = many ? joined(services) : services[0]
         return HUDPresentation(
@@ -22,7 +22,7 @@ extension HUD {
     }
 
     static func stuckQueue(count: Int, services rawServices: [String]) -> HUDPresentation {
-        let services = uniqueServices(rawServices)
+        let services = serviceNames(rawServices)
         let many = services.count > 1
         let countText = scrobbles(count)
         let detail = many
@@ -47,7 +47,7 @@ extension HUD {
     }
 
     static func rateLimited(_ rawServices: [String]) -> HUDPresentation {
-        let services = uniqueServices(rawServices)
+        let services = serviceNames(rawServices)
         let many = services.count > 1
         let spoken = many
             ? "\(services.count) services are rate limited. Retrying automatically."
@@ -68,7 +68,7 @@ extension HUD {
         verb: String,
         services rawServices: [String],
     ) -> HUDPresentation {
-        let services = uniqueServices(rawServices)
+        let services = serviceNames(rawServices)
         let spoken = services.count > 1
             ? "\(verb) on \(services.count) services."
             : "\(verb) on \(services[0])."
@@ -113,11 +113,14 @@ extension HUD {
         return "\(count) \(count == 1 ? "scrobble" : "scrobbles")"
     }
 
-    static func uniqueServices(_ services: [String]) -> [String] {
-        var seen: Set<String> = []
+    /// One name per targeted connection, in the order the runtime supplies
+    /// them. Different connections may share a visible label (two GNU FM roots
+    /// on one host, or two long hosts that truncate alike), so this never
+    /// collapses equal strings: the count is the connection count.
+    static func serviceNames(_ services: [String]) -> [String] {
         let cleaned = services
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .filter { !$0.isEmpty }
         return cleaned.isEmpty ? ["Service"] : cleaned
     }
 

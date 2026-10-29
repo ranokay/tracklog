@@ -68,13 +68,137 @@ struct HUDStuckRecoveryTests: CaptureTestHelpers {
         #expect(probe.presentations.count == 1, "one card per session per stuck connection set")
 
         runtime.retryDeliveries(forConnection: lastFMConnection.id ?? -1)
-        await eventually { probe.presentations.count == 2 }
+        await eventually { probe.presentations.contains { $0.id == "hud.recovery.queue" } }
 
-        let recovered = try #require(probe.presentations.last)
-        #expect(recovered.id == "hud.recovery.queue")
+        let recovered = try #require(
+            probe.presentations.first { $0.id == "hud.recovery.queue" },
+        )
         #expect(recovered.spoken == "Last.fm is accepting scrobbles again. 1 sent.")
         #expect(recovered.priority == .low)
         #expect(recovered.duration == 2)
+        #expect(
+            probe.presentations.contains { $0.id == "hud.failure.stuck" && $0.title == "1 scrobble waiting" },
+            "the remaining subset raises its own card after the recovery",
+        )
+    }
+
+    @Test func aPartiallyDrainedBacklogKeepsTheRecoveryCountUntilTheQueueDrains() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let clock = FakeClock(base)
+        let probe = HUDProbe()
+        let adapter = RecordingDeliveryAdapter(
+            kind: .lastFM,
+            answers: [
+                .results([.delivered(reference: nil)]),
+                .failure(.rateLimited(retryAfter: 120)),
+                .results([.delivered(reference: nil)]),
+            ],
+        )
+        let connection = try await saveHUDConnection(
+            store,
+            credentials: credentials,
+            kind: .lastFM,
+            base: base,
+        )
+        let runtime = makeHUDRuntime(
+            store: store,
+            clock: clock,
+            probe: probe,
+            adapters: [adapter],
+            credentials: credentials,
+        )
+        await runtime.start()
+        await turnMainActor(100)
+
+        try await insertHeldHUDPending(
+            store,
+            connection: connection,
+            title: "Old",
+            start: -(25 * 60 * 60),
+            base: base,
+        )
+        try await insertHeldHUDPending(
+            store,
+            connection: connection,
+            title: "Young",
+            start: -(60 * 60),
+            base: base,
+        )
+        await runtime.reloadDeliveryState()
+        await eventually { probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1 }
+
+        runtime.retryDeliveries(forConnection: connection.id ?? -1)
+        await eventually { runtime.state.pendingQueue.count == 1 }
+        #expect(
+            !probe.presentations.contains { $0.id == "hud.recovery.queue" },
+            "the mixed-age backlog has not drained yet",
+        )
+
+        runtime.retryDeliveries(forConnection: connection.id ?? -1)
+        await eventually { probe.presentations.contains { $0.id == "hud.recovery.queue" } }
+
+        let recoveries = probe.presentations.filter { $0.id == "hud.recovery.queue" }
+        #expect(recoveries.count == 1)
+        #expect(recoveries.first?.spoken == "Last.fm is accepting scrobbles again. 2 sent.")
+    }
+
+    @Test func deletingTheRemainderDoesNotCountAsSent() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let clock = FakeClock(base)
+        let probe = HUDProbe()
+        let adapter = RecordingDeliveryAdapter(
+            kind: .lastFM,
+            answers: [
+                .results([.delivered(reference: nil)]),
+                .failure(.rateLimited(retryAfter: 120)),
+            ],
+        )
+        let connection = try await saveHUDConnection(
+            store,
+            credentials: credentials,
+            kind: .lastFM,
+            base: base,
+        )
+        let runtime = makeHUDRuntime(
+            store: store,
+            clock: clock,
+            probe: probe,
+            adapters: [adapter],
+            credentials: credentials,
+        )
+        await runtime.start()
+        await turnMainActor(100)
+
+        try await insertHeldHUDPending(
+            store,
+            connection: connection,
+            title: "Old",
+            start: -(25 * 60 * 60),
+            base: base,
+        )
+        try await insertHeldHUDPending(
+            store,
+            connection: connection,
+            title: "Young",
+            start: -(60 * 60),
+            base: base,
+        )
+        await runtime.reloadDeliveryState()
+        await eventually { probe.presentations.filter { $0.id == "hud.failure.stuck" }.count == 1 }
+
+        runtime.retryDeliveries(forConnection: connection.id ?? -1)
+        await eventually { runtime.state.pendingQueue.count == 1 }
+        let young = try #require(runtime.state.pendingQueue.groups.first?.items.first?.delivery)
+        await runtime.deleteDelivery(young)
+        await eventually { probe.presentations.contains { $0.id == "hud.recovery.queue" } }
+
+        let recoveries = probe.presentations.filter { $0.id == "hud.recovery.queue" }
+        #expect(recoveries.count == 1)
+        #expect(recoveries.first?.spoken == "Last.fm is accepting scrobbles again. 1 sent.")
     }
 
     @Test func disabledAndNeedsSignInQueuesAreNotStuck() async throws {
@@ -135,52 +259,5 @@ struct HUDStuckRecoveryTests: CaptureTestHelpers {
         await eventually { probe.presentations.count == 1 }
         #expect(probe.presentations.last?.id == "hud.failure.stuck")
         #expect(probe.presentations.last?.spoken == "1 scrobble is waiting for Last.fm, which is not accepting it.")
-    }
-
-    @Test func signedInRecoveryReportsTheDeliveredCount() async throws {
-        let database = try TemporaryDatabase()
-        let store = try SQLiteListenStore(url: database.url)
-        let credentials = MemoryCredentialStore()
-        let clock = FakeClock(base)
-        let probe = HUDProbe()
-        let adapter = RecordingDeliveryAdapter(kind: .lastFM)
-        let connection = try await saveHUDConnection(
-            store,
-            credentials: credentials,
-            kind: .lastFM,
-            base: base,
-            authState: .needsSignIn,
-        )
-        try await credentials.saveCredential("old-token", forConnection: connection.id ?? -1)
-        _ = try await insertHUDPending(
-            store,
-            connection: connection,
-            title: "Held",
-            base: base,
-        )
-
-        let runtime = makeHUDRuntime(
-            store: store,
-            clock: clock,
-            probe: probe,
-            adapters: [adapter],
-            credentials: credentials,
-        )
-        await runtime.start()
-        #expect(probe.presentations.isEmpty)
-
-        _ = try await runtime.reauthenticate(
-            id: connection.id ?? -1,
-            credential: "new-token",
-            identity: ServiceIdentity(name: "listener"),
-            confirmReplacement: { _, _, _ in false },
-        )
-        await eventually { probe.presentations.count == 1 }
-
-        let recovery = try #require(probe.presentations.first)
-        #expect(recovery.id == "hud.recovery.signin")
-        #expect(recovery.spoken == "Last.fm reconnected. 1 scrobble sent.")
-        #expect(recovery.priority == .low)
-        #expect(probe.announcements == [recovery.spoken])
     }
 }

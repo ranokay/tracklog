@@ -38,6 +38,21 @@ struct HUDStuckThresholdTests: CaptureTestHelpers {
         #expect(probe.presentations.isEmpty, "an already-stuck queue raises no launch HUD")
         #expect(runtime.stuckEvaluationTask == nil, "a past deadline is never rescheduled")
 
+        // The launch baseline is part of this activation session's seen sets.
+        // Even after the queue empties and an identical set forms again, the
+        // session must not raise the card.
+        let baseline = try #require(try await store.pendingDeliveries().first)
+        await runtime.deleteDelivery(baseline.delivery)
+        try await insertHeldHUDPending(
+            store,
+            connection: connection,
+            title: "Again",
+            start: -(25 * 60 * 60),
+            base: base,
+        )
+        await runtime.reloadDeliveryState()
+        #expect(probe.presentations.isEmpty, "the launch set stays seen for the session")
+
         clock.advance(to: base.addingTimeInterval(2 * 24 * 60 * 60))
         await turnMainActor(100)
         #expect(probe.presentations.isEmpty)

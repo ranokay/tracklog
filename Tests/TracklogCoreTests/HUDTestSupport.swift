@@ -77,6 +77,7 @@ func saveHUDConnection(
     _ store: SQLiteListenStore,
     credentials: any CredentialStore,
     kind: ServiceKind,
+    endpoint: ServiceEndpoint? = nil,
     identity: String = "listener",
     base: Date,
     isEnabled: Bool = true,
@@ -85,7 +86,7 @@ func saveHUDConnection(
     let connection = try await store.save(
         Connection(
             kind: kind,
-            endpoint: kind.defaultEndpoint,
+            endpoint: endpoint ?? kind.defaultEndpoint,
             identity: identity,
             isEnabled: isEnabled,
             authState: authState,

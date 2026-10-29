@@ -171,6 +171,27 @@ struct HUDVocabularyTests {
         #expect(three.spoken == "Last.fm, Libre.fm and ListenBrainz need sign-in. Scrobbles are waiting.")
     }
 
+    @Test func equalVisibleLabelsStillCountDistinctConnections() {
+        let names = ["music.example.com", "music.example.com"]
+
+        let signIn = HUD.resolve(.needsSignIn(services: names))
+        #expect(signIn.title == "2 services need sign-in")
+        #expect(
+            signIn.spoken
+                == "music.example.com and music.example.com need sign-in. Scrobbles are waiting.",
+        )
+
+        let rateLimited = HUD.resolve(.rateLimited(services: names))
+        #expect(rateLimited.spoken == "2 services are rate limited. Retrying automatically.")
+
+        let stuck = HUD.resolve(.stuckQueue(count: 2, services: names))
+        #expect(stuck.detail == "Across 2 services")
+        #expect(stuck.spoken == "2 scrobbles are waiting across 2 services.")
+
+        let loved = HUD.resolve(.loved(services: names))
+        #expect(loved.spoken == "Loved on 2 services.")
+    }
+
     @Test func repeatsShareTheSameStableIdentifier() {
         #expect(
             HUD.resolve(.rateLimited(services: ["Last.fm"])).id

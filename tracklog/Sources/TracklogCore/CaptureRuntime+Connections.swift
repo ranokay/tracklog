@@ -27,6 +27,7 @@ extension CaptureRuntime {
         guard let connectionService else { return }
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
+        invalidateSignInRecoveries()
         evaluateSignInHUD()
         scheduleStuckEvaluation()
     }
@@ -153,7 +154,10 @@ public extension CaptureRuntime {
             throw error
         }
         if wasNeedingSignIn, connection.authState == .signedIn {
-            hudTracking.signInRecoveries[id] = 0
+            hudTracking.signInRecoveries[id] = SignInRecovery(
+                identity: connection.identity,
+                delivered: 0,
+            )
         }
         applyConnectionSnapshot()
         await reloadDeliveryState()
