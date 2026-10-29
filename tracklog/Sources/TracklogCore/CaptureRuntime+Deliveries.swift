@@ -23,6 +23,8 @@ extension CaptureRuntime {
         }
         guard isCurrentDeliveryReload(generation) else { return }
         state.pendingQueue = PendingQueue(pending: pending, connections: state.connections)
+        evaluateDeliveryHUD()
+        scheduleStuckEvaluation()
 
         let listenIDs = state.listens.compactMap(\.id)
         guard !listenIDs.isEmpty else {

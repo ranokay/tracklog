@@ -14,16 +14,24 @@ public extension CaptureRuntime {
     /// pre-threshold session is discarded, not stored. A pause already in the
     /// past is a no-op.
     func pause(until date: Date) {
+        pause(until: date, announcement: .until(date))
+    }
+
+    /// Pauses for a duration from the runtime's clock.
+    func pause(for duration: TimeInterval) {
+        pause(
+            until: clock.now.addingTimeInterval(duration),
+            announcement: .duration(duration),
+        )
+    }
+
+    private func pause(until date: Date, announcement: PauseAnnouncement) {
         guard date > clock.now else { return }
         state.pausedUntil = date
         persistCurrentSettings()
         stopFeed()
         schedulePauseExpiry()
-    }
-
-    /// Pauses for a duration from the runtime's clock.
-    func pause(for duration: TimeInterval) {
-        pause(until: clock.now.addingTimeInterval(duration))
+        showHUD(.paused(announcement))
     }
 
     /// Gates the now-playing send only. Capture and local history keep running.
@@ -40,6 +48,7 @@ public extension CaptureRuntime {
         pauseTask?.cancel()
         pauseTask = nil
         endPause()
+        showHUD(.resumed)
     }
 
     /// The composition schedules the feed to restart when the pause expires;

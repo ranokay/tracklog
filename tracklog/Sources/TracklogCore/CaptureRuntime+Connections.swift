@@ -27,6 +27,9 @@ extension CaptureRuntime {
         guard let connectionService else { return }
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
+        invalidateSignInRecoveries()
+        evaluateSignInHUD()
+        scheduleStuckEvaluation()
     }
 }
 
@@ -131,6 +134,7 @@ public extension CaptureRuntime {
         confirmReplacement: @MainActor (Connection, ServiceIdentity, Int) -> Bool,
     ) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
+        let wasNeedingSignIn = state.connection(id: id)?.authState == .needsSignIn
         // No drain may read the old rows and then submit them with the new
         // account's credential. The worker is stopped before the service call
         // and resumed either way.
@@ -148,6 +152,12 @@ public extension CaptureRuntime {
             // return it to its normal schedule.
             deliveryOutbox?.resume(connectionID: id)
             throw error
+        }
+        if wasNeedingSignIn, connection.authState == .signedIn {
+            hudTracking.signInRecoveries[id] = SignInRecovery(
+                identity: connection.identity,
+                delivered: 0,
+            )
         }
         applyConnectionSnapshot()
         await reloadDeliveryState()

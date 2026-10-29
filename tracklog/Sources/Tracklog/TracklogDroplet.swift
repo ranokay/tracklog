@@ -45,6 +45,10 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The one Libre.fm adapter. The link flow needs it after activation and
     /// each delivery builds its client from the connection's own root.
     var libreFMAdapter: LibreFMAdapter?
+    /// Tracklog's own HUD slot. The session tracks the active id so a newer
+    /// event replaces it before the host's priority bands decide, and the
+    /// announcement fires only after the host accepts the presentation.
+    var hudSession: HUDHostSession?
 
     /// Whether the droplet can start a Libre.fm link at all. The harness has
     /// no transport, so its pages say so instead of offering a dead button.
@@ -63,11 +67,21 @@ public final class TracklogDroplet: NSObject, Droplet {
         self.host = host
 
         let isHarness = host.environment.isHarness
+        let hudSession = HUDHostSession(
+            host: TracklogHUDHost(droplet: self),
+            announce: { presentation in
+                TracklogAccessibilityAnnouncer.post(presentation)
+            },
+            logRefusal: { presentation in
+                host.log.debug("HUD \(presentation.id) was refused")
+            },
+        )
+        self.hudSession = hudSession
         let transport: URLSessionTransport?
         let runtime: CaptureRuntime
         if isHarness {
             transport = nil
-            runtime = makeHarnessRuntime()
+            runtime = makeHarnessRuntime(hud: hudSession)
         } else {
             let sessionTransport = URLSessionTransport()
             transport = sessionTransport
@@ -78,6 +92,7 @@ public final class TracklogDroplet: NSObject, Droplet {
                 transport: sessionTransport,
                 credentials: KeychainCredentialStore(),
                 libreFM: libreFM,
+                hud: hudSession,
             )
         }
         self.runtime = runtime
@@ -107,6 +122,12 @@ public final class TracklogDroplet: NSObject, Droplet {
             await runtime.start()
             if isHarness {
                 await HarnessDemo.showNowPlaying(on: runtime)
+                // The HUD page renders nothing until the droplet presents, so
+                // the shot needs one deterministic card. It goes through the
+                // same host session and announcement path as a real event.
+                hudSession.show(
+                    HUD.resolve(.needsSignIn(services: ["Last.fm"])),
+                )
             }
         }
         host.log.info("Tracklog activated")
@@ -129,6 +150,8 @@ public final class TracklogDroplet: NSObject, Droplet {
         networkReachability = nil
         runtime?.stop()
         runtime = nil
+        hudSession?.deactivate()
+        hudSession = nil
         automationGate = nil
         host = nil
     }

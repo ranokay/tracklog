@@ -4,7 +4,7 @@ import TracklogCore
 import TracklogMedia
 
 extension TracklogDroplet {
-    func makeHarnessRuntime() -> CaptureRuntime {
+    func makeHarnessRuntime(hud: HUDHostSession) -> CaptureRuntime {
         let store = HarnessDemoStore()
         let credentials = MemoryCredentialStore()
         return CaptureRuntime(
@@ -20,6 +20,7 @@ extension TracklogDroplet {
                 HarnessDemoServiceAdapter(),
                 HarnessDemoLastFMAdapter(),
             ],
+            hud: hud,
             settings: CaptureSettings(scrobblingEnabled: true),
         )
     }
@@ -29,6 +30,7 @@ extension TracklogDroplet {
         transport: URLSessionTransport,
         credentials: KeychainCredentialStore,
         libreFM: LibreFMAdapter,
+        hud: HUDHostSession,
     ) -> CaptureRuntime {
         let settings = CaptureSettings(
             scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
@@ -79,6 +81,7 @@ extension TracklogDroplet {
                     host.log.notice(event.description)
                 }
             },
+            hud: hud,
             persistSettings: { settings in
                 host.preferences.setValue(settings.scrobblingEnabled, forKey: "scrobblingEnabled")
                 host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")

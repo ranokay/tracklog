@@ -10,11 +10,12 @@
     "minAPI": "1.19.0"
   },
   "minAppVersion": "15.3.0",
-  "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "network-client"],
+  "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "hud", "network-client"],
   "surfaces": [
     "shelf-widget",
     "expanded-surface",
-    "settings-pane"
+    "settings-pane",
+    "hud"
   ],
   "icon": "Tracklog.icon",
   "creator": {
