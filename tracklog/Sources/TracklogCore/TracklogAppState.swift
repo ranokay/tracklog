@@ -71,8 +71,13 @@ public final class TracklogAppState: ObservableObject {
         connections.first { $0.id == id }
     }
 
-    public func connection(kind: ServiceKind) -> Connection? {
-        connections.first { $0.kind == kind }
+    /// The connection a page or row refers to. A configurable service can have
+    /// several, so a caller that names a root gets that one; every other caller
+    /// gets the first of its kind.
+    public func connection(kind: ServiceKind, endpoint: ServiceEndpoint? = nil) -> Connection? {
+        connections.first {
+            $0.kind == kind && (endpoint == nil || $0.endpoint == endpoint)
+        }
     }
 
     /// The live media source and the health behind the feed.

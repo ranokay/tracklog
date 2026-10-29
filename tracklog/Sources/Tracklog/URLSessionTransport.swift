@@ -1,9 +1,26 @@
 import Foundation
 import TracklogCore
 
-/// The production HTTP transport. One session owns the timeouts and the
-/// descriptive User-Agent every request carries. Adapters never open a
-/// session of their own.
+/// Refuses a redirect that would drop HTTPS. A 307 or 308 resends the request
+/// body, and a GNU FM body carries the session key, so a cleartext hop would
+/// expose it. Returning `nil` stops the redirect: the task answers with the
+/// 3xx itself and the client maps it as a retryable failure.
+private final class SecureRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void,
+    ) {
+        let allowed = request.url.map(HTTPRedirectPolicy.allows) ?? false
+        completionHandler(allowed ? request : nil)
+    }
+}
+
+/// The production HTTP transport. One session owns the timeouts, the redirect
+/// rule and the descriptive User-Agent every request carries. Adapters never
+/// open a session of their own.
 final class URLSessionTransport: HTTPTransport, @unchecked Sendable {
     private let session: URLSession
 
@@ -18,7 +35,11 @@ final class URLSessionTransport: HTTPTransport, @unchecked Sendable {
             "User-Agent": userAgent,
             "Accept": "application/json",
         ]
-        session = URLSession(configuration: configuration)
+        session = URLSession(
+            configuration: configuration,
+            delegate: SecureRedirectDelegate(),
+            delegateQueue: nil,
+        )
     }
 
     deinit {

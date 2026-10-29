@@ -43,6 +43,17 @@ public struct HTTPResponse: Equatable, Sendable {
     }
 }
 
+/// The one redirect rule every Tracklog request keeps: a redirect may change
+/// the path, never the security of the connection. A 307 or 308 resends the
+/// request body, which can carry a session key, so a hop to cleartext HTTP is
+/// refused rather than followed.
+public enum HTTPRedirectPolicy {
+    /// Whether a redirect to `url` may proceed. Only HTTPS destinations do.
+    public static func allows(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
+    }
+}
+
 /// The one request/response seam. No client opens its own session: production
 /// is URLSession, tests are recorded fixtures.
 public protocol HTTPTransport: Sendable {

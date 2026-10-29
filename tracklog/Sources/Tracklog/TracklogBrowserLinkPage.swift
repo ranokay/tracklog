@@ -39,7 +39,7 @@ struct TracklogBrowserLinkPage: View {
     private func content(_ link: LastFMLinkModel) -> some View {
         TracklogBrowserLinkContent(
             droplet: droplet,
-            connection: state.connection(kind: kind),
+            connection: state.connection(kind: kind, endpoint: endpoint),
             serviceName: serviceName,
             endpoint: endpoint,
             link: link,
