@@ -11,7 +11,7 @@ struct HarnessDemoServiceAdapter: ServiceAdapter {
         supportsHate: true,
     )
 
-    func validate(_: String) async throws -> ServiceIdentity {
+    func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         ServiceIdentity(name: "listener")
     }
 }
@@ -23,7 +23,7 @@ struct HarnessDemoLastFMAdapter: ServiceAdapter, LastFMAppCredentialValidating {
     let kind = ServiceKind.lastFM
     let capabilities = ServiceCapabilities(signsRequests: true)
 
-    func validate(_: String) async throws -> ServiceIdentity {
+    func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         ServiceIdentity(name: "listener")
     }
 

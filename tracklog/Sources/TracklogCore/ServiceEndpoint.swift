@@ -20,8 +20,8 @@ public enum ServiceKind: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The root every request for this service is built from. Fixed for
-    /// Last.fm and ListenBrainz; Libre.fm's is configurable when its link flow
-    /// lands.
+    /// Last.fm and ListenBrainz; a Libre.fm connection keeps the root the
+    /// listener entered, and this is the default it starts from.
     public var defaultEndpoint: ServiceEndpoint {
         switch self {
         case .lastFM: .lastFM

@@ -89,7 +89,7 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
 
     // MARK: - Connection
 
-    public func validate(_ credential: String) async throws -> ServiceIdentity {
+    public func validate(_ credential: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         do {
             return try await client.userIdentity(sessionKey: credential)
         } catch {
@@ -111,7 +111,7 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
         }
         do {
             let results = try await client.scrobble(listens, sessionKey: credential)
-            return results.map(Self.deliveryResult)
+            return results.map { $0.deliveryResult(serviceName: "Last.fm") }
         } catch {
             throw Self.failure(for: error)
         }
@@ -148,21 +148,5 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
 
     private static func failure(for error: any Error) -> ServiceFailure {
         (error as? LastFMError)?.serviceFailure ?? .retryable
-    }
-
-    private static func deliveryResult(for result: LastFMScrobbleResult) -> DeliveryResult {
-        switch result {
-        case .accepted:
-            .delivered(reference: nil)
-        case let .ignored(code):
-            switch code {
-            case 1 ... 4:
-                .rejected(reason: "Last.fm ignored this scrobble (code \(code)).")
-            case 5:
-                .rateLimited(retryAfter: nil)
-            default:
-                .rejected(reason: "Last.fm ignored this scrobble (code \(code)).")
-            }
-        }
     }
 }

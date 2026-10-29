@@ -49,6 +49,24 @@ extension TracklogDroplet {
         }
     }
 
+    /// Starts a Libre.fm link against the root the listener typed and opens its
+    /// page. A model already in flight is cancelled: its token belongs to the
+    /// previous root.
+    func openLibreFMLink(endpoint: ServiceEndpoint) {
+        guard let host else { return }
+        guard let link = makeLibreFMLink(endpoint: endpoint) else {
+            host.log.notice("Libre.fm sign-in is unavailable")
+            return
+        }
+        libreFMLink?.model.cancel()
+        libreFMLink = TracklogLibreFMLink(endpoint: endpoint, model: link)
+        guard host.workspace.openSettingsPage(tracklogLibreFMLinkPageID, title: "Libre.fm") else {
+            libreFMLink = nil
+            host.log.notice("Opening the Libre.fm sign-in page was refused")
+            return
+        }
+    }
+
     func openServicesPage() {
         guard let host else { return }
         guard host.workspace.openSettingsPage(tracklogServicesPageID, title: "Services") else {

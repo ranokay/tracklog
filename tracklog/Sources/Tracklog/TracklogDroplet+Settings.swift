@@ -22,6 +22,8 @@ extension TracklogDroplet: SettingsPagesProviding {
             AnyView(TracklogAddServicePage(droplet: self, state: state))
         case tracklogLastFMLinkPageID:
             AnyView(TracklogLastFMLinkPage(droplet: self, state: state))
+        case tracklogLibreFMLinkPageID:
+            AnyView(TracklogLibreFMLinkPage(droplet: self, state: state))
         case tracklogLastFMAppCredentialsPageID:
             AnyView(TracklogLastFMAppCredentialsPage(droplet: self, state: state))
         default:

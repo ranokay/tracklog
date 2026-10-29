@@ -40,10 +40,14 @@ public extension CaptureRuntime {
     /// credential, and makes the new connection current. A failed link may
     /// still publish a kept connection when its cleanup could not complete.
     @discardableResult
-    func link(kind: ServiceKind, credential: String) async throws -> Connection {
+    func link(
+        kind: ServiceKind,
+        credential: String,
+        endpoint: ServiceEndpoint? = nil,
+    ) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
         return try await publishLinkedConnection {
-            try await connectionService.link(kind: kind, credential: credential)
+            try await connectionService.link(kind: kind, credential: credential, endpoint: endpoint)
         }
     }
 
@@ -55,6 +59,7 @@ public extension CaptureRuntime {
         kind: ServiceKind,
         credential: String,
         identity: ServiceIdentity,
+        endpoint: ServiceEndpoint? = nil,
     ) async throws -> Connection {
         guard let connectionService else { throw ConnectionError.unavailable }
         return try await publishLinkedConnection {
@@ -62,6 +67,7 @@ public extension CaptureRuntime {
                 kind: kind,
                 credential: credential,
                 identity: identity,
+                endpoint: endpoint,
             )
         }
     }

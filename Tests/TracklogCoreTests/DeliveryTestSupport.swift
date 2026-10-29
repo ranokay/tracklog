@@ -39,7 +39,7 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
         self.onSubmit = onSubmit
     }
 
-    func validate(_: String) async throws -> ServiceIdentity {
+    func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         ServiceIdentity(name: "listener-\(kind.rawValue)")
     }
 

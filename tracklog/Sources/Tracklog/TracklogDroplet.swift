@@ -33,6 +33,19 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
     private(set) var lastFMLink: LastFMLinkModel?
+    /// The Libre.fm browser link in flight, with the root it was started
+    /// against. Kept in the droplet for the same reason as Last.fm's model.
+    var libreFMLink: TracklogLibreFMLink?
+    /// The one Libre.fm adapter. The link flow needs it after activation and
+    /// each delivery builds its client from the connection's own root.
+    var libreFMAdapter: LibreFMAdapter?
+
+    /// Whether the droplet can start a Libre.fm link at all. The harness has
+    /// no transport, so its pages say so instead of offering a dead button.
+    var canLinkLibreFM: Bool {
+        libreFMAdapter != nil
+    }
+
     /// The effective Last.fm pair source shared by the link and the runtime.
     /// It holds no pair itself, only the credential store it reads.
     var lastFMAppCredentialsProvider: StoredLastFMAppCredentials?
@@ -52,10 +65,13 @@ public final class TracklogDroplet: NSObject, Droplet {
         } else {
             let sessionTransport = URLSessionTransport()
             transport = sessionTransport
+            let libreFM = LibreFMAdapter(transport: sessionTransport)
+            libreFMAdapter = libreFM
             runtime = makeProductionRuntime(
                 host: host,
                 transport: sessionTransport,
                 credentials: KeychainCredentialStore(),
+                libreFM: libreFM,
             )
         }
         self.runtime = runtime
@@ -94,6 +110,9 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = nil
         lastFMLink?.cancel()
         lastFMLink = nil
+        libreFMLink?.model.cancel()
+        libreFMLink = nil
+        libreFMAdapter = nil
         lastFMAppCredentialsProvider = nil
         networkReachability?.stop()
         networkReachability = nil
@@ -325,4 +344,11 @@ extension TracklogDroplet: ShelfWidgetProviding {
     public func makeWidgetSettingsPopover(_: ShelfWidgetID) -> AnyView? {
         nil
     }
+}
+
+/// A Libre.fm browser link in flight. The root and its page model travel
+/// together, so a model can never outlive the server it was started against.
+struct TracklogLibreFMLink {
+    let endpoint: ServiceEndpoint
+    let model: LastFMLinkModel
 }

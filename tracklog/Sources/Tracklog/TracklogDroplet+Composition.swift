@@ -28,6 +28,7 @@ extension TracklogDroplet {
         host: DropletHost,
         transport: URLSessionTransport,
         credentials: KeychainCredentialStore,
+        libreFM: LibreFMAdapter,
     ) -> CaptureRuntime {
         let settings = CaptureSettings(
             scrobblingEnabled: host.preferences.value(forKey: "scrobblingEnabled", default: false),
@@ -60,6 +61,7 @@ extension TracklogDroplet {
             serviceAdapters: [
                 ListenBrainzAdapter(transport: transport),
                 LastFMAdapter(transport: transport, appCredentials: appCredentials),
+                libreFM,
             ],
             connectionLog: { event in
                 switch event {
@@ -97,9 +99,9 @@ extension TracklogDroplet {
         )
     }
 
-    /// One page model for the browser link. It shares the runtime's transport,
-    /// opens the authorization page through AppKit, and stores the session key
-    /// through the runtime's connection service.
+    /// One page model for the Last.fm browser link. It shares the runtime's
+    /// transport, opens the authorization page through AppKit, and stores the
+    /// session key through the runtime's connection service.
     func makeLastFMLink(
         transport: URLSessionTransport,
         appCredentials: StoredLastFMAppCredentials,
@@ -122,6 +124,31 @@ extension TracklogDroplet {
             },
             onAppCredentialProblem: { [weak self] problem in
                 self?.runtime?.noteLastFMAppCredentialProblem(problem)
+            },
+        )
+    }
+
+    /// One page model for the Libre.fm browser link, bound to the root the
+    /// listener entered. GNU FM sends its own messages, so the model's service
+    /// name is Libre.fm and a refused client key is named rather than
+    /// reported as a Last.fm app-credential problem.
+    func makeLibreFMLink(endpoint: ServiceEndpoint) -> LastFMLinkModel? {
+        guard let libreFMAdapter else { return nil }
+        return LastFMLinkModel(
+            client: libreFMAdapter.linkClient(for: endpoint),
+            clock: SystemClock(),
+            serviceName: "Libre.fm",
+            openAuthorization: { NSWorkspace.shared.open($0) },
+            complete: { [weak self] session in
+                guard let self, let runtime else {
+                    throw ConnectionError.unavailable
+                }
+                return try await runtime.linkVerified(
+                    kind: .libreFM,
+                    credential: session.key,
+                    identity: ServiceIdentity(name: session.name),
+                    endpoint: endpoint,
+                )
             },
         )
     }
