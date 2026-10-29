@@ -147,6 +147,48 @@ struct LastFMClientTests {
         #expect(unlove["api_sig"] == signedParameters(unlove, secret: secret))
     }
 
+    @Test func feedbackActionsUseTheLoveAndUnloveDialect() async throws {
+        let (adapter, transport) = adapter([lastFMEmptyResponse(), lastFMEmptyResponse()])
+
+        try await adapter.submitFeedback(
+            .love,
+            track: lastFMTestTrack(),
+            reference: nil,
+            connection: lastFMTestConnection(),
+            credential: "session-key",
+        )
+        try await adapter.submitFeedback(
+            .unlove,
+            track: lastFMTestTrack(),
+            reference: nil,
+            connection: lastFMTestConnection(),
+            credential: "session-key",
+        )
+
+        let requests = await transport.requests
+        let love = try formParameters(#require(requests.first))
+        let unlove = try formParameters(#require(requests.last))
+        #expect(love["method"] == "track.love")
+        #expect(love["artist"] == "Blondie")
+        #expect(love["track"] == "Heart of Glass")
+        #expect(unlove["method"] == "track.unlove")
+    }
+
+    @Test func lastFMRefusesHateWithoutSending() async throws {
+        let (adapter, transport) = adapter([])
+
+        await #expect(throws: ServiceFailure.rejected("Last.fm does not support hate.")) {
+            try await adapter.submitFeedback(
+                .hate,
+                track: lastFMTestTrack(),
+                reference: nil,
+                connection: lastFMTestConnection(),
+                credential: "session-key",
+            )
+        }
+        #expect(await transport.requests.isEmpty)
+    }
+
     @Test func refusesMoreThanFiftyScrobblesWithoutSending() async throws {
         let (adapter, transport) = adapter([])
         let listens = (0 ..< 51).map { lastFMTestListen(index: $0) }

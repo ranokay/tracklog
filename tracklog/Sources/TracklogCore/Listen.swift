@@ -80,6 +80,19 @@ public struct Listen: Identifiable, Equatable, Sendable {
         )
     }
 
+    /// The processed fields as a track, for a service action that needs the
+    /// metadata history shows rather than the player's raw values.
+    public var processedTrack: Track {
+        Track(
+            title: processed.title,
+            artist: processed.artist,
+            album: processed.album,
+            albumArtist: processed.albumArtist,
+            duration: duration,
+            bundleID: bundleID,
+        )
+    }
+
     /// The durable duplicate key: raw identity plus the play's start.
     ///
     /// The start is quantized to whole seconds because that is the resolution
@@ -129,6 +142,7 @@ public struct CaptureFailure: Equatable, Sendable {
         case edits
         case blocks
         case connections
+        case feedback
     }
 
     public let stage: Stage
@@ -198,6 +212,16 @@ public struct CaptureFailure: Equatable, Sendable {
             stage: .connections,
             message: "Services could not be loaded from this Mac.",
             diagnostics: "Tracklog could not read its connections.\nError: \(error)",
+        )
+    }
+
+    /// Local feedback could not be read. Capture and history keep running; the
+    /// heart falls back to its unknown state.
+    public static func feedback(error: Error) -> CaptureFailure {
+        CaptureFailure(
+            stage: .feedback,
+            message: "Feedback could not be loaded from this Mac.",
+            diagnostics: "Tracklog could not read its local feedback.\nError: \(error)",
         )
     }
 }

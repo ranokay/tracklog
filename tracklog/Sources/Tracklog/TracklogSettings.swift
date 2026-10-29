@@ -269,6 +269,7 @@ struct TracklogSettings: View {
         case .edits: "Read failed"
         case .blocks: "Read failed"
         case .connections: "Unavailable"
+        case .feedback: "Read failed"
         }
     }
 }

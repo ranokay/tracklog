@@ -214,6 +214,8 @@ private struct TracklogHistory: View {
                 artwork: droplet.artworkData(for: listen),
                 deliveries: state.deliveries(for: listen),
                 connections: state.connections,
+                feedback: state.feedback(for: listen.processed.identity),
+                feedbackSupport: state.feedbackSupport,
             )
         }
     }

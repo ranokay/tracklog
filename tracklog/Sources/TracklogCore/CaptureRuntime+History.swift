@@ -40,6 +40,7 @@ extension CaptureRuntime {
             clearHistoryFailure()
             await refreshDayCounts(from: store, request: request, generation: startGeneration)
             await loadStoredArtwork(for: page)
+            await loadFeedback(for: page.map(\.processed.identity))
             await reloadDeliveryState()
         } catch {
             guard isCurrentHistoryRequest(request, startGeneration: startGeneration) else { return }
@@ -55,6 +56,7 @@ extension CaptureRuntime {
             guard applyHistoryPage(listens, total: total, request: request, generation: generation) else { return }
             await refreshDayCounts(from: store, request: request, generation: generation)
             await loadStoredArtwork(for: listens)
+            await loadFeedback(for: listens.map(\.processed.identity))
         } catch {
             guard isCurrentHistoryRequest(request, startGeneration: generation) else { return }
             recordHistoryFailure(error)
@@ -93,6 +95,7 @@ extension CaptureRuntime {
                 needsScrobbling: true,
             )
             await loadStoredArtwork(for: listens)
+            await loadFeedback(for: listens.map(\.processed.identity))
         } catch {
             guard isCurrentHistoryRequest(
                 request,
