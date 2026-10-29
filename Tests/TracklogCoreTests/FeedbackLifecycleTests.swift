@@ -169,47 +169,102 @@ struct FeedbackLifecycleTests: CaptureTestHelpers {
         #expect(probe.presentations.isEmpty)
     }
 
-    @Test func supportTracksEnabledSignedInAndCapabilities() async throws {
+    @Test func aToggleReadsTheStoredScoreBeforeTheInitialHeartReadCompletes() async throws {
+        let database = try TemporaryDatabase()
+        let sqlite = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let clock = FakeClock(base)
+        let probe = HUDProbe()
+        let store = SuspendingFeedbackStore(sqlite)
+        let brainz = makeFeedbackAdapter(kind: .listenBrainz)
+        _ = try await saveHUDConnection(
+            sqlite,
+            credentials: credentials,
+            kind: .listenBrainz,
+            base: base,
+        )
+        let current = Track(
+            title: "Current",
+            artist: "Artist",
+            album: "",
+            albumArtist: "",
+            bundleID: "com.apple.Music",
+        )
+        let identity = ListenMetadata(current).identity
+        try await sqlite.setFeedback(.loved, for: identity, at: base)
+        let runtime = makeFeedbackRuntime(
+            store: store,
+            clock: clock,
+            probe: probe,
+            adapters: [brainz],
+            credentials: credentials,
+        )
+        await runtime.start()
+
+        await store.holdNextFeedbackRead()
+        await runtime.ingest(
+            MediaSample(
+                track: current,
+                elapsed: 0,
+                playbackRate: 1,
+                isPlaying: true,
+                timestamp: base,
+            ),
+        )
+        await store.waitUntilReading()
+        #expect(runtime.state.nowPlayingFeedback == nil)
+
+        await runtime.toggleLoveForCurrentTrack()
+
+        let feedback = await brainz.feedback
+        #expect(feedback.map(\.action) == [.unlove])
+        #expect(runtime.state.nowPlayingFeedback == nil)
+
+        await store.release()
+        await turnMainActor()
+        #expect(runtime.state.nowPlayingFeedback == nil)
+    }
+
+    @Test func stoppingAndRestartingCancelsQueuedFeedbackActions() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
         let credentials = MemoryCredentialStore()
         let clock = FakeClock(base)
         let probe = HUDProbe()
-        let brainz = makeFeedbackAdapter(kind: .listenBrainz, supportsHate: true)
-        let lastFM = makeFeedbackAdapter(kind: .lastFM, supportsLove: false)
-        let brainzConnection = try await saveHUDConnection(
+        let gate = DeliveryGate()
+        let brainz = makeFeedbackAdapter(kind: .listenBrainz, feedbackGate: gate)
+        _ = try await saveHUDConnection(
             store,
             credentials: credentials,
             kind: .listenBrainz,
             base: base,
         )
-        let lastFMConnection = try await saveHUDConnection(
-            store,
-            credentials: credentials,
-            kind: .lastFM,
-            identity: "listener-lastfm",
-            base: base,
-        )
+        let listen = try await insertHistoryListen(store, base: base)
         let runtime = makeHUDRuntime(
             store: store,
             clock: clock,
             probe: probe,
-            adapters: [brainz, lastFM],
+            adapters: [brainz],
             credentials: credentials,
         )
         await runtime.start()
-        #expect(runtime.state.feedbackSupport == FeedbackSupport(canLove: true, canHate: true))
 
-        try await runtime.setConnectionEnabled(id: brainzConnection.id ?? -1, enabled: false)
-        #expect(runtime.state.feedbackSupport == FeedbackSupport())
+        let first = Task { await runtime.toggleLove(for: listen) }
+        await gate.waitUntilEntered()
+        let second = Task { await runtime.toggleLove(for: listen) }
+        let third = Task { await runtime.toggleLove(for: listen) }
+        await turnMainActor()
+        runtime.stop()
+        await runtime.start()
+        await gate.release()
+        await first.value
+        await second.value
+        await third.value
 
-        try await runtime.setConnectionEnabled(id: lastFMConnection.id ?? -1, enabled: false)
-        #expect(runtime.state.feedbackSupport == FeedbackSupport())
-
-        var signedOut = brainzConnection
-        signedOut.authState = .needsSignIn
-        _ = try await store.save(signedOut)
-        await runtime.reloadConnections()
-        #expect(runtime.state.feedbackSupport == FeedbackSupport())
+        let feedback = await brainz.feedback
+        #expect(feedback.count == 1)
+        #expect(feedback.first?.action == .love)
+        #expect(probe.presentations.isEmpty)
+        #expect(runtime.state.feedback(for: listen.processed.identity)?.score == .loved)
     }
 }

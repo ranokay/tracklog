@@ -19,20 +19,27 @@ extension CaptureRuntime {
     }
 
     /// Loads local feedback for processed identities that have not been read
-    /// yet. A local write during the read bumps the generation and discards the
-    /// stale answer, so it cannot overwrite a newer heart.
+    /// yet. A local write protects only its own identity from the stale answer;
+    /// untouched identities in the same read still apply.
     func loadFeedback(for identities: [String]) async {
         guard let feedbackStore else { return }
         let requested = Array(Set(identities.filter { !$0.isEmpty }))
             .filter { !feedbackLoadedIdentities.contains($0) }
         guard !requested.isEmpty else { return }
 
-        let generation = feedbackGeneration
+        let revisions = Dictionary(
+            uniqueKeysWithValues: requested.map {
+                ($0, feedbackWriteRevisions[$0, default: 0])
+            },
+        )
         do {
             let loaded = try await feedbackStore.feedback(for: requested)
-            guard generation == feedbackGeneration, !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
             var next = state.feedbackByTrack
             for identity in requested {
+                guard feedbackWriteRevisions[identity, default: 0] == revisions[identity] else {
+                    continue
+                }
                 next[identity] = loaded[identity]
                 feedbackLoadedIdentities.insert(identity)
             }
@@ -59,7 +66,14 @@ extension CaptureRuntime {
         feedbackIdentity = identity
         feedbackLoadTask?.cancel()
         feedbackLoadTask = Task { [weak self] in
-            await self?.loadFeedback(for: [identity])
+            guard let self else { return }
+            await loadFeedback(for: [identity])
+            guard !Task.isCancelled,
+                  state.nowPlaying.map({ ListenMetadata($0.track).identity }) == identity,
+                  !feedbackLoadedIdentities.contains(identity)
+            else { return }
+            // The answer was discarded or failed; let the next sample retry it.
+            feedbackIdentity = nil
         }
     }
 
@@ -84,12 +98,16 @@ public extension CaptureRuntime {
         guard let id = listen.id else { return }
         let track = listen.processedTrack
         let identity = listen.processed.identity
-        await enqueueFeedback { [weak self] in
+        await enqueueFeedback { [weak self] generation in
             guard let self else { return }
-            let action: FeedbackAction = state.feedback(for: identity)?.score == .loved
-                ? .unlove
-                : .love
-            await applyFeedback(action, track: track, identity: identity, scope: .listen(id))
+            let action = await loveAction(for: identity)
+            await applyFeedback(
+                action,
+                track: track,
+                identity: identity,
+                scope: .listen(id),
+                generation: generation,
+            )
         }
     }
 
@@ -98,12 +116,16 @@ public extension CaptureRuntime {
         guard let sample = state.nowPlaying else { return }
         let track = sample.track
         let identity = ListenMetadata(track).identity
-        await enqueueFeedback { [weak self] in
+        await enqueueFeedback { [weak self] generation in
             guard let self else { return }
-            let action: FeedbackAction = state.feedback(for: identity)?.score == .loved
-                ? .unlove
-                : .love
-            await applyFeedback(action, track: track, identity: identity, scope: .currentTrack)
+            let action = await loveAction(for: identity)
+            await applyFeedback(
+                action,
+                track: track,
+                identity: identity,
+                scope: .currentTrack,
+                generation: generation,
+            )
         }
     }
 
@@ -113,9 +135,15 @@ public extension CaptureRuntime {
         guard let id = listen.id else { return }
         let track = listen.processedTrack
         let identity = listen.processed.identity
-        await enqueueFeedback { [weak self] in
+        await enqueueFeedback { [weak self] generation in
             guard let self else { return }
-            await applyFeedback(.hate, track: track, identity: identity, scope: .listen(id))
+            await applyFeedback(
+                .hate,
+                track: track,
+                identity: identity,
+                scope: .listen(id),
+                generation: generation,
+            )
         }
     }
 
@@ -138,15 +166,30 @@ public extension CaptureRuntime {
 // MARK: - Ordering and fan-out
 
 private extension CaptureRuntime {
-    func enqueueFeedback(_ operation: @escaping @MainActor () async -> Void) async {
+    func enqueueFeedback(_ operation: @escaping @MainActor (Int) async -> Void) async {
+        let generation = startGeneration
         let previous = feedbackChain
         let task = Task { @MainActor [weak self] in
             _ = await previous?.value
-            guard let self, started, !Task.isCancelled else { return }
-            await operation()
+            guard let self, started, startGeneration == generation, !Task.isCancelled else {
+                return
+            }
+            await operation(generation)
         }
         feedbackChain = task
         await task.value
+    }
+
+    /// The latest durable state for an identity that has not been read yet.
+    /// This is an action-path read, never part of capture, so a held initial
+    /// read cannot make a toggle send love again for an already-loved track.
+    func loveAction(for identity: String) async -> FeedbackAction {
+        if !feedbackLoadedIdentities.contains(identity), let feedbackStore,
+           let loaded = try? await feedbackStore.feedback(for: [identity]) {
+            state.feedbackByTrack[identity] = loaded[identity]
+            feedbackLoadedIdentities.insert(identity)
+        }
+        return state.feedback(for: identity)?.score == .loved ? .unlove : .love
     }
 
     func applyFeedback(
@@ -154,8 +197,9 @@ private extension CaptureRuntime {
         track: Track,
         identity: String,
         scope: FeedbackScope,
+        generation: Int,
     ) async {
-        guard started, !Task.isCancelled else { return }
+        guard started, startGeneration == generation, !Task.isCancelled else { return }
         let targets = feedbackTargets(for: action)
         guard !targets.isEmpty, let feedbackStore else { return }
 
@@ -168,20 +212,23 @@ private extension CaptureRuntime {
             return
         }
 
-        feedbackGeneration += 1
+        guard started, startGeneration == generation, !Task.isCancelled else { return }
+        feedbackWriteRevisions[identity, default: 0] += 1
         feedbackLoadedIdentities.insert(identity)
         var next = state.feedbackByTrack
         next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
         state.feedbackByTrack = next
 
-        guard started, !Task.isCancelled else { return }
+        guard started, startGeneration == generation, !Task.isCancelled else { return }
         let succeeded = await deliveryOutbox?.sendFeedback(
             action,
             track: track,
             scope: scope,
             connectionIDs: targets.compactMap(\.id),
         ) ?? []
-        guard started, !Task.isCancelled, !succeeded.isEmpty else { return }
+        guard started, startGeneration == generation, !Task.isCancelled, !succeeded.isEmpty else {
+            return
+        }
 
         showFeedbackHUD(action, services: succeeded.map(\.hudServiceName))
     }

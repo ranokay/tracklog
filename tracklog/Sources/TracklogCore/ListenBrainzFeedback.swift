@@ -13,8 +13,10 @@ extension ListenBrainzAdapter: FeedbackAdapter {
     public func resolveReference(
         for track: Track,
         connection: Connection,
-        credential _: String,
+        credential: String,
     ) async throws -> RecordingReference? {
+        let token = credential.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw ServiceFailure.rejected("Enter a user token.") }
         let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !artist.isEmpty else {
@@ -40,6 +42,7 @@ extension ListenBrainzAdapter: FeedbackAdapter {
             method: .get,
             url: url,
             headers: [
+                "Authorization": "Token \(token)",
                 "User-Agent": userAgent,
                 "Accept": "application/json",
             ],

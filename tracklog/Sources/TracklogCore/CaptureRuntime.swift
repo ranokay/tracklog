@@ -61,9 +61,9 @@ public final class CaptureRuntime {
     /// Identities already read from the feedback store, so a page reload does
     /// not repeat the same read.
     var feedbackLoadedIdentities: Set<String> = []
-    /// Bumped by a local write, so an older asynchronous read cannot overwrite
-    /// what the listener just did.
-    var feedbackGeneration = 0
+    /// Per-identity write revisions, so a read protects the identities a local
+    /// action changed without discarding untouched identities in the same read.
+    var feedbackWriteRevisions: [String: Int] = [:]
     /// Serializes feedback actions in call order. A second toggle decides at
     /// execution time, after the first action has persisted.
     var feedbackChain: Task<Void, Never>?

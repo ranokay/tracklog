@@ -105,7 +105,7 @@ struct ListenBrainzFeedbackTests {
         let reference = try await adapter(transport).resolveReference(
             for: track(),
             connection: connection,
-            credential: "token",
+            credential: " token \n",
         )
 
         #expect(reference == .mbid("mbid-1"))
@@ -117,7 +117,7 @@ struct ListenBrainzFeedbackTests {
         #expect(query.first(where: { $0.name == "artist_name" })?.value == "Blondie")
         #expect(query.first(where: { $0.name == "recording_name" })?.value == "Heart of Glass")
         #expect(query.first(where: { $0.name == "release_name" })?.value == "Parallel Lines")
-        #expect(request.headers["Authorization"] == nil)
+        #expect(request.headers["Authorization"] == "Token token")
         #expect(request.headers["User-Agent"] == TracklogHTTP.userAgent)
     }
 

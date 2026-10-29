@@ -31,7 +31,7 @@ func makeFeedbackRuntime(
 /// A real store whose next feedback read can be held open, so the composition
 /// tests can prove a track change or a newer local write is not overwritten by
 /// a slow answer.
-actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore {
+actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore, DeliveryStore {
     private let base: SQLiteListenStore
     private var holdNextRead = false
     private var reading = false
@@ -110,6 +110,80 @@ actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore {
     func setCurrentConnectionID(_ id: Int64?) async throws {
         try await base.setCurrentConnectionID(id)
     }
+
+    func insert(_ listen: Listen, targets: [Int64]) async throws -> Listen? {
+        try await base.insert(listen, targets: targets)
+    }
+
+    func dueDeliveries(
+        for connectionID: Int64,
+        limit: Int,
+        at date: Date,
+    ) async throws -> [QueuedDelivery] {
+        try await base.dueDeliveries(for: connectionID, limit: limit, at: date)
+    }
+
+    func deliveries(for listenID: Int64) async throws -> [Delivery] {
+        try await base.deliveries(for: listenID)
+    }
+
+    func deliveries(forListenIDs listenIDs: [Int64]) async throws -> [Delivery] {
+        try await base.deliveries(forListenIDs: listenIDs)
+    }
+
+    func pendingDeliveries() async throws -> [QueuedDelivery] {
+        try await base.pendingDeliveries()
+    }
+
+    func pendingDeliveryCount(forConnection id: Int64) async throws -> Int {
+        try await base.pendingDeliveryCount(forConnection: id)
+    }
+
+    func markDelivered(_ deliveryID: Int64, at date: Date, reference: String?) async throws {
+        try await base.markDelivered(deliveryID, at: date, reference: reference)
+    }
+
+    func markFailed(
+        _ deliveryID: Int64,
+        attempts: Int,
+        at date: Date,
+        nextAttemptAt: Date,
+        error: String,
+    ) async throws {
+        try await base.markFailed(
+            deliveryID,
+            attempts: attempts,
+            at: date,
+            nextAttemptAt: nextAttemptAt,
+            error: error,
+        )
+    }
+
+    func abandon(
+        _ deliveryID: Int64,
+        attempts: Int,
+        lastAttemptAt: Date?,
+        reason: String,
+    ) async throws {
+        try await base.abandon(
+            deliveryID,
+            attempts: attempts,
+            lastAttemptAt: lastAttemptAt,
+            reason: reason,
+        )
+    }
+
+    func abandonPending(forConnection id: Int64, reason: String) async throws -> Int {
+        try await base.abandonPending(forConnection: id, reason: reason)
+    }
+
+    func markDue(for connectionID: Int64, at date: Date) async throws {
+        try await base.markDue(for: connectionID, at: date)
+    }
+
+    func earliestNextAttempt(for connectionIDs: [Int64]) async throws -> Date? {
+        try await base.earliestNextAttempt(for: connectionIDs)
+    }
 }
 
 /// A scripted feedback adapter for the composition suites.
@@ -144,6 +218,11 @@ func insertHistoryListen(
     _ store: SQLiteListenStore,
     title: String = "Song",
     base: Date,
+    start: TimeInterval = 0,
 ) async throws -> Listen {
-    try #require(try await store.insert(deliveryListen(title: title, base: base)))
+    try #require(
+        try await store.insert(
+            deliveryListen(title: title, base: base, start: start),
+        ),
+    )
 }

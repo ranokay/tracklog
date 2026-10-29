@@ -132,4 +132,48 @@ struct FeedbackHUDTests: CaptureTestHelpers {
         #expect(runtime.state.feedback(for: listen.processed.identity) == nil)
         #expect(probe.presentations.isEmpty)
     }
+
+    @Test func supportTracksEnabledSignedInAndCapabilities() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let credentials = MemoryCredentialStore()
+        let clock = FakeClock(base)
+        let probe = HUDProbe()
+        let brainz = makeFeedbackAdapter(kind: .listenBrainz, supportsHate: true)
+        let lastFM = makeFeedbackAdapter(kind: .lastFM, supportsLove: false)
+        let brainzConnection = try await saveHUDConnection(
+            store,
+            credentials: credentials,
+            kind: .listenBrainz,
+            base: base,
+        )
+        let lastFMConnection = try await saveHUDConnection(
+            store,
+            credentials: credentials,
+            kind: .lastFM,
+            identity: "listener-lastfm",
+            base: base,
+        )
+        let runtime = makeHUDRuntime(
+            store: store,
+            clock: clock,
+            probe: probe,
+            adapters: [brainz, lastFM],
+            credentials: credentials,
+        )
+        await runtime.start()
+        #expect(runtime.state.feedbackSupport == FeedbackSupport(canLove: true, canHate: true))
+
+        try await runtime.setConnectionEnabled(id: brainzConnection.id ?? -1, enabled: false)
+        #expect(runtime.state.feedbackSupport == FeedbackSupport())
+
+        try await runtime.setConnectionEnabled(id: lastFMConnection.id ?? -1, enabled: false)
+        #expect(runtime.state.feedbackSupport == FeedbackSupport())
+
+        var signedOut = brainzConnection
+        signedOut.authState = .needsSignIn
+        _ = try await store.save(signedOut)
+        await runtime.reloadConnections()
+        #expect(runtime.state.feedbackSupport == FeedbackSupport())
+    }
 }
