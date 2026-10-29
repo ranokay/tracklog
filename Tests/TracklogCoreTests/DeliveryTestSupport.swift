@@ -89,7 +89,7 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
     private func resolve(_ answer: Answer) throws -> [DeliveryResult] {
         switch answer {
         case let .results(results):
-            return results
+            results
         case let .failure(failure):
             throw failure
         }
