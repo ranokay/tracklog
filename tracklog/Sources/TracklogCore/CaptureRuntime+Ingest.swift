@@ -73,6 +73,7 @@ extension CaptureRuntime {
                 await persist(scrobble, in: store)
             }
         }
+        refreshNowPlayingFeedback()
     }
 
     /// Persists one threshold-crossing listen. A write admitted before a stop

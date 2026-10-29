@@ -10,27 +10,31 @@ import Foundation
 public final class DeliveryOutbox {
     public private(set) var isActive = false
 
-    private let store: any DeliveryStore
-    private let lookup: DeliveryConnectionLookup
-    private let clock: any Clock
-    private let writer: DeliveryOutboxWriter
+    let store: any DeliveryStore
+    let lookup: DeliveryConnectionLookup
+    let feedbackAdapters: [ServiceKind: any FeedbackAdapter]
+    let clock: any Clock
+    let writer: DeliveryOutboxWriter
     private lazy var scheduler = DeliveryScheduler(
         store: store,
         clock: clock,
         eligibleConnectionIDs: { [weak self] in self?.lookup.eligibleConnectionIDs() ?? [] },
         drain: { [weak self] ids in self?.drain(connectionIDs: ids) },
     )
-    private var workers: [Int64: ConnectionWorker] = [:]
+    var workers: [Int64: ConnectionWorker] = [:]
     /// The recording reference the last now playing returned, per connection.
     var nowPlayingReferences: [Int64: String] = [:]
+    /// The track that reference belongs to. A later action may use it only for
+    /// the same track, never for another listen or the current track's neighbour.
+    var nowPlayingReferenceTracks: [Int64: String] = [:]
     /// The last request start per connection, kept across worker lifetimes so
     /// the one-second spacing rule survives a drain ending.
-    private var lastRequestAt: [Int64: Date] = [:]
+    var lastRequestAt: [Int64: Date] = [:]
     /// A local write failed; do not resend the batch while the store is sick.
-    private var blockedUntil: [Int64: Date] = [:]
+    var blockedUntil: [Int64: Date] = [:]
     /// Connections held while a credential or identity operation runs. Their
     /// workers may still be finishing a cancellation; a new drain must wait.
-    private var suspended: Set<Int64> = []
+    var suspended: Set<Int64> = []
 
     /// The composition root publishes the connection list after an auth
     /// failure changes it.
@@ -49,6 +53,7 @@ public final class DeliveryOutbox {
         connections: ConnectionService,
         credentials: any CredentialStore,
         adapters: [any DeliveryAdapter],
+        feedbackAdapters: [any FeedbackAdapter]? = nil,
         clock: any Clock,
         retry: DeliveryRetrySchedule = .standard,
         log: @escaping @MainActor (DeliveryEvent) -> Void = { _ in
@@ -61,6 +66,11 @@ public final class DeliveryOutbox {
             credentials: credentials,
             adapters: adapters,
         )
+        var feedbackByKind: [ServiceKind: any FeedbackAdapter] = [:]
+        for adapter in feedbackAdapters ?? adapters.compactMap({ $0 as? any FeedbackAdapter }) {
+            feedbackByKind[adapter.kind] = adapter
+        }
+        self.feedbackAdapters = feedbackByKind
         self.clock = clock
         writer = DeliveryOutboxWriter(
             store: store,
@@ -108,7 +118,7 @@ public final class DeliveryOutbox {
     public func suspend(connectionID id: Int64) {
         suspended.insert(id)
         stopWorker(id)
-        nowPlayingReferences[id] = nil
+        clearRecordingReference(id: id)
         if isActive {
             scheduler.reschedule()
         }
@@ -118,24 +128,11 @@ public final class DeliveryOutbox {
     public func connectionRemoved(connectionID id: Int64) {
         suspended.remove(id)
         stopWorker(id)
-        nowPlayingReferences[id] = nil
+        clearRecordingReference(id: id)
         lastRequestAt[id] = nil
         blockedUntil[id] = nil
         if isActive {
             scheduler.reschedule()
-        }
-    }
-
-    /// Manual retry: makes every pending row for the connection due now and
-    /// drains it. Attempts are kept, so repeated failures still reach the cap.
-    public func retry(connectionID: Int64) {
-        guard isActive else { return }
-        suspended.remove(connectionID)
-        blockedUntil[connectionID] = nil
-        Task { @MainActor [weak self] in
-            guard let self, isActive else { return }
-            try? await store.markDue(for: connectionID, at: clock.now)
-            trigger(connectionID)
         }
     }
 
@@ -197,7 +194,7 @@ public final class DeliveryOutbox {
         }
     }
 
-    private func worker(for id: Int64) -> ConnectionWorker {
+    func worker(for id: Int64) -> ConnectionWorker {
         if let worker = workers[id] {
             return worker
         }
@@ -206,7 +203,7 @@ public final class DeliveryOutbox {
         return worker
     }
 
-    private func start(_ worker: ConnectionWorker, connectionID id: Int64) {
+    func start(_ worker: ConnectionWorker, connectionID id: Int64) {
         guard worker.task == nil else { return }
         worker.task = Task { @MainActor [weak self] in
             await self?.run(worker, connectionID: id)
@@ -215,6 +212,11 @@ public final class DeliveryOutbox {
 
     private func run(_ worker: ConnectionWorker, connectionID id: Int64) async {
         defer {
+            // Feedback queued after this worker was cancelled never runs.
+            // Resume it so its caller finishes without a leaked continuation.
+            let orphaned = worker.feedback
+            worker.feedback.removeAll()
+            orphaned.forEach { $0.resume(nil) }
             worker.task = nil
             if workers[id] === worker {
                 workers[id] = nil
@@ -232,6 +234,17 @@ public final class DeliveryOutbox {
         }
 
         while isActive, !Task.isCancelled {
+            if !worker.feedback.isEmpty {
+                let pending = worker.feedback.removeFirst()
+                guard !pending.isCancelled else {
+                    pending.resume(nil)
+                    continue
+                }
+                let connection = await performFeedback(pending, connectionID: id)
+                pending.resume(connection)
+                continue
+            }
+
             if let track = worker.nowPlaying {
                 worker.nowPlaying = nil
                 await sendNowPlaying(track, connectionID: id)
@@ -251,7 +264,7 @@ public final class DeliveryOutbox {
     private func drainBatches(connectionID id: Int64, worker: ConnectionWorker) async {
         // A new now playing jumps ahead of the rest of the backlog; it is a
         // timestamped event, not a queue item.
-        while isActive, !Task.isCancelled, worker.nowPlaying == nil {
+        while isActive, !Task.isCancelled, worker.nowPlaying == nil, worker.feedback.isEmpty {
             guard await drainOnce(connectionID: id, worker: worker) else { return }
         }
     }
@@ -323,75 +336,5 @@ public final class DeliveryOutbox {
             }
             return nil
         }
-    }
-}
-
-private extension DeliveryOutbox {
-    func apply(
-        _ results: [DeliveryResult],
-        to due: [QueuedDelivery],
-        connection: Connection,
-    ) async -> DeliveryApplyOutcome {
-        var persisted = true
-        var continueDraining = true
-        for (queued, result) in zip(due, results) {
-            if case .rateLimited = result {
-                // A daily-limit answer will repeat for the next batch too; stop
-                // after recording this one instead of burning a request per
-                // batch.
-                continueDraining = false
-            }
-            let written = await writer.apply(result, to: queued, connection: connection)
-            if written, case .delivered = result, let id = connection.id {
-                onDeliverySucceeded?(connection.kind, id)
-            }
-            persisted = written && persisted
-        }
-        return DeliveryApplyOutcome(continueDraining: continueDraining, persisted: persisted)
-    }
-
-    func sendNowPlaying(_ track: Track, connectionID id: Int64) async {
-        guard let connection = lookup.connection(id: id),
-              let adapter = lookup.adapters[connection.kind],
-              adapter.capabilities.supportsNowPlaying,
-              case let .value(credential) = await lookup.credential(for: id) else { return }
-
-        await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
-        guard isActive, !Task.isCancelled else { return }
-        lastRequestAt[id] = clock.now
-
-        do {
-            if let reference = try await adapter.submitNowPlaying(
-                track,
-                connection: connection,
-                credential: credential,
-            ) {
-                nowPlayingReferences[id] = reference
-            }
-        } catch let failure as ServiceFailure {
-            // Now playing is never retried, but a rejected credential still
-            // changes the connection so deliveries stop retrying it.
-            if failure.isAuthentication {
-                await markNeedsSignIn(id: id)
-            }
-            if let problem = failure.appCredentialProblem {
-                onAppCredentialProblem?(connection.kind, problem)
-            }
-            writer.log(.failed(kind: connection.kind, reason: DeliveryFailure.message(for: failure)))
-        } catch {
-            writer.log(.failed(kind: connection.kind, reason: DeliveryFailure.message(for: .retryable)))
-        }
-    }
-
-    func markNeedsSignIn(id: Int64) async {
-        guard await (try? lookup.connections.markNeedsSignIn(id: id)) != nil else { return }
-        onConnectionsChanged?()
-    }
-
-    func waitForSpacing(id: Int64, interval: TimeInterval) async {
-        guard interval > 0, let last = lastRequestAt[id] else { return }
-        let due = last.addingTimeInterval(interval)
-        guard due > clock.now else { return }
-        try? await clock.sleep(until: due)
     }
 }

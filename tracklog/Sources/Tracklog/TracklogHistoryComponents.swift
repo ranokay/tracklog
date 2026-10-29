@@ -40,6 +40,8 @@ struct HistoryRow: View {
     let artwork: Data?
     let deliveries: [Delivery]
     let connections: [Connection]
+    let feedback: TrackFeedback?
+    let feedbackSupport: FeedbackSupport
 
     @State private var isHovering = false
 
@@ -155,6 +157,23 @@ struct HistoryRow: View {
                 }
             }
         }
+        if feedbackSupport.canLove || feedbackSupport.canHate {
+            Section("Feedback") {
+                if feedbackSupport.canLove {
+                    Button(feedback?.score == .loved ? "Unlove" : "Love") {
+                        droplet.toggleLove(for: listen)
+                    }
+                }
+                if feedbackSupport.canHate {
+                    Button("Hate") {
+                        droplet.hate(listen)
+                    }
+                }
+            }
+        }
+        Button("Block") {
+            droplet.quickBlock(listen)
+        }
         Button("Copy metadata") {
             droplet.copyMetadata(for: listen)
         }
@@ -191,6 +210,8 @@ struct NowPlayingStrip: View {
     let droplet: TracklogDroplet
     let sample: MediaSample
     let status: ScrobbleStatus
+    let isLoved: Bool
+    let canLove: Bool
 
     var body: some View {
         VStack(spacing: DroppySpacing.sm) {
@@ -235,11 +256,39 @@ struct NowPlayingStrip: View {
     }
 
     private var controls: some View {
-        ListenControls(
-            droplet: droplet,
-            status: status,
-            transition: DroppyTransition.compactContent,
-        )
+        HStack(spacing: DroppySpacing.xs) {
+            loveButton
+            ListenControls(
+                droplet: droplet,
+                status: status,
+                transition: DroppyTransition.compactContent,
+            )
+        }
+    }
+
+    private var loveButton: some View {
+        Button {
+            droplet.toggleLoveForCurrentTrack()
+        } label: {
+            Image(systemName: isLoved ? "heart.fill" : "heart")
+        }
+        .buttonStyle(DroppyCircleButtonStyle(size: 24))
+        .disabled(!canLove)
+        .help(loveHelp)
+        .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
+        .accessibilityHint(loveHint)
+        .transition(DroppyTransition.compactContent)
+    }
+
+    private var loveHelp: String {
+        guard canLove else {
+            return "Connect a service that supports love"
+        }
+        return isLoved ? "Unlove this track" : "Love this track"
+    }
+
+    private var loveHint: String {
+        canLove ? "" : "Connect a service that supports love."
     }
 
     private var elapsedText: String {

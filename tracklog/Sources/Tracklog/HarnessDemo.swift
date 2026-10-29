@@ -46,7 +46,8 @@ final class HarnessDemoSource: NowPlayingSource {
     func stop() {}
 }
 
-actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore, DeliveryStore {
+actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore,
+    DeliveryStore, FeedbackStore {
     var listens: [Listen]
     private var artworks: [String: StoredArtwork]
     private var artworkHashes: [String: String]
@@ -54,6 +55,7 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     private var simpleEdits: [SimpleEditRule]
     private var blockRules: [BlockRule]
     var deliveryRows: [Delivery]
+    var feedbackRows: [String: TrackFeedback]
     var linkedConnections: [Connection] = []
     var currentConnection: Int64?
     var nextConnectionID: Int64 = 1
@@ -68,6 +70,32 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
         simpleEdits = Self.makeSimpleEdits()
         blockRules = Self.makeBlocks()
         deliveryRows = HarnessDemoData.makeDeliveries()
+        let lovedIdentity = ListenMetadata(
+            title: "Heart of Glass",
+            artist: "Blondie",
+            album: "Parallel Lines",
+        ).identity
+        feedbackRows = [
+            lovedIdentity: TrackFeedback(
+                identity: lovedIdentity,
+                score: .loved,
+                updatedAt: Date(timeIntervalSince1970: 1_000_000),
+            ),
+        ]
+    }
+
+    func feedback(for identities: [String]) async throws -> [String: TrackFeedback] {
+        Dictionary(
+            uniqueKeysWithValues: identities.compactMap { identity in
+                feedbackRows[identity].map { (identity, $0) }
+            },
+        )
+    }
+
+    func setFeedback(_ score: FeedbackScore?, for identity: String, at date: Date) async throws {
+        feedbackRows[identity] = score.map {
+            TrackFeedback(identity: identity, score: $0, updatedAt: date)
+        }
     }
 
     func insert(_: Listen) async throws -> Listen? {

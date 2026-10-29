@@ -16,6 +16,8 @@ public final class CaptureRuntime {
     let connectionService: ConnectionService?
     let deliveryStore: (any DeliveryStore)?
     let deliveryOutbox: DeliveryOutbox?
+    let feedbackStore: (any FeedbackStore)?
+    let feedbackAdapters: [ServiceKind: any FeedbackAdapter]
     let credentialStore: (any CredentialStore)?
     let hudSession: HUDHostSession?
     let compiledLastFMAppCredentials: LastFMAppCredentials
@@ -51,6 +53,20 @@ public final class CaptureRuntime {
     private var feedTask: Task<Void, Never>?
     private var feedSamples: AsyncStream<MediaSample?>.Continuation?
     var pauseTask: Task<Void, Never>?
+    /// The processed identity whose feedback is loaded for the current track.
+    var feedbackIdentity: String?
+    /// The current track's feedback read, kept off the capture path so a slow
+    /// local read never delays a sample or an artwork task.
+    var feedbackLoadTask: Task<Void, Never>?
+    /// Identities already read from the feedback store, so a page reload does
+    /// not repeat the same read.
+    var feedbackLoadedIdentities: Set<String> = []
+    /// Per-identity write revisions, so a read protects the identities a local
+    /// action changed without discarding untouched identities in the same read.
+    var feedbackWriteRevisions: [String: Int] = [:]
+    /// Serializes feedback actions in call order. A second toggle decides at
+    /// execution time, after the first action has persisted.
+    var feedbackChain: Task<Void, Never>?
     /// A credential change saved but the connection sign-out failed. A retry
     /// of the same save must still repair the connections.
     var lastFMInvalidationPending = false
@@ -86,6 +102,13 @@ public final class CaptureRuntime {
         self.store = store
         hudSession = hud
         credentialStore = credentials
+        feedbackStore = store as? any FeedbackStore
+        let feedbackAdapters = serviceAdapters.compactMap { $0 as? any FeedbackAdapter }
+        var feedbackByKind: [ServiceKind: any FeedbackAdapter] = [:]
+        for adapter in feedbackAdapters {
+            feedbackByKind[adapter.kind] = adapter
+        }
+        self.feedbackAdapters = feedbackByKind
         self.compiledLastFMAppCredentials = compiledLastFMAppCredentials
         lastFMAppCredentialsValidator = serviceAdapters
             .compactMap { $0 as? any LastFMAppCredentialValidating }
@@ -117,6 +140,7 @@ public final class CaptureRuntime {
                 connections: service,
                 credentials: credentials,
                 adapters: serviceAdapters.compactMap { $0 as? any DeliveryAdapter },
+                feedbackAdapters: feedbackAdapters,
                 clock: clock,
                 log: deliveryLog ?? { _ in
                     // A runtime without a delivery log stays silent.
@@ -211,41 +235,6 @@ public final class CaptureRuntime {
             configuration: configuration,
             historyPageSize: historyPageSize,
         )
-    }
-
-    public func stop() {
-        pauseTask?.cancel()
-        pauseTask = nil
-        deliveryRefreshTask?.cancel()
-        deliveryRefreshTask = nil
-        stuckEvaluationTask?.cancel()
-        stuckEvaluationTask = nil
-        hudTracking.primed = false
-        deliveryOutbox?.deactivate()
-        stopFeed()
-        started = false
-    }
-
-    public func setScrobblingEnabled(_ enabled: Bool) {
-        guard enabled != state.scrobblingEnabled else { return }
-        state.scrobblingEnabled = enabled
-        persistCurrentSettings()
-        if enabled, store != nil, started, state.pausedUntil == nil {
-            startFeed()
-        } else {
-            stopFeed()
-        }
-    }
-
-    /// Moves the engine's threshold floor. The current session picks it up on
-    /// its next sample; a track is never pre-filtered by its duration.
-    public func setMinimumDuration(_ seconds: TimeInterval) {
-        let range = CaptureSettings.minimumDurationRange
-        let clamped = min(max(seconds, range.lowerBound), range.upperBound)
-        guard clamped != state.minimumDuration else { return }
-        state.minimumDuration = clamped
-        engine.setMinimumThreshold(clamped)
-        persistCurrentSettings()
     }
 
     func startFeed() {

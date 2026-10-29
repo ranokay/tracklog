@@ -3,7 +3,7 @@ import Foundation
 /// Libre.fm's delivery adapter. It speaks the shared Last.fm 2.0 client with
 /// the GNU FM dialect: unsigned calls, one scrobble per request, and the root
 /// the listener chose when the connection was linked.
-public struct LibreFMAdapter: DeliveryAdapter {
+public struct LibreFMAdapter: DeliveryAdapter, FeedbackAdapter {
     public let kind = ServiceKind.libreFM
     public let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
@@ -108,6 +108,25 @@ public struct LibreFMAdapter: DeliveryAdapter {
             try await client(for: connection.endpoint).unlove(track, sessionKey: credential)
         } catch {
             throw Self.deliveryFailure(for: error)
+        }
+    }
+
+    /// The shared feedback port maps onto GNU FM's unsigned love/unlove
+    /// calls. GNU FM has no hate action.
+    public func submitFeedback(
+        _ action: FeedbackAction,
+        track: Track,
+        reference _: RecordingReference?,
+        connection: Connection,
+        credential: String,
+    ) async throws {
+        switch action {
+        case .love:
+            try await love(track, connection: connection, credential: credential)
+        case .unlove:
+            try await unlove(track, connection: connection, credential: credential)
+        case .hate:
+            throw ServiceFailure.rejected("Libre.fm does not support hate.")
         }
     }
 

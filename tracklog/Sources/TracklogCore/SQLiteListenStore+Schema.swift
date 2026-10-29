@@ -212,6 +212,21 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 9) { handle in
+                // Local knowledge of a love or hate, keyed by the processed
+                // track identity so a later listen of the same track reads the
+                // same heart regardless of the source player.
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE feedback (
+                        track_identity TEXT PRIMARY KEY,
+                        score TEXT NOT NULL,
+                        updated_at REAL NOT NULL
+                    );
+                    """,
+                )
+            },
         ]
     }
 

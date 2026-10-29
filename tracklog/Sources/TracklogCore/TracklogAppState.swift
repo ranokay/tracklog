@@ -108,6 +108,10 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var nowPlayingArtworkIdentity: String?
     /// Covers already loaded from the store, by content hash.
     @Published public internal(set) var artworkByHash: [String: Data] = [:]
+    /// Local love/hate knowledge, keyed by processed metadata identity.
+    @Published public internal(set) var feedbackByTrack: [String: TrackFeedback] = [:]
+    /// Which feedback actions the current connection set can perform.
+    @Published public internal(set) var feedbackSupport = FeedbackSupport()
     /// Deliveries for the listens on the loaded page, keyed by listen id.
     @Published public internal(set) var deliveriesByListen: [Int64: [Delivery]] = [:]
     /// Every pending delivery, grouped by connection, regardless of which
@@ -133,6 +137,23 @@ public final class TracklogAppState: ObservableObject {
     public func deliveries(for listen: Listen) -> [Delivery] {
         guard let id = listen.id else { return [] }
         return deliveriesByListen[id] ?? []
+    }
+
+    /// The local feedback for one processed identity.
+    public func feedback(for identity: String) -> TrackFeedback? {
+        feedbackByTrack[identity]
+    }
+
+    /// The heart state the Sleeve widget reads for the current track. The key
+    /// is the processed metadata identity, so a change of source player does
+    /// not change the heart.
+    public var nowPlayingFeedback: TrackFeedback? {
+        guard let track = nowPlaying?.track else { return nil }
+        return feedbackByTrack[ListenMetadata(track).identity]
+    }
+
+    public var nowPlayingIsLoved: Bool {
+        nowPlayingFeedback?.score == .loved
     }
 
     public func setPendingListExpanded(_ expanded: Bool) {

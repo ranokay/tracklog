@@ -10,7 +10,7 @@ public protocol LastFMAppCredentialValidating: Sendable {
 /// Last.fm's delivery adapter. The protocol client owns the signed request
 /// shapes; this type maps its failures and per-item outcomes onto the outbox's
 /// vocabulary.
-public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredentialValidating {
+public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredentialValidating, FeedbackAdapter {
     public let kind = ServiceKind.lastFM
     public let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
@@ -143,6 +143,25 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
             try await client.unlove(track, sessionKey: sessionKey)
         } catch {
             throw Self.failure(for: error)
+        }
+    }
+
+    /// The shared feedback port maps onto Last.fm's scalar love/unlove calls.
+    /// Last.fm has no hate action.
+    public func submitFeedback(
+        _ action: FeedbackAction,
+        track: Track,
+        reference _: RecordingReference?,
+        connection _: Connection,
+        credential: String,
+    ) async throws {
+        switch action {
+        case .love:
+            try await love(track, sessionKey: credential)
+        case .unlove:
+            try await unlove(track, sessionKey: credential)
+        case .hate:
+            throw ServiceFailure.rejected("Last.fm does not support hate.")
         }
     }
 

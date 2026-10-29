@@ -2,7 +2,7 @@ import TracklogCore
 
 /// An offline ListenBrainz stand-in for the harness: any non-empty token links
 /// the demo listener. The real adapter is exercised by the engine tests.
-struct HarnessDemoServiceAdapter: ServiceAdapter {
+struct HarnessDemoServiceAdapter: FeedbackAdapter {
     let kind = ServiceKind.listenBrainz
     let capabilities = ServiceCapabilities(
         supportsNowPlaying: true,
@@ -13,6 +13,16 @@ struct HarnessDemoServiceAdapter: ServiceAdapter {
 
     func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         ServiceIdentity(name: "listener")
+    }
+
+    func submitFeedback(
+        _: FeedbackAction,
+        track _: Track,
+        reference _: RecordingReference?,
+        connection _: Connection,
+        credential _: String,
+    ) async throws {
+        // The harness has no network; the action still proves the composition.
     }
 }
 

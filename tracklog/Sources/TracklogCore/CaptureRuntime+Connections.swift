@@ -27,6 +27,7 @@ extension CaptureRuntime {
         guard let connectionService else { return }
         state.connections = connectionService.connections
         state.currentConnectionID = connectionService.currentID
+        refreshFeedbackSupport()
         invalidateSignInRecoveries()
         evaluateSignInHUD()
         scheduleStuckEvaluation()

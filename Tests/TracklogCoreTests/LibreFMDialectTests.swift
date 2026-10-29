@@ -185,6 +185,50 @@ struct LibreFMDialectTests {
         #expect(unlove["api_sig"] == nil)
     }
 
+    @Test func feedbackActionsUseTheUnsignedLoveDialect() async throws {
+        let (adapter, transport) = adapter([lastFMEmptyResponse(), lastFMEmptyResponse()])
+        let connection = try connection()
+
+        try await adapter.submitFeedback(
+            .love,
+            track: lastFMTestTrack(),
+            reference: nil,
+            connection: connection,
+            credential: "session-key",
+        )
+        try await adapter.submitFeedback(
+            .unlove,
+            track: lastFMTestTrack(),
+            reference: nil,
+            connection: connection,
+            credential: "session-key",
+        )
+
+        let requests = await transport.requests
+        let love = try formParameters(#require(requests.first))
+        let unlove = try formParameters(#require(requests.last))
+        #expect(love["method"] == "track.love")
+        #expect(love["api_sig"] == nil)
+        #expect(unlove["method"] == "track.unlove")
+        #expect(unlove["api_sig"] == nil)
+    }
+
+    @Test func libreFMRefusesHateWithoutSending() async throws {
+        let (adapter, transport) = adapter([])
+        let linked = try connection()
+
+        await #expect(throws: ServiceFailure.rejected("Libre.fm does not support hate.")) {
+            try await adapter.submitFeedback(
+                .hate,
+                track: lastFMTestTrack(),
+                reference: nil,
+                connection: linked,
+                credential: "session-key",
+            )
+        }
+        #expect(await transport.requests.isEmpty)
+    }
+
     // MARK: - Identity and failures
 
     @Test func readsTheIdentityFromTheLinkedRoot() async throws {

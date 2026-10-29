@@ -2,10 +2,20 @@ import Foundation
 import Testing
 @testable import TracklogCore
 
+/// One feedback call a scripted adapter received.
+struct FeedbackRecord: Equatable, Sendable {
+    let action: FeedbackAction
+    let track: Track
+    let reference: RecordingReference?
+    let connectionID: Int64?
+}
+
 /// A delivery adapter whose answers a test scripts. Every batch is recorded
 /// before the answer runs, so an overlap shows up as two recorded batches
-/// while only one request was in flight.
-actor RecordingDeliveryAdapter: DeliveryAdapter {
+/// while only one request was in flight. It also speaks the feedback port, so
+/// the outbox and composition suites can drive fan-out without the network.
+actor RecordingDeliveryAdapter: DeliveryAdapter, FeedbackAdapter {
+    nonisolated let requiresReference: Bool
     enum Answer: Sendable {
         case results([DeliveryResult])
         case failure(ServiceFailure)
@@ -18,8 +28,14 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
     private let onSubmit: (@Sendable ([Listen]) async -> Void)?
     private(set) var batches: [[Listen]] = []
     private(set) var nowPlaying: [Track] = []
+    private(set) var feedback: [FeedbackRecord] = []
+    private(set) var lookups: [Track] = []
     private(set) var batchesInFlight = 0
     private(set) var peakBatchesInFlight = 0
+    private let reference: RecordingReference?
+    private let lookupGate: DeliveryGate?
+    private let feedbackGate: DeliveryGate?
+    private let feedbackAnswer: ServiceFailure?
 
     init(
         kind: ServiceKind = .listenBrainz,
@@ -31,12 +47,22 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
         answers: [Answer] = [],
         gate: DeliveryGate? = nil,
         onSubmit: (@Sendable ([Listen]) async -> Void)? = nil,
+        requiresReference: Bool = false,
+        reference: RecordingReference? = nil,
+        lookupGate: DeliveryGate? = nil,
+        feedbackGate: DeliveryGate? = nil,
+        feedbackAnswer: ServiceFailure? = nil,
     ) {
         self.kind = kind
         self.capabilities = capabilities
         self.answers = answers
         self.gate = gate
         self.onSubmit = onSubmit
+        self.requiresReference = requiresReference
+        self.reference = reference
+        self.lookupGate = lookupGate
+        self.feedbackGate = feedbackGate
+        self.feedbackAnswer = feedbackAnswer
     }
 
     func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
@@ -84,6 +110,43 @@ actor RecordingDeliveryAdapter: DeliveryAdapter {
     ) async throws -> String? {
         nowPlaying.append(track)
         return "msid-\(nowPlaying.count)"
+    }
+
+    func resolveReference(
+        for track: Track,
+        connection _: Connection,
+        credential _: String,
+    ) async throws -> RecordingReference? {
+        lookups.append(track)
+        if let lookupGate {
+            await lookupGate.enter()
+            await lookupGate.leave()
+        }
+        return reference
+    }
+
+    func submitFeedback(
+        _ action: FeedbackAction,
+        track: Track,
+        reference: RecordingReference?,
+        connection: Connection,
+        credential _: String,
+    ) async throws {
+        feedback.append(
+            FeedbackRecord(
+                action: action,
+                track: track,
+                reference: reference,
+                connectionID: connection.id,
+            ),
+        )
+        if let feedbackGate {
+            await feedbackGate.enter()
+            await feedbackGate.leave()
+        }
+        if let feedbackAnswer {
+            throw feedbackAnswer
+        }
     }
 
     private func resolve(_ answer: Answer) throws -> [DeliveryResult] {
@@ -213,6 +276,38 @@ func awaitNowPlaying(
     while tracks.count < count, clock.now < deadline {
         try? await Task.sleep(for: .milliseconds(5))
         tracks = await adapter.nowPlaying
+    }
+    return tracks
+}
+
+@MainActor
+func awaitFeedback(
+    _ adapter: RecordingDeliveryAdapter,
+    count: Int,
+    timeout: Duration = .seconds(3),
+) async -> [FeedbackRecord] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var records = await adapter.feedback
+    while records.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        records = await adapter.feedback
+    }
+    return records
+}
+
+@MainActor
+func awaitLookups(
+    _ adapter: RecordingDeliveryAdapter,
+    count: Int,
+    timeout: Duration = .seconds(3),
+) async -> [Track] {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    var tracks = await adapter.lookups
+    while tracks.count < count, clock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+        tracks = await adapter.lookups
     }
     return tracks
 }
