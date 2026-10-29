@@ -169,4 +169,35 @@ struct LastFMAppCredentialChangeTests {
         #expect(harness.state.lastFMNeedsAppCredentialRemedy == false)
         #expect(persisted == [nil])
     }
+
+    @Test func revalidatingTheSamePairClearsAStaleProblem() async throws {
+        var persisted: [AppCredentialProblem?] = []
+        let credentials = MemoryCredentialStore()
+        let saved = try #require(
+            LastFMAppCredentialOverride(
+                validating: lastFMTestCredentials.apiKey,
+                sharedSecret: lastFMTestCredentials.sharedSecret,
+            ),
+        )
+        try await credentials.saveLastFMAppCredentialOverride(saved)
+        let harness = try await makeHarness(
+            transport: ScriptedTransport([lastFMTokenResponse()]),
+            credentials: credentials,
+            appCredentialProblem: .suspendedKey,
+            persistAppCredentialProblem: { persisted.append($0) },
+        )
+
+        #expect(harness.state.lastFMNeedsAppCredentialRemedy)
+
+        // The candidate is the pair already in use, so saving it changes
+        // nothing but still proves Last.fm accepts it now.
+        try await harness.runtime.saveLastFMAppCredentialOverride(
+            apiKey: lastFMTestCredentials.apiKey,
+            sharedSecret: lastFMTestCredentials.sharedSecret,
+        )
+
+        #expect(harness.state.lastFMAppCredentialProblem == nil)
+        #expect(harness.state.lastFMNeedsAppCredentialRemedy == false)
+        #expect(persisted == [nil])
+    }
 }

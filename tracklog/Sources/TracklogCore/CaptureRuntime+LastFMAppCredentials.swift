@@ -105,6 +105,10 @@ private extension CaptureRuntime {
         } catch {
             throw LastFMAppCredentialError.storage
         }
+        // A validated save, or a removal, retires any rejection recorded for
+        // the pair that was in use. Saving the same pair again clears a stale
+        // warning even though the effective pair did not change.
+        clearLastFMAppCredentialProblem()
         await loadLastFMAppCredentials()
         let current: LastFMAppCredentials
         do {
@@ -115,9 +119,6 @@ private extension CaptureRuntime {
 
         let changed = current != previous
         guard changed || lastFMInvalidationPending else { return }
-        if changed {
-            clearLastFMAppCredentialProblem()
-        }
         lastFMInvalidationPending = true
         do {
             try await signOutLastFMSessions()

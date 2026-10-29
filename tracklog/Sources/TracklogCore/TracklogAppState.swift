@@ -22,8 +22,8 @@ public final class TracklogAppState: ObservableObject {
     /// Set until a connection read succeeds, so the Services page can say the
     /// list is unavailable rather than empty.
     @Published public internal(set) var connectionsFailure: CaptureFailure?
-    /// Why Last.fm rejected Tracklog's own app credentials, if it did. This is
-    /// distinct from a connection's own needs-sign-in state.
+    /// Why Last.fm rejected the app credentials in use, compiled or override.
+    /// This is distinct from a connection's own needs-sign-in state.
     @Published public internal(set) var lastFMAppCredentialProblem: AppCredentialProblem?
     /// Whether the compiled Last.fm pair has both halves.
     @Published public internal(set) var lastFMCompiledCredentialsPresent =
