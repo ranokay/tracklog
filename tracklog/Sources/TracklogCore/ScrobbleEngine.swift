@@ -101,7 +101,7 @@ public final class ScrobbleEngine {
         submitted: Track? = nil,
         nowPlayingEnabled: Bool = true,
     ) -> [ScrobbleEffect] {
-        let now = sample?.timestamp ?? Date()
+        let now = sample?.observedAt ?? Date()
 
         guard let sample, !sample.track.isEmpty else {
             let effects = finalize(at: now)
