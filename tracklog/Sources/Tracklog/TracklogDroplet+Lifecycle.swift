@@ -4,10 +4,16 @@ import TracklogCore
 
 public extension TracklogDroplet {
     func deactivate() {
+        exportOperationID = nil
         exportTask?.cancel()
         exportTask = nil
         exportPanel?.cancel(nil)
         exportPanel = nil
+        if let alert = exportAlert {
+            exportAlert = nil
+            alert.window.close()
+            NSApp.abortModal()
+        }
         activationTask?.cancel()
         activationTask = nil
         lastFMLink?.cancel()

@@ -53,15 +53,13 @@ struct TracklogSettings: View {
                 settingsSectionHeader("Players")
             } content: {
                 DropletSettingsCard {
-                    DropletSettingsPageLink(
-                        "Apps",
-                        subtitle: "Choose which players can scrobble.",
-                        page: tracklogAppsPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Apps",
+                                             subtitle: "Choose which players can scrobble.",
+                                             page: tracklogAppsPageID) {
                         SettingsLinkTile(systemImage: "app.badge.checkmark")
                     }
                     .id(tracklogAppsPageID)
-                    .focusable()
                 }
             }
 
@@ -69,53 +67,43 @@ struct TracklogSettings: View {
                 settingsSectionHeader("Settings")
             } content: {
                 DropletSettingsCard {
-                    DropletSettingsPageLink(
-                        "Services",
-                        subtitle: state.connections.isEmpty
-                            ? "Connect Last.fm, Libre.fm or ListenBrainz."
-                            : "\(state.connections.count) connected. Choose the current account.",
-                        page: tracklogServicesPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Services",
+                                             subtitle: state.connections.isEmpty
+                                                 ? "Connect Last.fm, Libre.fm or ListenBrainz."
+                                                 : "\(state.connections.count) connected. Choose the current account.",
+                                             page: tracklogServicesPageID) {
                         SettingsLinkTile(systemImage: "link")
                     }
                     .id(tracklogServicesPageID)
-                    .focusable()
-                    DropletSettingsPageLink(
-                        "Edits",
-                        subtitle: "Fix recurring titles, artists and albums.",
-                        page: tracklogEditsPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Edits",
+                                             subtitle: "Fix recurring titles, artists and albums.",
+                                             page: tracklogEditsPageID) {
                         SettingsLinkTile(systemImage: "text.badge.checkmark")
                     }
                     .id(tracklogEditsPageID)
-                    .focusable()
-                    DropletSettingsPageLink(
-                        "Blocks",
-                        subtitle: "Stop a track, artist, album or album artist from being saved.",
-                        page: tracklogBlocksPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Blocks",
+                                             subtitle: "Stop a track, artist, album or album artist from being saved.",
+                                             page: tracklogBlocksPageID) {
                         SettingsLinkTile(systemImage: "hand.raised")
                     }
                     .id(tracklogBlocksPageID)
-                    .focusable()
-                    DropletSettingsPageLink(
-                        "Data",
-                        subtitle: "Media diagnostics and your portable settings export.",
-                        page: tracklogDataPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Data",
+                                             subtitle: "Media diagnostics and your portable settings export.",
+                                             page: tracklogDataPageID) {
                         SettingsLinkTile(systemImage: "externaldrive")
                     }
                     .id(tracklogDataPageID)
-                    .focusable()
-                    DropletSettingsPageLink(
-                        "About",
-                        subtitle: "Version, licence and credits.",
-                        page: tracklogAboutPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "About",
+                                             subtitle: "Version, licence and credits.",
+                                             page: tracklogAboutPageID) {
                         SettingsLinkTile(systemImage: "info.circle")
                     }
                     .id(tracklogAboutPageID)
-                    .focusable()
                 }
             }
         }

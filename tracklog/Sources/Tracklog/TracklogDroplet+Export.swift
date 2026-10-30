@@ -4,23 +4,26 @@ import SwiftUI
 import TracklogCore
 import UniformTypeIdentifiers
 
+// swiftformat:disable redundantSelf
+// Explicit self is required by the compiler inside the escaping export task.
+
 extension TracklogDroplet {
     /// The portable settings export. The document is built and encoded before
     /// the save panel opens, so a failed rule read shows an alert instead of a
     /// partial file. Cancellation is silent; a write failure gets a native
     /// alert because the HUD has no copy for it.
     func exportSettings() {
-        guard exportTask == nil else { return }
-        guard let runtime, host != nil else {
-            presentExportError(
-                title: "Settings could not be exported",
-                detail: "Tracklog is not active.",
-            )
-            return
-        }
+        guard exportTask == nil, let runtime, host != nil else { return }
 
+        let operationID = UUID()
+        exportOperationID = operationID
         exportTask = Task { [weak self] in
-            defer { self?.exportTask = nil }
+            defer {
+                if let self, self.exportOperationID == operationID {
+                    self.exportTask = nil
+                    self.exportOperationID = nil
+                }
+            }
 
             let export: SettingsExport
             let data: Data
@@ -28,16 +31,24 @@ extension TracklogDroplet {
                 export = try await runtime.makeSettingsExport()
                 data = try export.encoded()
             } catch {
-                guard let self, isStillActive(runtime: runtime), !Task.isCancelled else { return }
+                guard let self,
+                      self.isCurrentExport(operationID, runtime: runtime),
+                      !Task.isCancelled
+                else { return }
                 let detail = (error as? SettingsExportReadFailure)?.description ?? "\(error)"
-                presentExportError(
+                self.presentExportError(
                     title: "Settings could not be exported",
                     detail: detail,
+                    operationID: operationID,
+                    runtime: runtime,
                 )
                 return
             }
 
-            guard let self, isStillActive(runtime: runtime), !Task.isCancelled else { return }
+            guard let self,
+                  self.isCurrentExport(operationID, runtime: runtime),
+                  !Task.isCancelled
+            else { return }
 
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.json]
@@ -46,28 +57,37 @@ extension TracklogDroplet {
             panel.title = "Export Tracklog settings"
             exportPanel = panel
             let response = panel.runModal()
-            exportPanel = nil
+            if exportPanel === panel {
+                exportPanel = nil
+            }
 
-            guard response == .OK, let url = panel.url, isStillActive(runtime: runtime), !Task.isCancelled else { return }
+            guard response == .OK,
+                  let url = panel.url,
+                  self.isCurrentExport(operationID, runtime: runtime),
+                  !Task.isCancelled
+            else { return }
 
             do {
                 try data.write(to: url, options: .atomic)
-                guard isStillActive(runtime: runtime), !Task.isCancelled else { return }
-                hudSession?.show(HUD.resolve(.exported))
+                guard self.isCurrentExport(operationID, runtime: runtime), !Task.isCancelled else { return }
+                self.hudSession?.show(HUD.resolve(.exported))
             } catch {
-                guard isStillActive(runtime: runtime), !Task.isCancelled else { return }
-                presentExportError(
+                guard self.isCurrentExport(operationID, runtime: runtime), !Task.isCancelled else { return }
+                self.presentExportError(
                     title: "Settings could not be exported",
                     detail: error.localizedDescription,
+                    operationID: operationID,
+                    runtime: runtime,
                 )
             }
         }
     }
 
-    /// True while the export still belongs to the live activation that
-    /// started it.
-    private func isStillActive(runtime: CaptureRuntime) -> Bool {
-        self.runtime === runtime && host != nil
+    /// True while the export belongs to the live activation and the operation
+    /// that started it. It prevents an old task's cleanup from clearing a
+    /// newer activation's task, panel or HUD.
+    private func isCurrentExport(_ operationID: UUID, runtime: CaptureRuntime) -> Bool {
+        exportOperationID == operationID && self.runtime === runtime && host != nil
     }
 
     var dropletVersion: String {
@@ -83,12 +103,24 @@ extension TracklogDroplet {
         }
     }
 
-    private func presentExportError(title: String, detail: String) {
+    private func presentExportError(
+        title: String,
+        detail: String,
+        operationID: UUID,
+        runtime: CaptureRuntime,
+    ) {
+        guard self.isCurrentExport(operationID, runtime: runtime) else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = detail
         alert.addButton(withTitle: "OK")
+        exportAlert = alert
         alert.runModal()
+        if exportAlert === alert {
+            exportAlert = nil
+        }
     }
 }
+
+// swiftformat:enable redundantSelf

@@ -78,19 +78,17 @@ struct TracklogAddServicePage: View {
                                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        DropletSettingsPageLink(
-                            lastFMAppCredentialLinkTitle,
-                            subtitle: "Save your own API key and shared secret, then sign in.",
-                            page: tracklogLastFMAppCredentialsPageID,
-                        ) {
+                        TracklogSettingsPageLink(droplet: droplet,
+                                                 lastFMAppCredentialLinkTitle,
+                                                 subtitle: "Save your own API key and shared secret, then sign in.",
+                                                 page: tracklogLastFMAppCredentialsPageID) {
                             SettingsLinkTile(systemImage: "key")
                         }
                     } else if lastFMConnection == nil, droplet.lastFMLink != nil {
-                        DropletSettingsPageLink(
-                            "Sign in with Last.fm",
-                            subtitle: "Opens Last.fm in your browser and waits for you to authorize Tracklog.",
-                            page: tracklogLastFMLinkPageID,
-                        ) {
+                        TracklogSettingsPageLink(droplet: droplet,
+                                                 "Sign in with Last.fm",
+                                                 subtitle: "Opens Last.fm in your browser and waits for you to authorize Tracklog.",
+                                                 page: tracklogLastFMLinkPageID) {
                             SettingsLinkTile(systemImage: "music.note")
                         }
                     } else if lastFMConnection == nil {

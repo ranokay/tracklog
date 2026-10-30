@@ -65,7 +65,9 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The export is owned by this activation. A deactivation cancels it and
     /// closes any save panel it opened.
     var exportTask: Task<Void, Never>?
+    var exportOperationID: UUID?
     var exportPanel: NSSavePanel?
+    var exportAlert: NSAlert?
 
     public func activate(host: DropletHost) throws {
         self.host = host
