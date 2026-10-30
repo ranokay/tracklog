@@ -1,7 +1,7 @@
 # Issue #29 milestone 1 — worker report
 
 - Base: `694b61eb1e8586e7add19a40aef933cfe997b7a6`
-- Implementation head: `9313ca8a77d7e88aa04b08f74689fb19653b813c`
+- Implementation head: `e783eb2f408b00f7fd059080476a513328476c48`
 - Branch: `feat/milestone-1-droppy-surfaces`
 - State: implementation, evidence and this report are committed locally; the
   tree is clean. No push, PR or merge.
@@ -14,9 +14,9 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Exit `0`, frozen gate `true`, head `9313ca8`, clean before and after.
-- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261030T102218Z-e2d99bb1850d.json`
-- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261030T102218Z-e2d99bb1850d.log`
+- Exit `0`, frozen gate `true`, head `e783eb2`, clean before and after.
+- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261030T103420Z-f8e11db4a37d.json`
+- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261030T103420Z-f8e11db4a37d.log`
 
 | Command | Exit | Observed |
 | --- | --- | --- |
@@ -40,9 +40,11 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
   the task. An old defer cannot clear a newer task, panel or alert. Panel
   clearing is identity-checked; `deactivate()` cancels the task, closes the
   save panel, and now also closes an open native alert with
-  `NSApp.abortModal()`. Runtime: Reload while the save panel was open closed it,
-  produced no Exported HUD, and the new activation continued. The same Reload
-  while the write-error alert was open removed the alert and all dialogs.
+  `NSApp.abortModal()` only when `NSApp.modalWindow` is that exact alert
+  window; a host modal nested above is never aborted. Runtime: Reload while the
+  save panel was open closed it, produced no Exported HUD, and the new
+  activation continued. The same Reload while the write-error alert was open
+  removed the alert and all dialogs; Activity showed no Exported HUD.
   The pending-read/new-export/old-completion sequence is enforced by the
   operation-id checks rather than separately instrumented; that specific
   sequence was not observed as a timed runtime trace.
