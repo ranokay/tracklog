@@ -86,6 +86,7 @@ private struct TracklogHistory: View {
             height: context.availableSize.height,
             alignment: .topLeading,
         )
+        .animation(TracklogMotion.stateAnimation, value: bottomBarKey)
         .task { await droplet.reloadHistory() }
         .onDisappear { state.setPendingListExpanded(false) }
     }
@@ -111,26 +112,29 @@ private struct TracklogHistory: View {
     /// Paused and off turn the pinned strip into a state bar, so recovery is
     /// in the same place whether or not a track is playing.
     @ViewBuilder private var bottomBar: some View {
-        if let until = state.pausedUntil {
-            HistoryStateBar(
-                text: "Scrobbling paused until \(until.formatted(date: .omitted, time: .shortened))",
-                actionTitle: "Resume",
-                action: { droplet.resumeCapture() },
-            )
-        } else if !state.scrobblingEnabled {
+        if !state.scrobblingEnabled {
             if state.connections.isEmpty {
                 HistoryStateBar(
+                    droplet: droplet,
                     text: "Scrobbling is off",
                     actionTitle: "Connect a service",
                     action: { droplet.openServicesPage() },
                 )
             } else {
                 HistoryStateBar(
+                    droplet: droplet,
                     text: "Scrobbling is off",
                     actionTitle: "Turn on",
                     action: { droplet.setScrobblingEnabled(true) },
                 )
             }
+        } else if let until = state.pausedUntil {
+            HistoryStateBar(
+                droplet: droplet,
+                text: "Scrobbling paused until \(until.formatted(date: .omitted, time: .shortened))",
+                actionTitle: "Resume",
+                action: { droplet.resumeCapture() },
+            )
         } else if let sample = state.nowPlaying {
             NowPlayingStrip(
                 droplet: droplet,
@@ -140,6 +144,19 @@ private struct TracklogHistory: View {
                 canLove: state.feedbackSupport.canLove,
             )
         }
+    }
+
+    private var bottomBarKey: String {
+        if !state.scrobblingEnabled {
+            return state.connections.isEmpty ? "off.connect" : "off.connections"
+        }
+        if let until = state.pausedUntil {
+            return "paused.\(until.timeIntervalSince1970)"
+        }
+        if let sample = state.nowPlaying {
+            return "track.\(sample.track.identity)"
+        }
+        return "none"
     }
 
     private var totalCount: Int {

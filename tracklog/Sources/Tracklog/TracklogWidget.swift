@@ -20,6 +20,20 @@ struct TracklogWidget: View {
         }
         .padding(context.contentInsets)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .animation(TracklogMotion.stateAnimation, value: phaseKey)
+        .onAppear { TracklogMotion.logReducedPathOnce() }
+    }
+
+    private var phaseKey: String {
+        switch phase {
+        case let .playing(sample): "playing.\(sample.track.identity)"
+        case let .paused(until): "paused.\(until.timeIntervalSince1970)"
+        case .offWithoutConnections: "off.connect"
+        case .off: "off"
+        case .historyUnavailable: "history"
+        case .feedUnavailable: "feed"
+        case .idle: "idle"
+        }
     }
 
     // MARK: - Phase

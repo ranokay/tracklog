@@ -26,6 +26,7 @@ struct TracklogSettings: View {
                     subtitle: "Reads the system now-playing feed and saves what you listen to on this Mac.",
                     isOn: droplet.scrobblingBinding,
                 )
+                .id(tracklogRootPageID)
             }
 
             DropletSettingsSection {
@@ -59,6 +60,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "app.badge.checkmark")
                     }
+                    .id(tracklogAppsPageID)
+                    .focusable()
                 }
             }
 
@@ -75,6 +78,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "link")
                     }
+                    .id(tracklogServicesPageID)
+                    .focusable()
                     DropletSettingsPageLink(
                         "Edits",
                         subtitle: "Fix recurring titles, artists and albums.",
@@ -82,6 +87,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "text.badge.checkmark")
                     }
+                    .id(tracklogEditsPageID)
+                    .focusable()
                     DropletSettingsPageLink(
                         "Blocks",
                         subtitle: "Stop a track, artist, album or album artist from being saved.",
@@ -89,6 +96,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "hand.raised")
                     }
+                    .id(tracklogBlocksPageID)
+                    .focusable()
                     DropletSettingsPageLink(
                         "Data",
                         subtitle: "Media diagnostics and your portable settings export.",
@@ -96,6 +105,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "externaldrive")
                     }
+                    .id(tracklogDataPageID)
+                    .focusable()
                     DropletSettingsPageLink(
                         "About",
                         subtitle: "Version, licence and credits.",
@@ -103,6 +114,8 @@ struct TracklogSettings: View {
                     ) {
                         SettingsLinkTile(systemImage: "info.circle")
                     }
+                    .id(tracklogAboutPageID)
+                    .focusable()
                 }
             }
         }

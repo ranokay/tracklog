@@ -14,28 +14,31 @@ struct ListenControls: View {
     let transition: AnyTransition
 
     var body: some View {
-        if status.canUndo {
-            Button {
-                droplet.undoCancelCurrentListen()
-            } label: {
-                Image(systemName: "arrow.uturn.backward")
-                    .frame(width: 24, height: 24)
+        Group {
+            if status.canUndo {
+                Button {
+                    droplet.undoCancelCurrentListen()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(DroppyCircleButtonStyle(size: 24))
+                .help("Undo cancel")
+                .accessibilityLabel("Undo cancel")
+                .transition(transition)
+            } else if status.canCancel {
+                Button {
+                    droplet.cancelCurrentListen()
+                } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(DroppyCircleButtonStyle(size: 24))
+                .help("Cancel this listen")
+                .accessibilityLabel("Cancel this listen")
+                .transition(transition)
             }
-            .buttonStyle(DroppyCircleButtonStyle(size: 24))
-            .help("Undo cancel")
-            .accessibilityLabel("Undo cancel")
-            .transition(transition)
-        } else if status.canCancel {
-            Button {
-                droplet.cancelCurrentListen()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(DroppyCircleButtonStyle(size: 24))
-            .help("Cancel this listen")
-            .accessibilityLabel("Cancel this listen")
-            .transition(transition)
         }
+        .animation(TracklogMotion.stateAnimation, value: status)
     }
 }

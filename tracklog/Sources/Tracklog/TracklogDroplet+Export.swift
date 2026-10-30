@@ -10,7 +10,8 @@ extension TracklogDroplet {
     /// partial file. Cancellation is silent; a write failure gets a native
     /// alert because the HUD has no copy for it.
     func exportSettings() {
-        guard let runtime else {
+        guard exportTask == nil else { return }
+        guard let runtime, host != nil else {
             presentExportError(
                 title: "Settings could not be exported",
                 detail: "Tracklog is not active.",
@@ -18,45 +19,55 @@ extension TracklogDroplet {
             return
         }
 
-        Task {
+        exportTask = Task { [weak self] in
+            defer { self?.exportTask = nil }
+
             let export: SettingsExport
             let data: Data
             do {
                 export = try await runtime.makeSettingsExport()
                 data = try export.encoded()
-            } catch let failure as SettingsExportReadFailure {
-                presentExportError(
-                    title: "Settings could not be exported",
-                    detail: failure.description,
-                )
-                return
             } catch {
+                guard let self, isStillActive(runtime: runtime), !Task.isCancelled else { return }
+                let detail = (error as? SettingsExportReadFailure)?.description ?? "\(error)"
                 presentExportError(
                     title: "Settings could not be exported",
-                    detail: "\(error)",
+                    detail: detail,
                 )
                 return
             }
+
+            guard let self, isStillActive(runtime: runtime), !Task.isCancelled else { return }
 
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.json]
             panel.nameFieldStringValue = "Tracklog Settings.json"
             panel.canCreateDirectories = true
             panel.title = "Export Tracklog settings"
-            guard panel.runModal() == .OK, let url = panel.url else {
-                return
-            }
+            exportPanel = panel
+            let response = panel.runModal()
+            exportPanel = nil
+
+            guard response == .OK, let url = panel.url, isStillActive(runtime: runtime), !Task.isCancelled else { return }
 
             do {
                 try data.write(to: url, options: .atomic)
+                guard isStillActive(runtime: runtime), !Task.isCancelled else { return }
                 hudSession?.show(HUD.resolve(.exported))
             } catch {
+                guard isStillActive(runtime: runtime), !Task.isCancelled else { return }
                 presentExportError(
                     title: "Settings could not be exported",
                     detail: error.localizedDescription,
                 )
             }
         }
+    }
+
+    /// True while the export still belongs to the live activation that
+    /// started it.
+    private func isStillActive(runtime: CaptureRuntime) -> Bool {
+        self.runtime === runtime && host != nil
     }
 
     var dropletVersion: String {

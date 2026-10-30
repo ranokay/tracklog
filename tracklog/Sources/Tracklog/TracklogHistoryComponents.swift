@@ -259,6 +259,7 @@ struct NowPlayingStrip: View {
         }
         .padding(.horizontal, DroppySpacing.xl)
         .frame(height: 76, alignment: .bottom)
+        .onAppear { TracklogMotion.logReducedPathOnce() }
     }
 
     private var info: some View {
@@ -291,7 +292,7 @@ struct NowPlayingStrip: View {
             ListenControls(
                 droplet: droplet,
                 status: status,
-                transition: DroppyTransition.compactContent,
+                transition: TracklogMotion.compactContent,
             )
         }
     }
@@ -310,17 +311,19 @@ struct NowPlayingStrip: View {
         .accessibilityValue(Text(isLoved ? "Loved" : "Not loved"))
         .accessibilityHint(Text(loveHint))
         .accessibilityAddTraits(isLoved ? .isSelected : [])
-        .transition(DroppyTransition.compactContent)
+        .transition(TracklogMotion.compactContent)
     }
 
     private var overflowMenu: some View {
         Menu {
-            Button("Edit this track") {
-                droplet.editCurrentListen()
-            }
-            Button("Block this track") {
-                droplet.quickBlockCurrentTrack()
-            }
+            TracklogMenuItems(
+                droplet: droplet,
+                status: status,
+                scrobblingEnabled: droplet.state.scrobblingEnabled,
+                pausedUntil: droplet.state.pausedUntil,
+                hasTrack: true,
+                includesListenControls: false,
+            )
         } label: {
             Image(systemName: "ellipsis")
                 .font(.caption.weight(.bold))

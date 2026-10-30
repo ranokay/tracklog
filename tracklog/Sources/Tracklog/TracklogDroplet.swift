@@ -27,12 +27,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The one observable state every surface reads.
     public let state = TracklogAppState()
 
-    private(set) var host: DropletHost?
-    private(set) var runtime: CaptureRuntime?
+    var host: DropletHost?
+    var runtime: CaptureRuntime?
     /// The Last.fm browser link's page model. It lives here, not in the view,
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
-    private(set) var lastFMLink: LastFMLinkModel?
+    var lastFMLink: LastFMLinkModel?
     /// The browser re-auth in flight, bound to the connection page that
     /// started it. The model survives a page rebuild while that page stays
     /// open, the same way a first link does.
@@ -60,8 +60,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// It holds no pair itself, only the credential store it reads.
     var lastFMAppCredentialsProvider: StoredLastFMAppCredentials?
     var automationGate: HostAutomationPermissionGate?
-    private var networkReachability: NetworkReachability?
-    private var activationTask: Task<Void, Never>?
+    var networkReachability: NetworkReachability?
+    var activationTask: Task<Void, Never>?
+    /// The export is owned by this activation. A deactivation cancels it and
+    /// closes any save panel it opened.
+    var exportTask: Task<Void, Never>?
+    var exportPanel: NSSavePanel?
 
     public func activate(host: DropletHost) throws {
         self.host = host
@@ -96,6 +100,11 @@ public final class TracklogDroplet: NSObject, Droplet {
             )
         }
         self.runtime = runtime
+        if isHarness {
+            state.setHarnessSettingsPage(
+                ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"],
+            )
+        }
         if let transport, let lastFMAppCredentialsProvider {
             lastFMLink = makeLastFMLink(
                 transport: transport,
@@ -131,29 +140,6 @@ public final class TracklogDroplet: NSObject, Droplet {
             }
         }
         host.log.info("Tracklog activated")
-    }
-
-    public func deactivate() {
-        activationTask?.cancel()
-        activationTask = nil
-        lastFMLink?.cancel()
-        lastFMLink = nil
-        reauthLink?.model.cancel()
-        reauthLink = nil
-        state.setReauthConnection(nil)
-        serviceTransport = nil
-        libreFMLink?.model.cancel()
-        libreFMLink = nil
-        libreFMAdapter = nil
-        lastFMAppCredentialsProvider = nil
-        networkReachability?.stop()
-        networkReachability = nil
-        runtime?.stop()
-        runtime = nil
-        hudSession?.deactivate()
-        hudSession = nil
-        automationGate = nil
-        host = nil
     }
 
     // MARK: - Scrobbling

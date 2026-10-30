@@ -80,28 +80,34 @@ extension TracklogWidget {
         action: (() -> Void)? = nil,
     ) -> some View {
         VStack(alignment: .leading, spacing: DroppySpacing.xs) {
-            Button {
-                droplet.presentHistory()
-            } label: {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                        .lineLimit(1)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .lineLimit(2)
+            HStack(alignment: .top, spacing: DroppySpacing.sm) {
+                Button {
+                    droplet.presentHistory()
+                } label: {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                            .lineLimit(1)
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                .lineLimit(2)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(title))
+                .accessibilityValue(Text(subtitle ?? ""))
+                .accessibilityHint(Text("Opens History"))
+
+                if state.pendingCount > 0 {
+                    queueButton
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(title))
-            .accessibilityValue(Text(subtitle ?? ""))
-            .accessibilityHint(Text("Opens History"))
 
             if let actionTitle, let action {
                 Button(actionTitle, action: action)

@@ -76,7 +76,14 @@ extension TracklogWidget {
 
     var overflowMenu: some View {
         Menu {
-            menuItems
+            TracklogMenuItems(
+                droplet: droplet,
+                status: state.status,
+                scrobblingEnabled: state.scrobblingEnabled,
+                pausedUntil: state.pausedUntil,
+                hasTrack: state.nowPlaying != nil,
+                includesListenControls: true,
+            )
         } label: {
             Image(systemName: "ellipsis")
                 .font(.caption.weight(.bold))
@@ -88,51 +95,5 @@ extension TracklogWidget {
         .help("More")
         .accessibilityLabel(Text("More"))
         .accessibilitySortPriority(1)
-    }
-
-    @ViewBuilder private var menuItems: some View {
-        if state.status.canUndo {
-            Button("Undo cancel") {
-                droplet.undoCancelCurrentListen()
-            }
-        } else if state.status.canCancel {
-            Button("Cancel this listen") {
-                droplet.cancelCurrentListen()
-            }
-        }
-
-        if state.pausedUntil != nil {
-            Button("Resume") {
-                droplet.resumeCapture()
-            }
-        } else {
-            Menu("Pause") {
-                Button("30 minutes") { droplet.pauseCapture(for: 30 * 60) }
-                Button("1 hour") { droplet.pauseCapture(for: 60 * 60) }
-                Button("2 hours") { droplet.pauseCapture(for: 2 * 60 * 60) }
-                Button("4 hours") { droplet.pauseCapture(for: 4 * 60 * 60) }
-            }
-        }
-
-        Divider()
-        Button("Edit this track") {
-            droplet.editCurrentListen()
-        }
-        .disabled(state.nowPlaying == nil)
-
-        Button("Block this track") {
-            droplet.quickBlockCurrentTrack()
-        }
-        .disabled(state.nowPlaying == nil)
-
-        Divider()
-        Button("Stop scrobbling") {
-            droplet.setScrobblingEnabled(false)
-        }
-        .disabled(!state.scrobblingEnabled)
-
-        Button("Settings") {
-            droplet.openSettings()
-        }
     }
 }

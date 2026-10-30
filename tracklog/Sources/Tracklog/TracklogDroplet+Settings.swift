@@ -1,37 +1,15 @@
 import DroppyKit
 import SwiftUI
+import TracklogCore
 
 // MARK: - Settings
 
 extension TracklogDroplet: SettingsPagesProviding {
     public func makeSettingsPane(context _: SettingsPaneContext) -> AnyView {
-        // The harness cannot follow a page link because it installs no page
-        // opener. An environment override lets the runtime checks mount one
-        // nested page in the pane without changing production behavior.
-        if let page = harnessSettingsPageOverride {
-            switch page {
-            case tracklogDataPageID:
-                return AnyView(TracklogDataPage(droplet: self, state: state))
-            case tracklogAboutPageID:
-                return AnyView(TracklogAboutPage(droplet: self))
-            case tracklogAppsPageID:
-                return AnyView(TracklogAppsPage(droplet: self, state: state))
-            case tracklogServicesPageID:
-                return AnyView(TracklogServicesPage(droplet: self, state: state))
-            case tracklogEditsPageID:
-                return AnyView(TracklogEditsPage(droplet: self, state: state))
-            case tracklogBlocksPageID:
-                return AnyView(TracklogBlocksPage(droplet: self, state: state))
-            default:
-                break
-            }
+        if host?.environment.isHarness == true {
+            return AnyView(TracklogHarnessSettingsPane(droplet: self, state: state))
         }
         return AnyView(TracklogSettings(droplet: self, state: state))
-    }
-
-    private var harnessSettingsPageOverride: String? {
-        guard host?.environment.isHarness == true else { return nil }
-        return ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"]
     }
 
     public func makeSettingsPage(id: String, context _: SettingsPaneContext) -> AnyView? {
@@ -124,5 +102,34 @@ extension TracklogDroplet: SettingsPagesProviding {
                 anchorID: tracklogAboutPageID,
             ),
         ]
+    }
+}
+
+/// Harness-only preview host for nested Settings pages. It installs the public
+/// page opener so `DropletSettingsPageLink` exercises the same
+/// `makeSettingsPage` route the real host uses. Production never reaches it.
+private struct TracklogHarnessSettingsPane: View {
+    let droplet: TracklogDroplet
+    @ObservedObject var state: TracklogAppState
+
+    var body: some View {
+        Group {
+            if let id = state.harnessSettingsPage,
+               id != tracklogRootPageID,
+               let page = droplet.makeSettingsPage(
+                   id: id,
+                   context: SettingsPaneContext(presentation: .harness),
+               ) {
+                page
+            } else {
+                TracklogSettings(droplet: droplet, state: state)
+            }
+        }
+        .environment(
+            \.dropletSettingsPageOpener,
+            DropletSettingsPageOpener { id, _ in
+                state.setHarnessSettingsPage(id)
+            },
+        )
     }
 }
