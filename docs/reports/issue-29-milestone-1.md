@@ -117,9 +117,9 @@ Droppy Playground with real service accounts.
 
 ### Live service smoke
 
-Bundle: `.build/Tracklog.droplet` from `6d54d4e`, loaded in Droppy Playground
-(Store row switched on). The song was BABYMONSTER — “Woke Up In Tokyo (RUKA &
-ASA)”, 2:23, played from Music.
+Bundle: `.build/Tracklog.droplet` built from the tree that became `6d54d4e`,
+loaded in Droppy Playground (Store row switched on). The song was BABYMONSTER —
+“Woke Up In Tokyo (RUKA & ASA)”, 2:23, played from Music.
 
 - Capture stored one local listen with the track-start timestamp and delivered
   it to all three connections.
