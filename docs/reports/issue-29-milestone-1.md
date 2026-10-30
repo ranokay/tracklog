@@ -1,7 +1,7 @@
 # Issue #29 milestone 1 — worker report
 
 - Base: `694b61eb1e8586e7add19a40aef933cfe997b7a6`
-- Implementation head: `9488ed2e4a918be9f5dd4a43072b63b90e89a7cf`
+- Implementation head: `9313ca8a77d7e88aa04b08f74689fb19653b813c`
 - Branch: `feat/milestone-1-droppy-surfaces`
 - State: implementation, evidence and this report are committed locally; the
   tree is clean. No push, PR or merge.
@@ -14,9 +14,9 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Exit `0`, frozen gate `true`, head `9488ed2`, clean before and after.
-- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261030T094655Z-ad8eadff2f08.json`
-- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261030T094655Z-ad8eadff2f08.log`
+- Exit `0`, frozen gate `true`, head `9313ca8`, clean before and after.
+- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261030T102218Z-e2d99bb1850d.json`
+- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261030T102218Z-e2d99bb1850d.log`
 
 | Command | Exit | Observed |
 | --- | --- | --- |
@@ -27,71 +27,59 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
 | four harness shot runs | 0 | every report `problems: []`, `verdict: ok` |
 | `python3 scripts/check_shot_report.py …` | 0 | four provided surfaces, both widget widths, every declared page present |
 
-The four shot reports are `tracklog/shots/report.json`, and the `paused`,
-`off`, and `feed-unavailable` reports in the matching subdirectories. The gate
-checks each separately: activation active, no activation error, manifest
-loaded, every declared surface `provided`, both widget widths declared, and
-every declared surface PNG non-empty.
+## Round-2 findings
 
-## Round-1 findings
-
-- **F5** — The paired widget keeps its 48 pt sleeve/title/countdown/Love/Queue
-  composition and no solo header or overflow. Its paused and feed-unavailable
-  shots retain the pending badge (`2 scrobbles waiting` in the AX tree and the
-  paired image). The takeover strip and paused/off state bar now expose the
-  same action menu: Pause (30 minutes/1/2/4 hours), Edit, Block, Stop
-  scrobbling and Settings, with Resume in the paused bar. Runtime AX opened the
-  strip menu and showed every item.
-- **F6** — The history bottom bar checks the master switch before the pause.
-  Runtime sequence: Pause, then Stop scrobbling, then History showed
-  `Scrobbling is off` / `Turn on`; Turn on returned to
-  `Scrobbling paused until 11:59` with Resume because the pause is
-  intentionally preserved; Resume then cleared it.
-- **F7** — Export is now an owned task; `deactivate()` cancels it, closes its
-  save panel, and clears the harness page. Every continuation checks the
-  activation identity, cancellation and `host != nil` before opening UI,
-  writing or showing the HUD. Starting another export while one is active is
-  ignored. Runtime: opening the export panel and pressing Reload closed the
-  panel and produced no `hud.confirm.export`.
-- **F8** — Search entries now point at real `.id` anchors on the root page
-  (`scrobbling`, `apps`, `services`, `edits`, `blocks`, `data`, `about`). The
-  harness installs the public `DropletSettingsPageOpener` environment and routes
-  its page links through `makeSettingsPage`; clicking Data in the running
-  harness opened the Data page. Root links are focusable. Full root/nested
-  keyboard traversal could not be confirmed under the harness focus policy
-  without changing the OS full-keyboard-access setting, which is outside the
-  authorized boundary; this remains an explicit unpassed item.
-- **F9** — Added `TracklogMotion`: normal motion remains the SDK transition;
-  Reduce Motion uses a 0.16 s crossfade for droplet-owned state/control swaps.
-  A 0.16 s contract constant is unit-tested below 200 ms. Runtime with
-  `TRACKLOG_HARNESS_REDUCE_MOTION=1` logged
-  `Tracklog motion: reduced crossfade 0.16s` when the strip mounted; the log is
-  committed at `docs/reports/issue-29/reduced-motion.log`.
-- **F10** — Reproduced a real write failure through the running export flow by
-  saving over an immutable file with a writable parent folder. The native alert
-  showed `Settings could not be exported` / `You don’t have permission to save
-  the file “Tracklog Settings.json” in the folder “export”`; the target file was
-  unchanged and Activity showed no `hud.confirm.export`. Screenshot:
-  `docs/reports/issue-29/export-write-error.png`.
+- **F5 closed** — Paired paused and feed-unavailable cards retain the pending
+  badge; paired remains only the 48 pt sleeve, title/countdown, Love and Queue.
+  The takeover strip and paused/off state-bar overflow expose Pause, Edit,
+  Block, Stop scrobbling and Settings. Runtime AX showed the full strip menu.
+- **F6 closed** — Master-off takes precedence over `pausedUntil`. Runtime:
+  Pause → Stop → History showed `Scrobbling is off` / `Turn on`; Turn on
+  returned to the preserved pause with Resume.
+- **F7 fixed** — `exportOperationID` scopes cleanup to the operation that owns
+  the task. An old defer cannot clear a newer task, panel or alert. Panel
+  clearing is identity-checked; `deactivate()` cancels the task, closes the
+  save panel, and now also closes an open native alert with
+  `NSApp.abortModal()`. Runtime: Reload while the save panel was open closed it,
+  produced no Exported HUD, and the new activation continued. The same Reload
+  while the write-error alert was open removed the alert and all dialogs.
+  The pending-read/new-export/old-completion sequence is enforced by the
+  operation-id checks rather than separately instrumented; that specific
+  sequence was not observed as a timed runtime trace.
+- **F8 partially fixed** — Root anchors and the SDK page-link route are correct.
+  The harness uses the public `DropletSettingsPageOpener`; every page link now
+  goes through `TracklogSettingsPageLink`, which makes the row focusable and
+  forwards Return/Space to that opener. Runtime keyboard evidence:
+  `Tab` once focused `AXButton "Apps"`; `Return` opened the Apps page.
+  `Tab` twice focused `AXButton "Services"`; `Return` opened Services.
+  Nested-page switches did not enter the Tab chain: `Tab` stayed on the search
+  `AXTextField` on Apps. `defaults read NSGlobalDomain AppleKeyboardUIMode` is
+  unset (default 0, Full Keyboard Access off); changing it is outside the
+  authorization. This nested-control keyboard check remains unpassed.
+- **F9 closed (as configured-path evidence)** — Reduce Motion selects the
+  0.16 s opacity transition (`AccessibilityMotion.reducedCrossfade`) and the
+  Core test asserts it is below 200 ms. The committed log records
+  `Tracklog motion: reduced crossfade 0.16s` when the reduced runtime mounted;
+  the log is configured-path evidence, not a measured animation duration.
+  Cancel/Undo was exercised in the reduced runtime, but no frame timing was
+  captured.
+- **F10 closed** — A real write failure through the running flow (immutable
+  target in a writable folder) showed the native alert, left the target file
+  unchanged, and produced no Exported HUD.
 
 ## Committed screenshots
 
 Screenshots are in `docs/reports/issue-29/`:
 
 - `shelf-playing.png`, `shelf-paused.png`, `shelf-off.png`,
-  `shelf-feed-unavailable.png` — solo and paired at both widths in each state.
-  The paused and feed-unavailable paired cards show the pending badge.
-- `history-playing.png` — History with the pending list open and the pinned
-  now-playing strip.
-- `settings-root.png`, `settings-data.png`, `settings-about.png` — the root
-  pane, Data, and About.
-- `shelf-contrast.png`, `history-contrast.png` — the harness contrast override
-  (`TRACKLOG_HARNESS_CONTRAST=increased`): solo header separator, row
-  separators, and pending-panel borders.
-- `hud.png` — the needs-sign-in card and strip.
-- `export-write-error.png` — the native write-error alert.
-- `export-sample.json` — the file written by the successful export run.
-- `reduced-motion.log` — the reduced-motion runtime marker.
+  `shelf-feed-unavailable.png`
+- `history-playing.png`
+- `settings-root.png`, `settings-data.png`, `settings-about.png`
+- `shelf-contrast.png`, `history-contrast.png`
+- `hud.png`
+- `export-write-error.png`
+- `export-sample.json`
+- `reduced-motion.log`
 
 ## Runtime observations
 
@@ -102,49 +90,28 @@ not prove a real service accepted a scrobble.
 - Solo AX element: `Heart of Glass, Blondie` with value
   `1:18 of 3:45, scrobbles in 107 seconds, 2 waiting`; Love, Queue and More are
   separate elements. Paired exposes title and countdown, then Love and Queue.
-- Love/Unlove toggled the heart and its selected/loved value.
-- Widget overflow opened with Cancel, Pause (30 minutes/1/2/4 hours), Edit,
-  Block, Stop scrobbling and Settings. Pause produced the paused widget and
-  state copy with Resume; Resume restarted the scripted source and the next
-  sample returned the widget to playing.
-- The scripted source crossed the threshold: History went from 6 to 8 listens
-  and the pending queue from 2 to 3, proving capture and delivery-row creation
-  in the harness store.
-- Cancel produced `Tracking cancelled` with Undo; Undo restored the session
-  from the same played time.
-- Block from a History row and from the widget raised
-  `present "hud.confirm.block"`; the next scripted sample produced no now
-  playing and no new history row. Existing rows were untouched.
-- Stop scrobbling changed the widget to `Scrobbling is off` with the queue
-  badge intact.
-- Opening Settings from the widget opened the pane.
-- The queue badge logged `present "history"` to the host.
-- Export success wrote a versioned JSON file and logged
-  `present "hud.confirm.export"`. Cancelling the save panel closed it without an
-  export HUD or file. The immutable-target run showed the native alert and no
-  export HUD.
-- History rows expose `AXUnknown` with label
-  `Heart of Glass, Blondie, Parallel Lines, 10:07` and value
-  `waiting for ListenBrainz`; a separate `Actions for Heart of Glass`
-  `AXMenuButton` exposes the row menu.
-- The HUD tests assert the exact spoken strings, card/strip mechanics, silent
-  events, repeats and recovery.
+- Love/Unlove toggled the heart. Widget overflow opened with Cancel, Pause,
+  Edit, Block, Stop and Settings; Pause/Resume and Stop changed the widget and
+  state bar as prescribed.
+- Capture crossed the threshold and added history and pending delivery rows;
+  Cancel/Undo restored the session; Block removed now playing and prevented
+  the next history row.
+- Export success wrote the versioned file and raised the Exported HUD;
+  cancellation was silent; the immutable-target write showed the native alert.
+- History rows expose a delivery value and the separate
+  `Actions for Heart of Glass` menu.
+- HUD tests assert the exact spoken strings, mechanics, silence and recovery.
 
 ## Explicit completion blockers
 
-These are unpassed requirements, not passes:
-
-- Actual VoiceOver speech was not run. The OS accessibility setting was not
-  changed under the outside-repository boundary; the AX tree and keyboard
-  interaction were inspected instead.
-- Full keyboard traversal of the root and nested Settings links was not
-  confirmed under the harness focus policy; the page-link route itself was
-  exercised with the public opener environment.
-- No live Last.fm, Libre.fm or ListenBrainz smoke was run: no dedicated test
-  account credentials are provisioned. All service proof is fixture- or
-  fake-adapter-backed.
-- Droppy Playground loading was not performed: installing the bundle writes
-  outside the repository and was not authorized.
+- Actual VoiceOver speech was not run; the AX tree and keyboard sequence were
+  inspected instead.
+- Nested Settings control keyboard traversal remains unpassed because Full
+  Keyboard Access is off (`AppleKeyboardUIMode` unset/0) and changing the OS
+  setting is outside the authorized boundary.
+- No live Last.fm, Libre.fm or ListenBrainz smoke: no dedicated credentials.
+- Droppy Playground loading was not performed under the outside-repository
+  boundary.
 
 ## Notes
 
@@ -154,5 +121,4 @@ These are unpassed requirements, not passes:
   1.19.0 matches the build report.
 - The CI workflow remains one pinned `macos-26` test workflow on push and pull
   request to `main`.
-- The VoiceOver checklist is outside the submitted package at
-  `docs/accessibility/voiceover-checklist.md`.
+- `docs/accessibility/voiceover-checklist.md` is outside the submitted package.
