@@ -1,10 +1,32 @@
 import DroppyKit
+import Foundation
 import SwiftUI
 import TracklogCore
 
 /// The same count wording in the page header and in every day header.
 func listenCountText(_ count: Int) -> String {
     "\(count.formatted()) \(count == 1 ? "listen" : "listens")"
+}
+
+/// Whether the surfaces should draw their increased-contrast separators. The
+/// harness override exists because the runtime checks cannot change a system
+/// accessibility setting; production only reads the environment value.
+enum SurfaceContrast {
+    static func isIncreased(_ contrast: ColorSchemeContrast) -> Bool {
+        contrast == .increased
+            || ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CONTRAST"] == "increased"
+    }
+}
+
+/// A separator that appears only for people who ask for more contrast. It
+/// strengthens the line between rows instead of changing the fill behind them.
+struct SurfaceSeparator: View {
+    var body: some View {
+        Rectangle()
+            .fill(AdaptiveColors.contrastTintAuto.opacity(0.32))
+            .frame(height: 1)
+            .accessibilityHidden(true)
+    }
 }
 
 // MARK: - Day header
@@ -16,11 +38,11 @@ struct HistoryDayHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.md) {
             Text(day.date.formatted(.dateTime.weekday(.wide).day().month(.wide).year()))
-                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .semibold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             Spacer(minLength: DroppySpacing.md)
             Text(listenCountText(count))
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .monospacedDigit()
         }
@@ -44,6 +66,7 @@ struct HistoryRow: View {
     let feedbackSupport: FeedbackSupport
 
     @State private var isHovering = false
+    @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
         HStack(spacing: 0) {
@@ -55,18 +78,18 @@ struct HistoryRow: View {
                 )
                 VStack(alignment: .leading, spacing: 1) {
                     Text(listen.processed.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                         .lineLimit(1)
                     if !listen.processed.artist.isEmpty {
                         Text(listen.processed.artist)
-                            .font(.system(size: 13))
+                            .font(.subheadline)
                             .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                             .lineLimit(1)
                     }
                     if !listen.processed.album.isEmpty {
                         Text(listen.processed.album)
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
                             .lineLimit(1)
                     }
@@ -74,11 +97,11 @@ struct HistoryRow: View {
                 Spacer(minLength: DroppySpacing.sm)
                 VStack(alignment: .trailing, spacing: DroppySpacing.xs) {
                     Text(listen.startedAt.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .monospacedDigit()
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     Image(systemName: deliveryGlyph)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(deliveryGlyphColor)
                         .accessibilityHidden(true)
                 }
@@ -94,6 +117,12 @@ struct HistoryRow: View {
         .frame(height: 68)
         .contentShape(Rectangle())
         .background(isHovering ? AdaptiveColors.overlayAuto(0.05) : .clear)
+        .overlay(alignment: .bottom) {
+            if SurfaceContrast.isIncreased(colorContrast) {
+                SurfaceSeparator()
+                    .padding(.horizontal, DroppySpacing.xl)
+            }
+        }
         .onHover { isHovering = $0 }
         .contextMenu { rowMenuItems }
     }
@@ -133,7 +162,7 @@ struct HistoryRow: View {
             rowMenuItems
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .droppyGlassControlChrome(shape: AnyShape(Circle()), isHovering: isHovering)
@@ -141,7 +170,7 @@ struct HistoryRow: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .opacity(isHovering ? 1 : 0)
+        .opacity(isHovering ? 1 : 0.01)
         .allowsHitTesting(isHovering)
         .accessibilityLabel("Actions for \(listen.processed.title)")
     }
@@ -224,29 +253,31 @@ struct NowPlayingStrip: View {
                 info
                 Spacer(minLength: DroppySpacing.md)
                 controls
+                overflowMenu
             }
             progressLine
         }
         .padding(.horizontal, DroppySpacing.xl)
         .frame(height: 76, alignment: .bottom)
+        .onAppear { TracklogMotion.logReducedPathOnce() }
     }
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.xs) {
                 Text(sample.track.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .lineLimit(1)
                 if !sample.track.artist.isEmpty {
                     Text("— \(sample.track.artist)")
-                        .font(.system(size: 13))
+                        .font(.subheadline)
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                         .lineLimit(1)
                 }
             }
             Text(elapsedText)
-                .font(.system(size: 11, weight: .medium))
+                .font(.caption.weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
         }
@@ -261,7 +292,7 @@ struct NowPlayingStrip: View {
             ListenControls(
                 droplet: droplet,
                 status: status,
-                transition: DroppyTransition.compactContent,
+                transition: TracklogMotion.compactContent,
             )
         }
     }
@@ -271,13 +302,38 @@ struct NowPlayingStrip: View {
             droplet.toggleLoveForCurrentTrack()
         } label: {
             Image(systemName: isLoved ? "heart.fill" : "heart")
+                .frame(width: 24, height: 24)
         }
         .buttonStyle(DroppyCircleButtonStyle(size: 24))
         .disabled(!canLove)
         .help(loveHelp)
         .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
-        .accessibilityHint(loveHint)
-        .transition(DroppyTransition.compactContent)
+        .accessibilityValue(Text(isLoved ? "Loved" : "Not loved"))
+        .accessibilityHint(Text(loveHint))
+        .accessibilityAddTraits(isLoved ? .isSelected : [])
+        .transition(TracklogMotion.compactContent)
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            TracklogMenuItems(
+                droplet: droplet,
+                status: status,
+                scrobblingEnabled: droplet.state.scrobblingEnabled,
+                pausedUntil: droplet.state.pausedUntil,
+                hasTrack: true,
+                includesListenControls: false,
+            )
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.bold))
+                .frame(width: 24, height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More")
+        .accessibilityLabel(Text("More"))
     }
 
     private var loveHelp: String {

@@ -27,12 +27,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The one observable state every surface reads.
     public let state = TracklogAppState()
 
-    private(set) var host: DropletHost?
-    private(set) var runtime: CaptureRuntime?
+    var host: DropletHost?
+    var runtime: CaptureRuntime?
     /// The Last.fm browser link's page model. It lives here, not in the view,
     /// because Droppy rebuilds the page view each time it opens and the pending
     /// token must survive that.
-    private(set) var lastFMLink: LastFMLinkModel?
+    var lastFMLink: LastFMLinkModel?
     /// The browser re-auth in flight, bound to the connection page that
     /// started it. The model survives a page rebuild while that page stays
     /// open, the same way a first link does.
@@ -60,8 +60,14 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// It holds no pair itself, only the credential store it reads.
     var lastFMAppCredentialsProvider: StoredLastFMAppCredentials?
     var automationGate: HostAutomationPermissionGate?
-    private var networkReachability: NetworkReachability?
-    private var activationTask: Task<Void, Never>?
+    var networkReachability: NetworkReachability?
+    var activationTask: Task<Void, Never>?
+    /// The export is owned by this activation. A deactivation cancels it and
+    /// closes any save panel it opened.
+    var exportTask: Task<Void, Never>?
+    var exportOperationID: UUID?
+    var exportPanel: NSSavePanel?
+    var exportAlert: NSAlert?
 
     public func activate(host: DropletHost) throws {
         self.host = host
@@ -96,6 +102,11 @@ public final class TracklogDroplet: NSObject, Droplet {
             )
         }
         self.runtime = runtime
+        if isHarness {
+            state.setHarnessSettingsPage(
+                ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"],
+            )
+        }
         if let transport, let lastFMAppCredentialsProvider {
             lastFMLink = makeLastFMLink(
                 transport: transport,
@@ -131,29 +142,6 @@ public final class TracklogDroplet: NSObject, Droplet {
             }
         }
         host.log.info("Tracklog activated")
-    }
-
-    public func deactivate() {
-        activationTask?.cancel()
-        activationTask = nil
-        lastFMLink?.cancel()
-        lastFMLink = nil
-        reauthLink?.model.cancel()
-        reauthLink = nil
-        state.setReauthConnection(nil)
-        serviceTransport = nil
-        libreFMLink?.model.cancel()
-        libreFMLink = nil
-        libreFMAdapter = nil
-        lastFMAppCredentialsProvider = nil
-        networkReachability?.stop()
-        networkReachability = nil
-        runtime?.stop()
-        runtime = nil
-        hudSession?.deactivate()
-        hudSession = nil
-        automationGate = nil
-        host = nil
     }
 
     // MARK: - Scrobbling
@@ -220,7 +208,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     func editCurrentListen() {
         guard let runtime, let match = runtime.editMatchForCurrentListen() else { return }
         state.requestEditPrefill(match)
-        guard host?.workspace.openSettingsPage(tracklogEditsPageID, title: "Edits") == true else {
+        guard openSettingsPage(tracklogEditsPageID, title: "Edits") else {
             // Discard the request so a refused open does not surface a draft
             // the next time the user visits Edits by hand.
             _ = state.takeEditPrefill()
@@ -248,7 +236,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         return bundleID
     }
 
-    private func displayName(for bundleID: String) -> String? {
+    func displayName(for bundleID: String) -> String? {
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
            let name = app.localizedName, !name.isEmpty {
             return name
@@ -268,7 +256,18 @@ public final class TracklogDroplet: NSObject, Droplet {
     // MARK: - Presentation
 
     public func openSettings() {
+        dismissTakeoverForSettings()
         host?.workspace.openSettings()
+    }
+
+    /// Opens one of the droplet's own Settings pages. Any History takeover is
+    /// dismissed first: Settings is the only typed surface, and it must not
+    /// sit underneath the takeover.
+    @discardableResult
+    func openSettingsPage(_ id: String, title: String) -> Bool {
+        dismissTakeoverForSettings()
+        guard let host else { return false }
+        return host.workspace.openSettingsPage(id, title: title)
     }
 
     public func presentHistory(expandingPending: Bool = false) {
@@ -345,50 +344,4 @@ public final class TracklogDroplet: NSObject, Droplet {
         guard let runtime else { throw DatabaseError.unavailable("Tracklog is not active") }
         try await runtime.deleteBlock(id: id)
     }
-
-    /// The player's display name, for the widget's status line.
-    public var sourceName: String? {
-        guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
-        return displayName(for: bundleID)
-    }
-}
-
-// MARK: - Shelf widget
-
-extension TracklogDroplet: ShelfWidgetProviding {
-    public var widgetDescriptors: [ShelfWidgetDescriptor] {
-        [
-            ShelfWidgetDescriptor(
-                id: "tracklog",
-                title: "Tracklog",
-                systemImage: "waveform",
-                layoutTraits: ShelfWidgetLayoutTraits(
-                    preferredSoloWidth: 420,
-                    preferredPairedWidth: 210,
-                    contentHeight: .fixed(150),
-                ),
-            ),
-        ]
-    }
-
-    public func makeWidgetView(_: ShelfWidgetID, context: ShelfWidgetContext) -> AnyView {
-        AnyView(TracklogWidget(droplet: self, state: state, context: context))
-    }
-
-    public func makeWidgetSettingsPopover(_: ShelfWidgetID) -> AnyView? {
-        nil
-    }
-}
-
-/// A Libre.fm browser link in flight. The root and its page model travel
-/// together, so a model can never outlive the server it was started against.
-struct TracklogLibreFMLink {
-    let endpoint: ServiceEndpoint
-    let model: LastFMLinkModel
-}
-
-/// A browser re-auth in flight on one connection's page.
-struct TracklogReauthLink {
-    let connectionID: Int64
-    let model: LastFMLinkModel
 }

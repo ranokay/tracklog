@@ -60,7 +60,13 @@ public struct MediaSample: Equatable, Sendable {
     /// `1` while playing normally; `0` while paused.
     public let playbackRate: Double
     public let isPlaying: Bool
+    /// The timestamp the media source reported. For a helper snapshot this is
+    /// the track's start, not the poll time.
     public let timestamp: Date
+    /// When Tracklog observed this sample. Played time is measured from this
+    /// clock, so a helper that repeats its start timestamp cannot freeze the
+    /// engine's progress.
+    public let observedAt: Date
 
     public init(
         track: Track,
@@ -68,12 +74,14 @@ public struct MediaSample: Equatable, Sendable {
         playbackRate: Double,
         isPlaying: Bool,
         timestamp: Date = Date(),
+        observedAt: Date? = nil,
     ) {
         self.track = track
         self.elapsed = elapsed
         self.playbackRate = playbackRate
         self.isPlaying = isPlaying
         self.timestamp = timestamp
+        self.observedAt = observedAt ?? timestamp
     }
 
     func replacingMetadata(_ metadata: ListenMetadata) -> MediaSample {
@@ -83,6 +91,7 @@ public struct MediaSample: Equatable, Sendable {
             playbackRate: playbackRate,
             isPlaying: isPlaying,
             timestamp: timestamp,
+            observedAt: observedAt,
         )
     }
 }

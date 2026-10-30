@@ -204,13 +204,20 @@ public enum MediaHelperPayload {
         let album = payload["album"] as? String ?? ""
         let albumArtist = payload["albumArtist"] as? String ?? ""
         let duration = payload["duration"] as? Double ?? 0
-        let elapsed = payload["elapsedTime"] as? Double ?? 0
+        let payloadElapsed = payload["elapsedTime"] as? Double ?? 0
         let playbackRate = payload["playbackRate"] as? Double ?? 0
         let playing = payload["playing"] as? Bool ?? (playbackRate > 0)
         let bundleID = payload["parentApplicationBundleIdentifier"] as? String
             ?? payload["bundleIdentifier"] as? String
             ?? ""
-        let timestamp = timestamp(from: payload["timestamp"] as? String) ?? Date()
+        let observedAt = Date()
+        let timestamp = timestamp(from: payload["timestamp"] as? String) ?? observedAt
+        // The helper's get --now reports the track start and can keep
+        // elapsedTime at zero. Derive the position from the observation clock
+        // so polling advances played time; the reported timestamp still
+        // reconstructs the start.
+        let elapsedFromStart = playing ? max(0, observedAt.timeIntervalSince(timestamp)) : 0
+        let elapsed = max(payloadElapsed, elapsedFromStart)
         let artwork = (payload["artworkData"] as? String)
             .flatMap { Data(base64Encoded: $0) }
             .flatMap { $0.isEmpty ? nil : $0 }
@@ -229,6 +236,7 @@ public enum MediaHelperPayload {
                 playbackRate: playbackRate,
                 isPlaying: playing,
                 timestamp: timestamp,
+                observedAt: observedAt,
             ),
             artwork: artwork,
         )

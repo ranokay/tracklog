@@ -28,61 +28,20 @@ echo "==> droplet validation"
 
 echo "==> surface shots"
 mkdir -p tracklog/shots
+rm -rf tracklog/shots/playing tracklog/shots/paused tracklog/shots/off tracklog/shots/feed-unavailable
 rm -f tracklog/shots/report.json tracklog/shots/*.png
-(cd tracklog && droppykit run -- --shots ./shots --report ./shots/report.json)
 
-python3 - "$ROOT/tracklog/shots/report.json" <<'PY'
-import json
-import os
-import sys
+# The main report keeps the documented path and the playing state. Each extra
+# state is a separate clean harness run; every report is checked, not only the
+# first.
+(cd tracklog && TRACKLOG_DEMO_STATE=playing droppykit run -- --shots ./shots --report ./shots/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/report.json tracklog/shots
 
-report_path = sys.argv[1]
-shot_dir = os.path.dirname(report_path)
-
-with open(report_path) as handle:
-    report = json.load(handle)
-
-problems = report.get("problems", [])
-if problems:
-    sys.exit("shots reported problems:\n  " + "\n  ".join(problems))
-if report.get("verdict") != "ok":
-    sys.exit(f"shots verdict is {report.get('verdict')!r}, not 'ok'")
-
-activation = report.get("activation") or {}
-if not activation.get("active"):
-    sys.exit("the droplet did not activate")
-if activation.get("error"):
-    sys.exit(f"activation failed: {activation['error']}")
-
-manifest = report.get("manifest") or {}
-if not manifest.get("loaded"):
-    sys.exit(f"the manifest did not load: {manifest.get('problem')}")
-
-pages = {
-    "shelf-widget": "shelf-widget.png",
-    "live-activity": "live-activity.png",
-    "expanded-surface": "expanded-surface.png",
-    "settings-pane": "settings-pane.png",
-    "hud": "hud.png",
-    "lock-screen-status": "lock-screen.png",
-    "menu-bar-extra": "menu-bar.png",
-}
-surfaces = (report.get("droplet") or {}).get("surfaces") or []
-if not surfaces:
-    sys.exit("the manifest declares no surfaces")
-
-missing = []
-for surface in surfaces:
-    page = pages.get(surface)
-    if page is None:
-        missing.append(f"{surface}: no known shot page")
-    elif not os.path.exists(os.path.join(shot_dir, page)) or not os.path.getsize(os.path.join(shot_dir, page)):
-        missing.append(f"{surface}: {page} is missing or empty")
-if missing:
-    sys.exit("declared surfaces were not rendered:\n  " + "\n  ".join(missing))
-
-print(f"gate: {len(surfaces)} surface(s) rendered, no problems")
-PY
+for state in paused off feed-unavailable; do
+    echo "==> surface shots: $state"
+    (cd tracklog && TRACKLOG_DEMO_STATE="$state" droppykit run -- --shots "./shots/$state" --report "./shots/$state/report.json" --shot-height 1900)
+    python3 scripts/check_shot_report.py "tracklog/shots/$state/report.json" "tracklog/shots/$state"
+done
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

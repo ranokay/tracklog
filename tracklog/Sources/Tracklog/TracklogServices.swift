@@ -8,7 +8,7 @@ let tracklogServicesPageID = "services"
 let tracklogAddServicePageID = "add-service"
 let tracklogLastFMLinkPageID = "lastfm-link"
 let tracklogLibreFMLinkPageID = "librefm-link"
-let tracklogLastFMAppCredentialsPageID = "lastfm-app-credentials"
+let tracklogLastFMAppCredentialsPageID = "lastfm-credentials"
 
 private let tracklogConnectionPagePrefix = "connection-"
 
@@ -68,11 +68,10 @@ struct TracklogServicesPage: View {
                         }
                     }
 
-                    DropletSettingsPageLink(
-                        "Add service",
-                        subtitle: "Connect Last.fm, Libre.fm or ListenBrainz.",
-                        page: tracklogAddServicePageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Add service",
+                                             subtitle: "Connect Last.fm, Libre.fm or ListenBrainz.",
+                                             page: tracklogAddServicePageID) {
                         SettingsLinkTile(systemImage: "plus")
                     }
                 }
@@ -97,15 +96,14 @@ struct TracklogServicesPage: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    DropletSettingsPageLink(
-                        state.lastFMOverridePresent
-                            ? "Last.fm app credentials"
-                            : "Set up Last.fm app credentials",
-                        subtitle: state.lastFMOverridePresent
-                            ? "Stored in the Keychain and used instead of the built-in pair."
-                            : "Add your own API key and shared secret.",
-                        page: tracklogLastFMAppCredentialsPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             state.lastFMOverridePresent
+                                                 ? "Last.fm app credentials"
+                                                 : "Set up Last.fm app credentials",
+                                             subtitle: state.lastFMOverridePresent
+                                                 ? "Stored in the Keychain and used instead of the built-in pair."
+                                                 : "Add your own API key and shared secret.",
+                                             page: tracklogLastFMAppCredentialsPageID) {
                         SettingsLinkTile(systemImage: "key")
                     }
                 }

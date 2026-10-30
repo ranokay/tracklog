@@ -1,0 +1,86 @@
+{
+  "apps" : [
+    {
+      "allowed" : true,
+      "bundle_id" : "com.apple.Music"
+    },
+    {
+      "allowed" : true,
+      "bundle_id" : "com.spotify.client"
+    },
+    {
+      "allowed" : false,
+      "bundle_id" : "com.apple.podcasts"
+    }
+  ],
+  "blocks" : [
+    {
+      "album" : "",
+      "album_artist" : "",
+      "artist" : "The Daily",
+      "track" : ""
+    },
+    {
+      "album" : "",
+      "album_artist" : "",
+      "artist" : "",
+      "track" : "Baby Shark"
+    },
+    {
+      "album" : "Sleep Sounds",
+      "album_artist" : "",
+      "artist" : "",
+      "track" : ""
+    }
+  ],
+  "settings" : {
+    "minimum_duration" : 30,
+    "now_playing_enabled" : true,
+    "scrobbling_enabled" : true
+  },
+  "simple_edits" : [
+    {
+      "match" : {
+        "album" : null,
+        "album_artist" : null,
+        "artist" : "Blondie",
+        "track" : "Heart of Glass"
+      },
+      "replacement" : {
+        "album" : "Parallel Lines",
+        "album_artist" : null,
+        "artist" : null,
+        "track" : null
+      }
+    },
+    {
+      "match" : {
+        "album" : "Rumours",
+        "album_artist" : null,
+        "artist" : null,
+        "track" : null
+      },
+      "replacement" : {
+        "album" : "",
+        "album_artist" : null,
+        "artist" : null,
+        "track" : null
+      }
+    },
+    {
+      "match" : {
+        "album" : null,
+        "album_artist" : null,
+        "artist" : "Talking Heads",
+        "track" : null
+      },
+      "replacement" : {
+        "album" : "Remain in Light (Deluxe)",
+        "album_artist" : null,
+        "artist" : null,
+        "track" : null
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -120,6 +120,9 @@ public final class TracklogAppState: ObservableObject {
     /// Whether the pending list is open beneath the banner. The queue badge
     /// opens History with this already set.
     @Published public internal(set) var pendingListExpanded = false
+    /// The nested Settings page the harness is previewing. Production never
+    /// sets this; the host's own page opener drives nested pages there.
+    @Published public internal(set) var harnessSettingsPage: String?
 
     public var pendingCount: Int {
         pendingQueue.count
@@ -162,6 +165,10 @@ public final class TracklogAppState: ObservableObject {
 
     public func setReauthConnection(_ id: Int64?) {
         reauthConnectionID = id
+    }
+
+    public func setHarnessSettingsPage(_ id: String?) {
+        harnessSettingsPage = id
     }
 
     public func togglePendingList() {

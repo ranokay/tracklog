@@ -2,12 +2,15 @@ import DroppyKit
 import SwiftUI
 import TracklogCore
 
-/// The Apps page id, shared by the root page's link and the host's page
-/// request. Stable interface value; never rename it.
+/// Stable interface values. The root is a page id as well as the pane the host
+/// mounts, and every nested page keeps its id across releases.
+let tracklogRootPageID = "scrobbling"
 let tracklogAppsPageID = "apps"
+let tracklogDataPageID = "data"
+let tracklogAboutPageID = "about"
 
 /// The droplet's root Settings page. Droppy draws the page header, so this
-/// starts with the first setting.
+/// starts with the first setting and never repeats the droplet's name.
 struct TracklogSettings: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -23,6 +26,7 @@ struct TracklogSettings: View {
                     subtitle: "Reads the system now-playing feed and saves what you listen to on this Mac.",
                     isOn: droplet.scrobblingBinding,
                 )
+                .id(tracklogRootPageID)
             }
 
             DropletSettingsSection {
@@ -49,122 +53,57 @@ struct TracklogSettings: View {
                 settingsSectionHeader("Players")
             } content: {
                 DropletSettingsCard {
-                    DropletSettingsPageLink(
-                        "Apps",
-                        subtitle: "Choose which players can scrobble.",
-                        page: tracklogAppsPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Apps",
+                                             subtitle: "Choose which players can scrobble.",
+                                             page: tracklogAppsPageID) {
                         SettingsLinkTile(systemImage: "app.badge.checkmark")
                     }
+                    .id(tracklogAppsPageID)
                 }
             }
 
             DropletSettingsSection {
-                settingsSectionHeader("Metadata")
+                settingsSectionHeader("Settings")
             } content: {
                 DropletSettingsCard {
-                    DropletSettingsPageLink(
-                        "Edits",
-                        subtitle: "Fix recurring titles, artists and albums.",
-                        page: tracklogEditsPageID,
-                    ) {
-                        SettingsLinkTile(systemImage: "text.badge.checkmark")
-                    }
-                    DropletSettingsPageLink(
-                        "Blocks",
-                        subtitle: "Stop a track, artist, album or album artist from being saved.",
-                        page: tracklogBlocksPageID,
-                    ) {
-                        SettingsLinkTile(systemImage: "hand.raised")
-                    }
-                }
-            }
-
-            if let failure = state.failure {
-                DropletSettingsSection {
-                    settingsSectionHeader("Storage")
-                } content: {
-                    DropletSettingsCard {
-                        DropletControlRow(title: failure.message) {
-                            DropletValuePill(text: failureLabel(for: failure))
-                        }
-                        DropletStackedRow(title: "Diagnostics") {
-                            Text(failure.diagnostics)
-                                .font(.system(size: 11))
-                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
-
-            mediaSection
-
-            DropletSettingsSection {
-                settingsSectionHeader("Status")
-            } content: {
-                DropletSettingsCard {
-                    DropletControlRow(title: "Media feed") {
-                        DropletValuePill(text: state.feedAvailable ? "Available" : "Unavailable")
-                    }
-                    DropletControlRow(title: "Now playing") {
-                        DropletValuePill(text: state.nowPlaying?.track.title ?? "Nothing")
-                    }
-                    DropletControlRow(title: "Listens this session") {
-                        DropletValuePill(text: "\(state.listenCount)")
-                    }
-                    DropletControlRow(title: "Last listen") {
-                        DropletValuePill(text: state.lastListen?.processed.title ?? "None")
-                    }
-                }
-            }
-
-            DropletSettingsSection {
-                settingsSectionHeader("History")
-            } content: {
-                DropletSettingsCard {
-                    if state.historyFailure != nil {
-                        DropletControlRow(title: "History unavailable") {
-                            Text("History could not be loaded from this Mac.")
-                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                        }
-                    } else if state.listens.isEmpty {
-                        DropletControlRow(title: "Nothing played yet") {
-                            Text("Play something to start your history.")
-                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                        }
-                    } else {
-                        ForEach(state.listens) { listen in
-                            DropletControlRow(title: listen.processed.title) {
-                                Text(listen.processed.artist)
-                                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                }
-            }
-
-            DropletSettingsSection {
-                settingsSectionHeader("Services")
-            } content: {
-                DropletSettingsCard {
-                    DropletSettingsPageLink(
-                        "Services",
-                        subtitle: state.connections.isEmpty
-                            ? "Connect Last.fm, Libre.fm or ListenBrainz."
-                            : "\(state.connections.count) connected. Choose the current account.",
-                        page: tracklogServicesPageID,
-                    ) {
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Services",
+                                             subtitle: state.connections.isEmpty
+                                                 ? "Connect Last.fm, Libre.fm or ListenBrainz."
+                                                 : "\(state.connections.count) connected. Choose the current account.",
+                                             page: tracklogServicesPageID) {
                         SettingsLinkTile(systemImage: "link")
                     }
-                }
-            }
-
-            DropletSettingsCard {
-                DropletControlRow(title: "Queue") {
-                    DropletValuePill(text: "Local")
+                    .id(tracklogServicesPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Edits",
+                                             subtitle: "Fix recurring titles, artists and albums.",
+                                             page: tracklogEditsPageID) {
+                        SettingsLinkTile(systemImage: "text.badge.checkmark")
+                    }
+                    .id(tracklogEditsPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Blocks",
+                                             subtitle: "Stop a track, artist, album or album artist from being saved.",
+                                             page: tracklogBlocksPageID) {
+                        SettingsLinkTile(systemImage: "hand.raised")
+                    }
+                    .id(tracklogBlocksPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Data",
+                                             subtitle: "Media diagnostics and your portable settings export.",
+                                             page: tracklogDataPageID) {
+                        SettingsLinkTile(systemImage: "externaldrive")
+                    }
+                    .id(tracklogDataPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "About",
+                                             subtitle: "Version, licence and credits.",
+                                             page: tracklogAboutPageID) {
+                        SettingsLinkTile(systemImage: "info.circle")
+                    }
+                    .id(tracklogAboutPageID)
                 }
             }
         }
@@ -258,20 +197,6 @@ struct TracklogSettings: View {
             until.formatted(date: .abbreviated, time: .shortened)
         }
     }
-
-    // MARK: - Failure
-
-    private func failureLabel(for failure: CaptureFailure) -> String {
-        switch failure.stage {
-        case .database: "Unavailable"
-        case .storage: "Write failed"
-        case .history: "Read failed"
-        case .edits: "Read failed"
-        case .blocks: "Read failed"
-        case .connections: "Unavailable"
-        case .feedback: "Read failed"
-        }
-    }
 }
 
 private enum PauseChoice: Hashable {
@@ -326,61 +251,5 @@ struct TracklogAppsPage: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Media
-
-private extension TracklogSettings {
-    var mediaSection: some View {
-        DropletSettingsSection {
-            settingsSectionHeader("Media")
-        } content: {
-            DropletSettingsCard {
-                DropletControlRow(title: "Source") {
-                    DropletValuePill(text: state.mediaStatus.source.displayName)
-                }
-                DropletStackedRow(title: "Media helper") {
-                    Text(state.mediaStatus.helperHealth.summary)
-                        .font(.system(size: 11))
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if state.mediaStatus.automation == .denied {
-                    DropletControlRow(title: "Automation") {
-                        HStack(spacing: DroppySpacing.sm) {
-                            DropletValuePill(text: "Denied")
-                            Button("Open System Settings") {
-                                droplet.openAutomationSettings()
-                            }
-                            .buttonStyle(DroppyQuietButtonStyle(size: .small))
-                        }
-                    }
-                }
-                DropletControlRow(title: "Diagnostics") {
-                    Button("Copy diagnostics") {
-                        droplet.copyMediaDiagnostics()
-                    }
-                    .buttonStyle(DroppyAccentButtonStyle(size: .small))
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Link tile
-
-struct SettingsLinkTile: View {
-    let systemImage: String
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: DroppyRadius.small, style: .continuous)
-                    .fill(AdaptiveColors.overlayAuto(0.08)),
-            )
     }
 }

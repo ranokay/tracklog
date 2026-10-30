@@ -106,6 +106,27 @@ struct MediaHelperPayloadTests {
         #expect(MediaHelperPayload.decode(whole)?.timestamp == Date(timeIntervalSince1970: 1_000_000))
     }
 
+    @Test func aStaleHelperTimestampStillAdvancesPlayedTime() throws {
+        let started = Date().addingTimeInterval(-12)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let payload = try data(["payload": [
+            "title": "Song",
+            "duration": 200.0,
+            "elapsedTime": 0.0,
+            "playbackRate": 1.0,
+            "playing": true,
+            "timestamp": formatter.string(from: started),
+        ]])
+
+        let sample = try #require(MediaHelperPayload.decode(payload))
+
+        #expect(abs(sample.timestamp.timeIntervalSince(started)) < 0.1)
+        #expect(abs(sample.observedAt.timeIntervalSinceNow) < 1)
+        #expect(sample.elapsed > 10)
+        #expect(sample.elapsed < 15)
+    }
+
     @Test func malformedTimestampFallsBackToNow() {
         let payload = Data(#"{"payload":{"title":"Song","timestamp":"not a date"}}"#.utf8)
 

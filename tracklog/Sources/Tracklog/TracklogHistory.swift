@@ -79,21 +79,14 @@ private struct TracklogHistory: View {
                 PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
             }
             content
-            if state.scrobblingEnabled, let sample = state.nowPlaying {
-                NowPlayingStrip(
-                    droplet: droplet,
-                    sample: sample,
-                    status: state.status,
-                    isLoved: state.nowPlayingIsLoved,
-                    canLove: state.feedbackSupport.canLove,
-                )
-            }
+            bottomBar
         }
         .frame(
             width: context.availableSize.width,
             height: context.availableSize.height,
             alignment: .topLeading,
         )
+        .animation(TracklogMotion.stateAnimation, value: bottomBarKey)
         .task { await droplet.reloadHistory() }
         .onDisappear { state.setPendingListExpanded(false) }
     }
@@ -103,17 +96,67 @@ private struct TracklogHistory: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.md) {
             Text("History")
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .font(.system(.title, design: .rounded, weight: .semibold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             Spacer(minLength: DroppySpacing.md)
             Text(listenCountText(totalCount))
-                .font(.system(size: 13, weight: .medium))
+                .font(.callout.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .monospacedDigit()
         }
         .padding(.horizontal, DroppySpacing.xl)
         .padding(.top, DroppySpacing.lg)
         .padding(.bottom, DroppySpacing.sm)
+    }
+
+    /// Paused and off turn the pinned strip into a state bar, so recovery is
+    /// in the same place whether or not a track is playing.
+    @ViewBuilder private var bottomBar: some View {
+        if !state.scrobblingEnabled {
+            if state.connections.isEmpty {
+                HistoryStateBar(
+                    droplet: droplet,
+                    text: "Scrobbling is off",
+                    actionTitle: "Connect a service",
+                    action: { droplet.openServicesPage() },
+                )
+            } else {
+                HistoryStateBar(
+                    droplet: droplet,
+                    text: "Scrobbling is off",
+                    actionTitle: "Turn on",
+                    action: { droplet.setScrobblingEnabled(true) },
+                )
+            }
+        } else if let until = state.pausedUntil {
+            HistoryStateBar(
+                droplet: droplet,
+                text: "Scrobbling paused until \(until.formatted(date: .omitted, time: .shortened))",
+                actionTitle: "Resume",
+                action: { droplet.resumeCapture() },
+            )
+        } else if let sample = state.nowPlaying {
+            NowPlayingStrip(
+                droplet: droplet,
+                sample: sample,
+                status: state.status,
+                isLoved: state.nowPlayingIsLoved,
+                canLove: state.feedbackSupport.canLove,
+            )
+        }
+    }
+
+    private var bottomBarKey: String {
+        if !state.scrobblingEnabled {
+            return state.connections.isEmpty ? "off.connect" : "off.connections"
+        }
+        if let until = state.pausedUntil {
+            return "paused.\(until.timeIntervalSince1970)"
+        }
+        if let sample = state.nowPlaying {
+            return "track.\(sample.track.identity)"
+        }
+        return "none"
     }
 
     private var totalCount: Int {
@@ -142,10 +185,10 @@ private struct TracklogHistory: View {
     private var empty: some View {
         VStack(spacing: DroppySpacing.xsm) {
             Text("Nothing played yet")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             Text("Play something to start your history.")
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
         }
         .multilineTextAlignment(.center)
@@ -155,10 +198,10 @@ private struct TracklogHistory: View {
     private func unavailable(_ failure: CaptureFailure) -> some View {
         VStack(spacing: DroppySpacing.xsm) {
             Text("History unavailable")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             Text(failure.message)
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
         }
         .multilineTextAlignment(.center)
@@ -185,7 +228,7 @@ private struct TracklogHistory: View {
                             }
                     } else if state.historyFailure != nil, !state.listens.isEmpty {
                         Text("Older history could not be loaded.")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, DroppySpacing.md)
