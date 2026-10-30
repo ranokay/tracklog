@@ -11,8 +11,13 @@ public extension TracklogDroplet {
         exportPanel = nil
         if let alert = exportAlert {
             exportAlert = nil
+            let ownsCurrentModal = NSApp.modalWindow === alert.window
             alert.window.close()
-            NSApp.abortModal()
+            if ownsCurrentModal {
+                // Only end the modal loop when it is our alert's. A host
+                // dialog nested above it must keep its own modal session.
+                NSApp.abortModal()
+            }
         }
         activationTask?.cancel()
         activationTask = nil
