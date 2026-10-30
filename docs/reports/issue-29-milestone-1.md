@@ -128,8 +128,8 @@ loaded in Droppy Playground (Store row switched on). The song was BABYMONSTER â€
   unscrobble API method.
 - ListenBrainz accepted the listen (`listened_at` 1793361105, `recording_msid`
   `b797f653-fcaa-44ad-bb5d-ff1830d9faef`); its queued delete was processed at
-  the top of the hour. The two extra listens Music played next were also
-  queued for deletion in the next hourly run.
+  the top of the hour. The two extra listens Music played next were deleted in
+  the following hourly run.
 - Libre.fm accepted the scrobble. Libre.fm (GNU FM) has no user-facing or API
   delete path; `LibreFMAdapter` already declares `supportsDelete: false`.
   The three test scrobbles (the smoke track plus the two tracks Music played
