@@ -118,7 +118,7 @@ struct TracklogAboutPage: View {
                 }
                 DropletControlRow(title: "Licence") {
                     Button("MIT") {
-                        droplet.openURL("https://opensource.org/license/mit")
+                        droplet.openURL("https://opensource.org/license/mit") // NOSONAR: public licence link
                     }
                     .buttonStyle(DroppyQuietButtonStyle(size: .small))
                 }
@@ -130,19 +130,19 @@ struct TracklogAboutPage: View {
                 DropletSettingsCard {
                     DropletControlRow(title: "Inspired by Pano Scrobbler") {
                         Button("Open") {
-                            droplet.openURL("https://github.com/kawaiiDango/pano-scrobbler")
+                            droplet.openURL("https://github.com/kawaiiDango/pano-scrobbler") // NOSONAR: public attribution link
                         }
                         .buttonStyle(DroppyQuietButtonStyle(size: .small))
                     }
                     DropletControlRow(title: "Built for Droppy with DroppyKit") {
                         Button("Open") {
-                            droplet.openURL("https://getdroppy.app")
+                            droplet.openURL("https://getdroppy.app") // NOSONAR: public attribution link
                         }
                         .buttonStyle(DroppyQuietButtonStyle(size: .small))
                     }
                     DropletControlRow(title: "Last.fm attribution") {
                         Button("Open Last.fm") {
-                            droplet.openURL("https://www.last.fm")
+                            droplet.openURL("https://www.last.fm") // NOSONAR: public attribution link
                         }
                         .buttonStyle(DroppyQuietButtonStyle(size: .small))
                     }
