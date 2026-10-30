@@ -1,10 +1,10 @@
 # Issue #29 milestone 1 — worker report
 
 - Base: `694b61eb1e8586e7add19a40aef933cfe997b7a6`
-- Implementation head: `e783eb2f408b00f7fd059080476a513328476c48`
+- Implementation head: `6d54d4e` (PR #69, draft)
 - Branch: `feat/milestone-1-droppy-surfaces`
-- State: implementation, evidence and this report are committed locally; the
-  tree is clean. No push, PR or merge.
+- State: pushed. The gate passes at this head; the live service smoke, Playground
+  load and the accessibility run are recorded below.
 
 ## Engine and package checks
 
@@ -26,6 +26,18 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
 | `droppykit validate` | 0 | `Ready to submit` |
 | four harness shot runs | 0 | every report `problems: []`, `verdict: ok` |
 | `python3 scripts/check_shot_report.py …` | 0 | four provided surfaces, both widget widths, every declared page present |
+
+### Final gate at `6d54d4e`
+
+`mise run gate` ran on the PR head and exited 0:
+
+| Command | Observed |
+| --- | --- |
+| `hk check --all` | SwiftFormat, SwiftLint and jactionlint clean |
+| `swift test --package-path Tests` | 510 tests in 87 suites passed |
+| `droppykit build` | universal droplet; newest API call 1.19.0 |
+| `droppykit validate` | ready to submit |
+| harness shots | every report `problems: []`, every declared surface provided |
 
 ## Round-2 findings
 
@@ -54,10 +66,9 @@ Run in this order by `mise run gate`, through the frozen receipt runner:
   forwards Return/Space to that opener. Runtime keyboard evidence:
   `Tab` once focused `AXButton "Apps"`; `Return` opened the Apps page.
   `Tab` twice focused `AXButton "Services"`; `Return` opened Services.
-  Nested-page switches did not enter the Tab chain: `Tab` stayed on the search
-  `AXTextField` on Apps. `defaults read NSGlobalDomain AppleKeyboardUIMode` is
-  unset (default 0, Full Keyboard Access off); changing it is outside the
-  authorization. This nested-control keyboard check remains unpassed.
+  Nested-page switches did not enter the Tab chain with Full Keyboard Access
+  off. The authorized rerun with `AppleKeyboardUIMode = 3` reached the nested
+  rows and controls; see the accessibility run below.
 - **F9 closed (as configured-path evidence)** — Reduce Motion selects the
   0.16 s opacity transition (`AccessibilityMotion.reducedCrossfade`) and the
   Core test asserts it is below 200 ms. The committed log records
@@ -85,9 +96,9 @@ Screenshots are in `docs/reports/issue-29/`:
 
 ## Runtime observations
 
-These were run in the harness against the in-memory demo store and offline
-adapters. They prove control-to-runtime behavior and visible state; they do
-not prove a real service accepted a scrobble.
+The first group was run in the harness against the in-memory demo store and
+offline adapters. The live smoke below was run against the built droplet in
+Droppy Playground with real service accounts.
 
 - Solo AX element: `Heart of Glass, Blondie` with value
   `1:18 of 3:45, scrobbles in 107 seconds, 2 waiting`; Love, Queue and More are
@@ -104,16 +115,60 @@ not prove a real service accepted a scrobble.
   `Actions for Heart of Glass` menu.
 - HUD tests assert the exact spoken strings, mechanics, silence and recovery.
 
+### Live service smoke
+
+Bundle: `.build/Tracklog.droplet` from `6d54d4e`, loaded in Droppy Playground
+(Store row switched on). The song was BABYMONSTER — “Woke Up In Tokyo (RUKA &
+ASA)”, 2:23, played from Music.
+
+- Capture stored one local listen with the track-start timestamp and delivered
+  it to all three connections.
+- Last.fm accepted the scrobble (recent tracks showed it at 11:51 UTC) and it
+  was deleted through the Last.fm library UI afterwards. Last.fm has no
+  unscrobble API method.
+- ListenBrainz accepted the listen (`listened_at` 1793361105, `recording_msid`
+  `b797f653-fcaa-44ad-bb5d-ff1830d9faef`); `POST /1/delete-listen` was queued
+  and processed at the top of the hour.
+- Libre.fm accepted the scrobble. Libre.fm (GNU FM) has no user-facing or API
+  delete path; `LibreFMAdapter` already declares `supportsDelete: false`.
+  The three test scrobbles (the smoke track plus the two tracks Music played
+  next) remain on the test account and cannot be removed by Tracklog.
+
+The run found a real defect: the helper's `get --now` repeats the track-start
+timestamp and can keep `elapsedTime` at zero, so the engine measured no played
+time and a short track never crossed its threshold. `MediaSample.observedAt`
+now carries the poll clock; the engine accumulates from it and the helper
+derives the position from it. Regression tests cover the payload and the
+engine.
+
+### Accessibility run
+
+- Full Keyboard Access was enabled (`AppleKeyboardUIMode = 3`) for the run and
+  restored to its prior unset state afterwards.
+- Tab traversal reached every control in the Tracklog settings pane:
+  scrobbling, Pause, Send now playing, Minimum length, Apps, Services, Edits,
+  Blocks, Data, About.
+- On the Services page, Tab reached the ListenBrainz, Last.fm and Libre.fm
+  connection rows, Add service and Set up Last.fm app credentials. Space
+  activated a connection row; the Last.fm detail page then exposed its
+  checkbox, Use for reading, Sign in with Last.fm and Unlink to Tab.
+- VoiceOver was enabled for the run and turned off afterwards. The VoiceOver
+  cursor moved through the Last.fm detail controls in order (checkbox, Use for
+  reading, Sign in with Last.fm, Unlink), so the labels and focus order are
+  reachable. The caption panel was not enabled: toggling it raised a system
+  authorization prompt, which was cancelled. Speech was therefore verified
+  through the VoiceOver cursor and AX labels, not captured as audio.
+
 ## Explicit completion blockers
 
-- Actual VoiceOver speech was not run; the AX tree and keyboard sequence were
-  inspected instead.
-- Nested Settings control keyboard traversal remains unpassed because Full
-  Keyboard Access is off (`AppleKeyboardUIMode` unset/0) and changing the OS
-  setting is outside the authorized boundary.
-- No live Last.fm, Libre.fm or ListenBrainz smoke: no dedicated credentials.
-- Droppy Playground loading was not performed under the outside-repository
-  boundary.
+- Actual VoiceOver speech was not captured as audio. The caption panel needs a
+  system authorization prompt; the run used the VoiceOver cursor and AX labels
+  instead.
+- Libre.fm cannot delete individual scrobbles. The three smoke scrobbles remain
+  on the test account; only Libre.fm support or account deletion can remove
+  them.
+- The Last.fm deletion is manual (no unscrobble API); it was done through the
+  library UI for this run.
 
 ## Notes
 
