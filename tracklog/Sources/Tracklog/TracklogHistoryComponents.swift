@@ -7,6 +7,17 @@ func listenCountText(_ count: Int) -> String {
     "\(count.formatted()) \(count == 1 ? "listen" : "listens")"
 }
 
+/// A separator that appears only for people who ask for more contrast. It
+/// strengthens the line between rows instead of changing the fill behind them.
+struct SurfaceSeparator: View {
+    var body: some View {
+        Rectangle()
+            .fill(AdaptiveColors.contrastTintAuto.opacity(0.32))
+            .frame(height: 1)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Day header
 
 struct HistoryDayHeader: View {
@@ -16,11 +27,11 @@ struct HistoryDayHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.md) {
             Text(day.date.formatted(.dateTime.weekday(.wide).day().month(.wide).year()))
-                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .semibold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
             Spacer(minLength: DroppySpacing.md)
             Text(listenCountText(count))
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .monospacedDigit()
         }
@@ -44,6 +55,7 @@ struct HistoryRow: View {
     let feedbackSupport: FeedbackSupport
 
     @State private var isHovering = false
+    @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
         HStack(spacing: 0) {
@@ -55,18 +67,18 @@ struct HistoryRow: View {
                 )
                 VStack(alignment: .leading, spacing: 1) {
                     Text(listen.processed.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                         .lineLimit(1)
                     if !listen.processed.artist.isEmpty {
                         Text(listen.processed.artist)
-                            .font(.system(size: 13))
+                            .font(.subheadline)
                             .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                             .lineLimit(1)
                     }
                     if !listen.processed.album.isEmpty {
                         Text(listen.processed.album)
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
                             .lineLimit(1)
                     }
@@ -74,11 +86,11 @@ struct HistoryRow: View {
                 Spacer(minLength: DroppySpacing.sm)
                 VStack(alignment: .trailing, spacing: DroppySpacing.xs) {
                     Text(listen.startedAt.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .monospacedDigit()
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     Image(systemName: deliveryGlyph)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(deliveryGlyphColor)
                         .accessibilityHidden(true)
                 }
@@ -94,6 +106,12 @@ struct HistoryRow: View {
         .frame(height: 68)
         .contentShape(Rectangle())
         .background(isHovering ? AdaptiveColors.overlayAuto(0.05) : .clear)
+        .overlay(alignment: .bottom) {
+            if colorContrast == .increased {
+                SurfaceSeparator()
+                    .padding(.horizontal, DroppySpacing.xl)
+            }
+        }
         .onHover { isHovering = $0 }
         .contextMenu { rowMenuItems }
     }
@@ -133,7 +151,7 @@ struct HistoryRow: View {
             rowMenuItems
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText.opacity(0.9))
                 .frame(width: 24, height: 24)
                 .droppyGlassControlChrome(shape: AnyShape(Circle()), isHovering: isHovering)
@@ -141,7 +159,7 @@ struct HistoryRow: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .opacity(isHovering ? 1 : 0)
+        .opacity(isHovering ? 1 : 0.01)
         .allowsHitTesting(isHovering)
         .accessibilityLabel("Actions for \(listen.processed.title)")
     }
@@ -224,6 +242,7 @@ struct NowPlayingStrip: View {
                 info
                 Spacer(minLength: DroppySpacing.md)
                 controls
+                overflowMenu
             }
             progressLine
         }
@@ -235,18 +254,18 @@ struct NowPlayingStrip: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.xs) {
                 Text(sample.track.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .lineLimit(1)
                 if !sample.track.artist.isEmpty {
                     Text("— \(sample.track.artist)")
-                        .font(.system(size: 13))
+                        .font(.subheadline)
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                         .lineLimit(1)
                 }
             }
             Text(elapsedText)
-                .font(.system(size: 11, weight: .medium))
+                .font(.caption.weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
         }
@@ -271,13 +290,36 @@ struct NowPlayingStrip: View {
             droplet.toggleLoveForCurrentTrack()
         } label: {
             Image(systemName: isLoved ? "heart.fill" : "heart")
+                .frame(width: 24, height: 24)
         }
         .buttonStyle(DroppyCircleButtonStyle(size: 24))
         .disabled(!canLove)
         .help(loveHelp)
         .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
-        .accessibilityHint(loveHint)
+        .accessibilityValue(Text(isLoved ? "Loved" : "Not loved"))
+        .accessibilityHint(Text(loveHint))
+        .accessibilityAddTraits(isLoved ? .isSelected : [])
         .transition(DroppyTransition.compactContent)
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            Button("Edit this track") {
+                droplet.editCurrentListen()
+            }
+            Button("Block this track") {
+                droplet.quickBlockCurrentTrack()
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.bold))
+                .frame(width: 24, height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More")
+        .accessibilityLabel(Text("More"))
     }
 
     private var loveHelp: String {
@@ -323,5 +365,36 @@ struct NowPlayingStrip: View {
     private func time(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+// MARK: - Paused and off bar
+
+/// The strip becomes a state bar whenever capture cannot show a track. The
+/// text is one element and the action is its own button.
+struct HistoryStateBar: View {
+    let text: String
+    let actionTitle: String
+    let action: () -> Void
+    @Environment(\.colorSchemeContrast) private var colorContrast
+
+    var body: some View {
+        HStack(spacing: DroppySpacing.md) {
+            Text(text)
+                .font(.body.weight(.medium))
+                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                .lineLimit(2)
+                .accessibilityLabel(Text(text))
+            Spacer(minLength: DroppySpacing.md)
+            Button(actionTitle, action: action)
+                .buttonStyle(DroppyAccentButtonStyle(size: .small))
+        }
+        .padding(.horizontal, DroppySpacing.xl)
+        .frame(height: 76)
+        .overlay(alignment: .top) {
+            if colorContrast == .increased {
+                SurfaceSeparator()
+            }
+        }
     }
 }

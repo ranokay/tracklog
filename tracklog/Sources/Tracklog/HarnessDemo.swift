@@ -1,49 +1,127 @@
 import Foundation
 import TracklogCore
 
-/// Deterministic content for the harness's surface shots. Droppy never sees
-/// this: `host.environment.isHarness` is the only gate.
-enum HarnessDemo {
-    @MainActor
-    static func showNowPlaying(on runtime: CaptureRuntime) async {
-        let track = Track(
-            title: "Heart of Glass",
-            artist: "Blondie",
-            album: "Parallel Lines",
-            duration: 225,
-            bundleID: "com.apple.Music",
-        )
-        await runtime.ingest(
-            MediaSample(
-                track: track,
-                elapsed: 72,
-                playbackRate: 1,
-                isPlaying: true,
-            ),
-        )
-        // One demo connection makes the pending banner and queue badge real
-        // instead of a screenshot-only fixture. Its adapter is not a delivery
-        // adapter, so nothing is sent.
-        _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
-        // The History shot shows the pending list as the queue badge opens it.
-        runtime.state.setPendingListExpanded(true)
-        // The shot should show the demo cover, not the neutral sleeve. Artwork
-        // is deliberately off the capture path, so wait for its task instead
-        // of polling the published value.
-        await runtime.waitForArtwork()
+/// The four shelf states the harness renders and drives. The environment
+/// override is read only in the harness; production never sees it.
+enum HarnessDemoState: String {
+    case playing
+    case paused
+    case off
+    case feedUnavailable = "feed-unavailable"
+
+    static var selected: HarnessDemoState {
+        let raw = ProcessInfo.processInfo.environment["TRACKLOG_DEMO_STATE"] ?? ""
+        return HarnessDemoState(rawValue: raw) ?? .playing
+    }
+
+    var isPlaying: Bool {
+        self == .playing
+    }
+
+    var scrobblingEnabled: Bool {
+        self != .off
+    }
+
+    var connectsAService: Bool {
+        self != .off
+    }
+
+    var mediaStatus: MediaStatus {
+        self == .feedUnavailable ? .unavailable : .legacyAvailable
     }
 }
 
+/// Deterministic content for the harness's surface shots and runtime checks.
+/// Droppy never sees this: `host.environment.isHarness` is the only gate.
+enum HarnessDemo {
+    static let track = Track(
+        title: "Heart of Glass",
+        artist: "Blondie",
+        album: "Parallel Lines",
+        duration: 225,
+        bundleID: "com.apple.Music",
+    )
+
+    @MainActor
+    static func showNowPlaying(on runtime: CaptureRuntime) async {
+        let state = HarnessDemoState.selected
+
+        if state.isPlaying {
+            await runtime.ingest(
+                MediaSample(
+                    track: track,
+                    elapsed: 72,
+                    playbackRate: 1,
+                    isPlaying: true,
+                ),
+            )
+        }
+
+        if state.connectsAService {
+            // One demo connection makes the pending banner, queue badge and
+            // love action real instead of a screenshot-only fixture. Its
+            // adapter is offline and never sends.
+            _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+        }
+        // The History shot shows the pending list as the queue badge opens it.
+        runtime.state.setPendingListExpanded(true)
+        if state.isPlaying {
+            // The shot should show the demo cover, not the neutral sleeve.
+            // Artwork is deliberately off the capture path, so wait for its
+            // task instead of polling the published value.
+            await runtime.waitForArtwork()
+        }
+    }
+}
+
+/// A scripted harness source: it emits the initial observation, then advances
+/// the same track every two seconds until `stop`. That lets pause, resume,
+/// cancel, undo and block be observed as real engine transitions instead of a
+/// static demo view. It is never constructed outside the harness path.
 @MainActor
 final class HarnessDemoSource: NowPlayingSource {
-    func start(
-        onSample _: @escaping @MainActor (MediaSample?) -> Void,
-        onStatus: @escaping @MainActor (MediaStatus) -> Void,
-    ) {
-        onStatus(mediaStatus)
+    let demoState: HarnessDemoState
+    private var task: Task<Void, Never>?
+    private var elapsed: TimeInterval = 72
+    private var sampleHandler: (@MainActor (MediaSample?) -> Void)?
+
+    init(demoState: HarnessDemoState) {
+        self.demoState = demoState
     }
 
-    func stop() {}
+    var mediaStatus: MediaStatus {
+        demoState.mediaStatus
+    }
+
+    func start(
+        onSample: @escaping @MainActor (MediaSample?) -> Void,
+        onStatus: @escaping @MainActor (MediaStatus) -> Void,
+    ) {
+        onStatus(demoState.mediaStatus)
+        guard demoState.isPlaying else { return }
+        sampleHandler = onSample
+        task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                elapsed += 2
+                sampleHandler?(
+                    MediaSample(
+                        track: HarnessDemo.track,
+                        elapsed: elapsed,
+                        playbackRate: 1,
+                        isPlaying: true,
+                    ),
+                )
+            }
+        }
+    }
+
+    func stop() {
+        task?.cancel()
+        task = nil
+        sampleHandler = nil
+    }
 }
 
 actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore,
@@ -59,6 +137,8 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     var linkedConnections: [Connection] = []
     var currentConnection: Int64?
     var nextConnectionID: Int64 = 1
+    private var nextListenID: Int64 = 1_000
+    private var nextDeliveryID: Int64 = 1_000
 
     init() {
         let content = HarnessDemoData.makeContent()
@@ -98,12 +178,32 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
         }
     }
 
-    func insert(_: Listen) async throws -> Listen? {
-        nil
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await insert(listen, targets: [])
     }
 
-    func insert(_: Listen, targets _: [Int64]) async throws -> Listen? {
-        nil
+    func insert(_ listen: Listen, targets: [Int64]) async throws -> Listen? {
+        guard !listens.contains(where: { $0.dedupKey == listen.dedupKey }) else {
+            return nil
+        }
+        let stored = listen.stored(withID: nextListenID)
+        nextListenID += 1
+        listens.insert(stored, at: 0)
+        for target in Set(targets).sorted() {
+            deliveryRows.append(
+                Delivery(
+                    id: nextDeliveryID,
+                    listenID: stored.id ?? 0,
+                    connectionID: target,
+                    serviceKind: linkedConnections.first { $0.id == target }?.kind,
+                    state: .waiting,
+                    attempts: 0,
+                    nextAttemptAt: Date(),
+                ),
+            )
+            nextDeliveryID += 1
+        }
+        return stored
     }
 
     func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {

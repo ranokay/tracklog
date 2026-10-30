@@ -10,21 +10,22 @@ struct HistoryBannerView: View {
     let banner: HistoryBanner
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
+    @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
         HStack(spacing: DroppySpacing.md) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .lineLimit(1)
                 Text(detail)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     .lineLimit(1)
             }
@@ -41,6 +42,12 @@ struct HistoryBannerView: View {
             RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
                 .fill(AdaptiveColors.overlayAuto(0.08)),
         )
+        .overlay {
+            if colorContrast == .increased {
+                RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
+                    .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
+            }
+        }
         .padding(.horizontal, DroppySpacing.xl)
         .padding(.bottom, DroppySpacing.xs)
     }
@@ -118,12 +125,13 @@ struct PendingQueuePanel: View {
     let queue: PendingQueue
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
+    @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: DroppySpacing.sm) {
                 Text("Pending scrobbles")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 Spacer(minLength: DroppySpacing.sm)
                 Button("Hide") {
@@ -149,6 +157,12 @@ struct PendingQueuePanel: View {
             RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
                 .fill(AdaptiveColors.overlayAuto(0.04)),
         )
+        .overlay {
+            if colorContrast == .increased {
+                RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
+                    .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
+            }
+        }
         .padding(.horizontal, DroppySpacing.xl)
         .padding(.bottom, DroppySpacing.xs)
     }
@@ -162,10 +176,10 @@ private struct PendingConnectionGroupView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: DroppySpacing.sm) {
                 Text(group.connection.kind.displayName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                 Text(group.connection.identity)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     .lineLimit(1)
                 Spacer(minLength: DroppySpacing.sm)
@@ -195,16 +209,16 @@ private struct PendingDeliveryRow: View {
         HStack(spacing: DroppySpacing.sm) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(trackTitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .lineLimit(1)
                 Text(statusLine)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     .lineLimit(1)
                 if let error = item.delivery.lastError, !error.isEmpty {
                     Text(error)
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
                         .lineLimit(2)
                 }

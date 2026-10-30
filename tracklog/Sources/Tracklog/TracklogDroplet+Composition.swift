@@ -7,10 +7,11 @@ extension TracklogDroplet {
     func makeHarnessRuntime(hud: HUDHostSession) -> CaptureRuntime {
         let store = HarnessDemoStore()
         let credentials = MemoryCredentialStore()
+        let demoState = HarnessDemoState.selected
         return CaptureRuntime(
             state: state,
             clock: SystemClock(),
-            source: HarnessDemoSource(),
+            source: HarnessDemoSource(demoState: demoState),
             store: store,
             allowlist: store,
             edits: store,
@@ -21,7 +22,10 @@ extension TracklogDroplet {
                 HarnessDemoLastFMAdapter(),
             ],
             hud: hud,
-            settings: CaptureSettings(scrobblingEnabled: true),
+            settings: CaptureSettings(
+                scrobblingEnabled: demoState.scrobblingEnabled,
+                pausedUntil: demoState == .paused ? Date().addingTimeInterval(60 * 60) : nil,
+            ),
         )
     }
 

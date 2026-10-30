@@ -60,7 +60,7 @@ struct TracklogHUDStrip: View {
                 .font(.system(size: DroppyLiveActivityMetrics.iconSize, weight: .semibold))
             Spacer(minLength: 0)
             Text(presentation.word)
-                .font(.system(size: DroppyLiveActivityMetrics.labelFontSize, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)

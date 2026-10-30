@@ -8,7 +8,7 @@ let tracklogServicesPageID = "services"
 let tracklogAddServicePageID = "add-service"
 let tracklogLastFMLinkPageID = "lastfm-link"
 let tracklogLibreFMLinkPageID = "librefm-link"
-let tracklogLastFMAppCredentialsPageID = "lastfm-app-credentials"
+let tracklogLastFMAppCredentialsPageID = "lastfm-credentials"
 
 private let tracklogConnectionPagePrefix = "connection-"
 

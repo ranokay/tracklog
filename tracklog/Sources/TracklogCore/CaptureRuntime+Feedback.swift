@@ -151,12 +151,34 @@ public extension CaptureRuntime {
 
     /// Creates an exact artist + title block with blank album and album artist.
     /// Existing history is untouched; the block applies to future captures.
+    ///
+    /// The raw values are the ones the next play arrives with. Blocks run
+    /// before simple edits, so blocking the processed display values would let
+    /// a rule-rewritten track through on its next play.
     @discardableResult
     func quickBlock(_ listen: Listen) async throws -> BlockRule {
         try await saveBlock(
             BlockRule(
-                track: listen.processed.title,
-                artist: listen.processed.artist,
+                track: listen.raw.title,
+                artist: listen.raw.artist,
+                album: "",
+                albumArtist: "",
+                savedAt: clock.now,
+            ),
+        )
+    }
+
+    /// Creates the same raw artist + title block for the track in flight. The
+    /// engine keeps the player's raw observation while `state.nowPlaying`
+    /// publishes the edited values, so the block is authored against what the
+    /// next play will actually arrive as.
+    @discardableResult
+    func quickBlockCurrentTrack() async throws -> BlockRule? {
+        guard let raw = engine.currentRawTrack else { return nil }
+        return try await saveBlock(
+            BlockRule(
+                track: raw.title,
+                artist: raw.artist,
                 album: "",
                 albumArtist: "",
                 savedAt: clock.now,

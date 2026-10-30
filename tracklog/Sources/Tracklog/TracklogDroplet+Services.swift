@@ -44,7 +44,7 @@ extension TracklogDroplet {
     func openConnectionPage(for connection: Connection) {
         guard let host, let id = connection.id else { return }
         let title = "\(connection.kind.displayName) connection"
-        guard host.workspace.openSettingsPage(tracklogConnectionPageID(id), title: title) else {
+        guard openSettingsPage(tracklogConnectionPageID(id), title: title) else {
             host.log.notice("Opening the connection page was refused")
             return
         }
@@ -190,7 +190,7 @@ extension TracklogDroplet {
         }
         libreFMLink?.model.cancel()
         libreFMLink = TracklogLibreFMLink(endpoint: endpoint, model: link)
-        guard host.workspace.openSettingsPage(tracklogLibreFMLinkPageID, title: "Libre.fm") else {
+        guard openSettingsPage(tracklogLibreFMLinkPageID, title: "Libre.fm") else {
             libreFMLink = nil
             host.log.notice("Opening the Libre.fm sign-in page was refused")
             return
@@ -199,7 +199,7 @@ extension TracklogDroplet {
 
     func openServicesPage() {
         guard let host else { return }
-        guard host.workspace.openSettingsPage(tracklogServicesPageID, title: "Services") else {
+        guard openSettingsPage(tracklogServicesPageID, title: "Services") else {
             host.log.notice("Opening the Services page was refused")
             return
         }

@@ -18,4 +18,8 @@ extension TracklogDroplet {
     func quickBlock(_ listen: Listen) {
         Task { try? await runtime?.quickBlock(listen) }
     }
+
+    func quickBlockCurrentTrack() {
+        Task { try? await runtime?.quickBlockCurrentTrack() }
+    }
 }
