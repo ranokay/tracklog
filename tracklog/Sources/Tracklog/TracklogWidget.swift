@@ -58,7 +58,7 @@ struct TracklogWidget: View {
     private var solo: some View {
         VStack(alignment: .leading, spacing: DroppySpacing.xsm) {
             soloHeader
-            if colorContrast == .increased {
+            if SurfaceContrast.isIncreased(colorContrast) {
                 SurfaceSeparator()
             }
             switch phase {

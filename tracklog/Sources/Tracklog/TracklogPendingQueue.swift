@@ -43,7 +43,7 @@ struct HistoryBannerView: View {
                 .fill(AdaptiveColors.overlayAuto(0.08)),
         )
         .overlay {
-            if colorContrast == .increased {
+            if SurfaceContrast.isIncreased(colorContrast) {
                 RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
                     .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
             }
@@ -158,7 +158,7 @@ struct PendingQueuePanel: View {
                 .fill(AdaptiveColors.overlayAuto(0.04)),
         )
         .overlay {
-            if colorContrast == .increased {
+            if SurfaceContrast.isIncreased(colorContrast) {
                 RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
                     .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
             }

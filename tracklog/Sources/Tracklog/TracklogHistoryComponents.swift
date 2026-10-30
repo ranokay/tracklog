@@ -1,10 +1,21 @@
 import DroppyKit
+import Foundation
 import SwiftUI
 import TracklogCore
 
 /// The same count wording in the page header and in every day header.
 func listenCountText(_ count: Int) -> String {
     "\(count.formatted()) \(count == 1 ? "listen" : "listens")"
+}
+
+/// Whether the surfaces should draw their increased-contrast separators. The
+/// harness override exists because the runtime checks cannot change a system
+/// accessibility setting; production only reads the environment value.
+enum SurfaceContrast {
+    static func isIncreased(_ contrast: ColorSchemeContrast) -> Bool {
+        contrast == .increased
+            || ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CONTRAST"] == "increased"
+    }
 }
 
 /// A separator that appears only for people who ask for more contrast. It
@@ -107,7 +118,7 @@ struct HistoryRow: View {
         .contentShape(Rectangle())
         .background(isHovering ? AdaptiveColors.overlayAuto(0.05) : .clear)
         .overlay(alignment: .bottom) {
-            if colorContrast == .increased {
+            if SurfaceContrast.isIncreased(colorContrast) {
                 SurfaceSeparator()
                     .padding(.horizontal, DroppySpacing.xl)
             }
@@ -365,36 +376,5 @@ struct NowPlayingStrip: View {
     private func time(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-// MARK: - Paused and off bar
-
-/// The strip becomes a state bar whenever capture cannot show a track. The
-/// text is one element and the action is its own button.
-struct HistoryStateBar: View {
-    let text: String
-    let actionTitle: String
-    let action: () -> Void
-    @Environment(\.colorSchemeContrast) private var colorContrast
-
-    var body: some View {
-        HStack(spacing: DroppySpacing.md) {
-            Text(text)
-                .font(.body.weight(.medium))
-                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                .lineLimit(2)
-                .accessibilityLabel(Text(text))
-            Spacer(minLength: DroppySpacing.md)
-            Button(actionTitle, action: action)
-                .buttonStyle(DroppyAccentButtonStyle(size: .small))
-        }
-        .padding(.horizontal, DroppySpacing.xl)
-        .frame(height: 76)
-        .overlay(alignment: .top) {
-            if colorContrast == .increased {
-                SurfaceSeparator()
-            }
-        }
     }
 }
