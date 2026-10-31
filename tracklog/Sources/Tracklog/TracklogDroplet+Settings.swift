@@ -98,7 +98,7 @@ extension TracklogDroplet: SettingsPagesProviding {
             ),
             SettingsSearchEntry(
                 title: "About",
-                keywords: ["version", "licence", "credits", "pano", "droppy"],
+                keywords: ["version", "licence", "credits", "droppy"],
                 anchorID: tracklogAboutPageID,
             ),
         ]

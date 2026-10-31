@@ -30,7 +30,7 @@ struct ScrobbleEngineTests {
         return false
     }
 
-    @Test func thresholdUsesPanoFormula() {
+    @Test func thresholdIsCappedPercentWithAFloor() {
         let cases: [(duration: TimeInterval, target: TimeInterval)] = [
             (200, 100),
             (1000, 240),
