@@ -16,11 +16,12 @@ struct ScrobbleEngineLeadInTests {
         observedAt: TimeInterval,
         elapsed: TimeInterval,
         playing: Bool = true,
+        rate: Double = 1,
     ) -> MediaSample {
         MediaSample(
             track: track,
             elapsed: elapsed,
-            playbackRate: playing ? 1 : 0,
+            playbackRate: playing ? rate : 0,
             isPlaying: playing,
             timestamp: base.addingTimeInterval(reportedAt),
             observedAt: base.addingTimeInterval(observedAt),
@@ -45,6 +46,15 @@ struct ScrobbleEngineLeadInTests {
         }
 
         #expect(effects.filter(isScrobble) == [.scrobble(Scrobble(raw: track, playedAt: base, playedDuration: 30))])
+    }
+
+    @Test func aFasterPlaybackRateCountsItsUnseenPlayAtThatRate() {
+        let engine = ScrobbleEngine()
+
+        // At twice the speed, 16 seconds since the start is 32 seconds in.
+        _ = engine.ingest(sample(Track(title: "Track", duration: 40), reportedAt: 0, observedAt: 16, elapsed: 32, rate: 2))
+
+        #expect(engine.status.played == 32)
     }
 
     @Test func aSeekCountsOnlyThePlaySinceTheSeek() {

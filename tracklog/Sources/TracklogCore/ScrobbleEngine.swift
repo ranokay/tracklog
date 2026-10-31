@@ -193,18 +193,6 @@ public final class ScrobbleEngine {
         configuration.minThreshold = seconds
     }
 
-    /// What a new track played before it was first seen. The player resets
-    /// its reported timestamp on a start, a seek or a resume, so the time
-    /// since that report is uninterrupted play. Past the lead-in it was
-    /// already playing before Tracklog looked, and a source that reports no
-    /// timestamp of its own proves nothing; both count from zero.
-    private func unseenPlay(before sample: MediaSample) -> TimeInterval {
-        guard sample.isPlaying else { return 0 }
-        let sinceReport = sample.observedAt.timeIntervalSince(sample.timestamp)
-        guard sinceReport <= configuration.leadIn else { return 0 }
-        return max(0, min(sinceReport, sample.elapsed))
-    }
-
     private func makeSession(
         _ sample: MediaSample,
         submitted: Track?,
@@ -249,8 +237,7 @@ public final class ScrobbleEngine {
         current.submittedTrack = submitted ?? current.submittedTrack
         if sample.isPlaying {
             let gap = max(0, min(now.timeIntervalSince(current.lastSampleAt), configuration.maxSampleGap))
-            let rate = max(0, min(sample.playbackRate, 4))
-            current.played += gap * (rate > 0 ? rate : 1)
+            current.played += played(over: gap, at: sample)
         }
         current.lastSampleAt = now
         current.lastElapsed = sample.elapsed
@@ -345,5 +332,26 @@ public final class ScrobbleEngine {
     /// has a zero window, so every resume refreshes it.
     private func staleWindow(for duration: TimeInterval) -> TimeInterval {
         min(max(0, duration) * 0.75, Self.nowPlayingStaleCap)
+    }
+}
+
+private extension ScrobbleEngine {
+    /// What a new track played before it was first seen. The player resets
+    /// its reported timestamp on a start, a seek or a resume, so the time
+    /// since that report is uninterrupted play. Past the lead-in it was
+    /// already playing before Tracklog looked, and a source that reports no
+    /// timestamp of its own proves nothing; both count from zero.
+    func unseenPlay(before sample: MediaSample) -> TimeInterval {
+        guard sample.isPlaying else { return 0 }
+        let sinceReport = sample.observedAt.timeIntervalSince(sample.timestamp)
+        guard sinceReport <= configuration.leadIn else { return 0 }
+        return max(0, min(played(over: sinceReport, at: sample), sample.elapsed))
+    }
+
+    /// Wall-clock seconds as played time at the sample's rate, capped at 4×.
+    /// A player that reports no rate counts at 1×.
+    func played(over seconds: TimeInterval, at sample: MediaSample) -> TimeInterval {
+        let rate = max(0, min(sample.playbackRate, 4))
+        return seconds * (rate > 0 ? rate : 1)
     }
 }
