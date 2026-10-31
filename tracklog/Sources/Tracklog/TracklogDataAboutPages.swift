@@ -128,12 +128,6 @@ struct TracklogAboutPage: View {
                 settingsSectionHeader("Credits")
             } content: {
                 DropletSettingsCard {
-                    DropletControlRow(title: "Inspired by Pano Scrobbler") {
-                        Button("Open") {
-                            droplet.openURL("https://github.com/kawaiiDango/pano-scrobbler") // NOSONAR: public attribution link
-                        }
-                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
-                    }
                     DropletControlRow(title: "Built for Droppy with DroppyKit") {
                         Button("Open") {
                             droplet.openURL("https://getdroppy.app") // NOSONAR: public attribution link

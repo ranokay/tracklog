@@ -4,7 +4,7 @@ import Foundation
 ///
 /// One session per track identity. Played time accumulates in wall-clock time
 /// while the player is playing, capped at the polling gap, so a paused player
-/// and a sleeping Mac do not inflate it. The threshold is Pano's:
+/// and a sleeping Mac do not inflate it. The threshold is
 /// `max(min(percent × duration, 4 min), minimum − 0.6 s)`, with a flat 30
 /// seconds when the player does not report a duration.
 ///

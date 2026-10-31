@@ -95,7 +95,7 @@ Checks:
 - Token and secret fields are secure and never show a saved value back.
 - Data names the live media source, Copy diagnostics works, and Export settings
   is present; Import is absent.
-- About shows the licence, Pano, Droppy/DroppyKit, Last.fm attribution and the
+- About shows the licence, Droppy/DroppyKit, Last.fm attribution and the
   version.
 - No droplet icon or droplet-name header is repeated inside the pane.
 
