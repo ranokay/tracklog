@@ -1,6 +1,6 @@
 # Core charts prototype
 
-Throwaway HTML model for [Prototype Core charts in the Droppy takeover](https://github.com/ranokay/tracklog/issues/73). It asks which control layout and information hierarchy work best inside the existing Sleeve takeover. It is awaiting the owner's response. No layout has been accepted.
+Throwaway HTML model for [Prototype Core charts in the Droppy takeover](https://github.com/ranokay/tracklog/issues/73). The owner selected **Context rail** on 31 October 2026. The [resolution](https://github.com/ranokay/tracklog/issues/73#issuecomment-6545268245) records the accepted layout and shared interactions. Use `?variant=rail` to view the chosen direction. All three variants remain here as the primary source for the comparison.
 
 Open `index.html` directly in a browser, or run this from the repository root:
 
@@ -42,4 +42,4 @@ Browser control styling approximates Droppy's dark glass controls using its spac
 
 Browser interaction checks exercised all three layouts, every chart type, source/period controls, all seven data fixtures, offline retry, four pinned-strip states, Libre.fm fallback, the Custom Settings handoff, saved chart state on History-first reopen, totals variants, and stale-cache refresh. The browser console reported zero errors and zero warnings. Screenshots in `output/playwright/` capture the three local weekly album lists, saved data after failed refresh, and Custom Settings. This is prototype validation. No native package code changed, so the droplet build, submission gate and live-host qualification were not run.
 
-The full artifact stays on `prototype/core-charts`, with no pull request. Record the owner's choice or requested combination on the prototype ticket before resolving it. That choice is design input to the separate data-contract ticket and later implementation planning.
+The full artifact stays on `prototype/core-charts`, with no pull request. The prototype ticket is resolved and its context pointer is in the wayfinder map. Context rail is design input to the separate data-contract ticket and later implementation planning. No prototype code is promoted into production.
