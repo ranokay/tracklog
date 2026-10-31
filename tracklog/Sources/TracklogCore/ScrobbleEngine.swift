@@ -31,7 +31,7 @@ public final class ScrobbleEngine {
         /// A new track first seen playing this far in or less is taken to have
         /// played from its start, so those seconds count. It matches the
         /// media feed's slowest poll, which can find a track that late.
-        public var leadIn: TimeInterval
+        public var leadIn: TimeInterval = 15
 
         public init(
             scrobblePercent: Double = 0.5,
@@ -41,7 +41,6 @@ public final class ScrobbleEngine {
             settleTime: TimeInterval = 1,
             dedupWindow: TimeInterval = 8,
             maxSampleGap: TimeInterval = 5,
-            leadIn: TimeInterval = 15,
         ) {
             self.scrobblePercent = scrobblePercent
             self.maxThreshold = maxThreshold
@@ -50,7 +49,6 @@ public final class ScrobbleEngine {
             self.settleTime = settleTime
             self.dedupWindow = dedupWindow
             self.maxSampleGap = maxSampleGap
-            self.leadIn = leadIn
         }
     }
 
