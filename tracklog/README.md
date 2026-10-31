@@ -2,8 +2,8 @@
 
 A scrobbler for macOS that lives in [Droppy](https://getdroppy.app). It reads the
 system's now-playing feed, applies your edits and blocks, and sends what you listen to
-Last.fm, ListenBrainz, Libre.fm and Pleroma. A local queue keeps scrobbles safe offline; a
-local history keeps your listening in one place.
+Last.fm, ListenBrainz, and Libre.fm or another GNU FM server. A local queue keeps scrobbles
+safe offline; a local history keeps your listening in one place.
 
 Scrobbling stays off until you turn it on in Tracklog's settings, and it runs while Droppy
 is open. Your listens go only to the services you connect.
