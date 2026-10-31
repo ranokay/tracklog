@@ -4,12 +4,14 @@ import TracklogCore
 /// One read of Droppy's bundled media helper.
 ///
 /// A helper that cannot run reports why instead of throwing: the missing
-/// executable, a spawn failure, a non-zero exit and a valid empty payload are
-/// separate health states, and none of them is a crash.
+/// executable, a spawn failure, a non-zero exit, a timeout and a valid empty
+/// payload are separate health states, and none of them is a crash.
 public enum MediaHelperRead: Equatable, Sendable {
     case missingExecutable
     case spawnFailed(String)
     case exitedNonZero(Int32)
+    /// The helper did not answer before the read deadline and was stopped.
+    case timedOut
     case empty
     case sample(MediaSample)
 
@@ -19,6 +21,7 @@ public enum MediaHelperRead: Equatable, Sendable {
         case .missingExecutable: .missingExecutable
         case let .spawnFailed(message): .spawnFailed(message)
         case let .exitedNonZero(code): .exitedNonZero(code)
+        case .timedOut: .timedOut
         case .empty: .silent
         case .sample: .working
         }
@@ -30,6 +33,7 @@ public enum MediaHelperRead: Equatable, Sendable {
         case .missingExecutable: "Media helper is missing."
         case let .spawnFailed(message): "Media helper could not start: \(message)"
         case let .exitedNonZero(code): "Media helper exited with status \(code)"
+        case .timedOut: "Media helper did not answer in time and was stopped."
         case .empty, .sample: nil
         }
     }
@@ -82,14 +86,21 @@ public extension MediaHelperReading {
 /// Droppy's own player, and a flat one-second loop is not defensible.
 @MainActor
 public final class MediaHelperReader: MediaHelperReading {
+    /// How long one read may take. A normal read answers in milliseconds; a
+    /// helper that hangs is stopped here so it neither holds the poll nor
+    /// outlives a deactivate. The engine's lead-in is sized against it.
+    public nonisolated static let readDeadline: TimeInterval = 3
+
     private let executableURL: URL
+    private let readDeadline: TimeInterval
 
     private static let queue = DispatchQueue(label: "app.tracklog.media-helper", qos: .utility)
 
-    public init(bundleURL: URL = Bundle.main.bundleURL) {
+    public init(bundleURL: URL = Bundle.main.bundleURL, readDeadline: TimeInterval = MediaHelperReader.readDeadline) {
         executableURL = bundleURL
             .appendingPathComponent("Contents/Helpers/DroppyMediaHelper.app")
             .appendingPathComponent("Contents/MacOS/DroppyMediaHelper")
+        self.readDeadline = readDeadline
     }
 
     public var executablePath: String {
@@ -102,39 +113,43 @@ public final class MediaHelperReader: MediaHelperReading {
 
     public func read() async -> MediaHelperRead {
         let url = executableURL
+        let deadline = readDeadline
         guard isExecutable else { return .missingExecutable }
         return await withCheckedContinuation { continuation in
             Self.queue.async {
-                continuation.resume(returning: Self.readSync(helperURL: url))
+                continuation.resume(returning: Self.readSync(helperURL: url, deadline: deadline))
             }
         }
     }
 
     public func readArtwork() async -> MediaHelperArtworkRead {
         let url = executableURL
+        let deadline = readDeadline
         guard isExecutable else { return .unavailable }
         return await withCheckedContinuation { continuation in
             Self.queue.async {
-                continuation.resume(returning: Self.readArtworkSync(helperURL: url))
+                continuation.resume(returning: Self.readArtworkSync(helperURL: url, deadline: deadline))
             }
         }
     }
 
-    private nonisolated static func readSync(helperURL: URL) -> MediaHelperRead {
-        switch run(helperURL: helperURL, arguments: ["get", "--now", "--no-artwork"]) {
+    private nonisolated static func readSync(helperURL: URL, deadline: TimeInterval) -> MediaHelperRead {
+        switch run(helperURL: helperURL, arguments: ["get", "--now", "--no-artwork"], deadline: deadline) {
         case .missingExecutable:
             .missingExecutable
         case let .spawnFailed(message):
             .spawnFailed(message)
         case let .exitedNonZero(code):
             .exitedNonZero(code)
+        case .timedOut:
+            .timedOut
         case let .data(data):
             MediaHelperPayload.decode(data).map(MediaHelperRead.sample) ?? .empty
         }
     }
 
-    private nonisolated static func readArtworkSync(helperURL: URL) -> MediaHelperArtworkRead {
-        guard case let .data(data) = run(helperURL: helperURL, arguments: ["get", "--now"]),
+    private nonisolated static func readArtworkSync(helperURL: URL, deadline: TimeInterval) -> MediaHelperArtworkRead {
+        guard case let .data(data) = run(helperURL: helperURL, arguments: ["get", "--now"], deadline: deadline),
               let snapshot = MediaHelperPayload.decodeSnapshot(data)
         else {
             return .unavailable
@@ -146,10 +161,11 @@ public final class MediaHelperReader: MediaHelperReading {
         case missingExecutable
         case spawnFailed(String)
         case exitedNonZero(Int32)
+        case timedOut
         case data(Data)
     }
 
-    private nonisolated static func run(helperURL: URL, arguments: [String]) -> RunResult {
+    private nonisolated static func run(helperURL: URL, arguments: [String], deadline: TimeInterval) -> RunResult {
         guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
             return .missingExecutable
         }
@@ -168,8 +184,26 @@ public final class MediaHelperReader: MediaHelperReading {
             return .spawnFailed(error.localizedDescription)
         }
 
+        // Stop a helper that has not answered by the deadline, and kill one
+        // that ignores the stop a second later.
+        let running = RunningHelper(process: process)
+        let stop = DispatchWorkItem {
+            running.markStopped()
+            running.process.terminate()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+                if running.process.isRunning {
+                    kill(running.process.processIdentifier, SIGKILL)
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline, execute: stop)
+
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        stop.cancel()
+        if running.wasStopped {
+            return .timedOut
+        }
         guard process.terminationStatus == 0 else {
             return .exitedNonZero(process.terminationStatus)
         }
@@ -254,5 +288,26 @@ public enum MediaHelperPayload {
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
         return plain.date(from: string)
+    }
+}
+
+/// Lets the deadline stop the helper from another queue. `Process` is safe to
+/// terminate and to query while it runs, and the stop flag is locked, so a
+/// helper that crashes on its own is not reported as timed out.
+private final class RunningHelper: @unchecked Sendable {
+    let process: Process
+    private let lock = NSLock()
+    private var stopped = false
+
+    init(process: Process) {
+        self.process = process
+    }
+
+    var wasStopped: Bool {
+        lock.withLock { stopped }
+    }
+
+    func markStopped() {
+        lock.withLock { stopped = true }
     }
 }

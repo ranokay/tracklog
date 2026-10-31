@@ -37,6 +37,31 @@ struct MediaArbiterTests {
         #expect(arbiter.mediaStatus.helperHealth == .silent)
     }
 
+    @Test func twoQuietMinutesSlowTheIdleCadenceUntilSomethingPlays() async {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let helper = FakeHelper(results: [.sample(playingSample()), .empty, .empty, .empty, .sample(playingSample()), .empty])
+        let arbiter = makeArbiter(helper: helper, now: { now })
+
+        #expect(await arbiter.pollOnce().interval == .seconds(2))
+        now += 2
+        #expect(await arbiter.pollOnce().interval == .seconds(5), "playback just stopped")
+        now += 119
+        #expect(await arbiter.pollOnce().interval == .seconds(5))
+        now += 1
+        #expect(await arbiter.pollOnce().interval == .seconds(15), "quiet for two minutes")
+        now += 15
+        #expect(await arbiter.pollOnce().interval == .seconds(2))
+        now += 2
+        #expect(await arbiter.pollOnce().interval == .seconds(5), "a new quiet stretch starts over")
+    }
+
+    @Test func theQuietCadenceFindsATrackInsideTheEngineLeadIn() {
+        let quiet = TimeInterval(MediaArbiter.quietInterval.components.seconds)
+        let schedulingAllowance: TimeInterval = 2
+
+        #expect(quiet + MediaHelperReader.readDeadline + schedulingAllowance <= ScrobbleEngine.Configuration().leadIn)
+    }
+
     @Test func theRunningLoopUsesTheAdaptiveCadence() async {
         let helper = FakeHelper(results: [.sample(playingSample()), .empty])
         var sleeps: [Duration] = []
