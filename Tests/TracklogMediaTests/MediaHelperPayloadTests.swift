@@ -217,4 +217,41 @@ struct MediaHelperReaderTests {
         #expect(await reader.read() == .missingExecutable)
         #expect(await reader.readArtwork() == .unavailable)
     }
+
+    @Test func aHelperThatAnswersInTimeIsRead() async throws {
+        let bundle = try helperBundle(script: #"echo '{"payload":{"title":"Song","playing":true}}'"#)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let reader = MediaHelperReader(bundleURL: bundle, readDeadline: 2)
+
+        guard case let .sample(sample) = await reader.read() else {
+            Issue.record("expected a sample")
+            return
+        }
+        #expect(sample.track.title == "Song")
+    }
+
+    @Test func aHelperThatHangsIsStoppedAtTheDeadline() async throws {
+        let bundle = try helperBundle(script: "exec sleep 30")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let reader = MediaHelperReader(bundleURL: bundle, readDeadline: 0.5)
+        let clock = ContinuousClock()
+
+        let started = clock.now
+        let read = await reader.read()
+
+        #expect(read == .timedOut)
+        #expect(clock.now - started < .seconds(3))
+    }
+
+    /// A bundle with a shell script where Droppy keeps its media helper.
+    private func helperBundle(script: String) throws -> URL {
+        let bundle = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tracklog-helper-\(UUID().uuidString).app")
+        let directory = bundle.appendingPathComponent("Contents/Helpers/DroppyMediaHelper.app/Contents/MacOS")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let executable = directory.appendingPathComponent("DroppyMediaHelper")
+        try Data("#!/bin/sh\n\(script)\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        return bundle
+    }
 }

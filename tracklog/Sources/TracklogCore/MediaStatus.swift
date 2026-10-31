@@ -36,6 +36,8 @@ public struct MediaStatus: Equatable, Sendable {
         case missingExecutable
         case spawnFailed(String)
         case exitedNonZero(Int32)
+        /// The helper did not answer before the read deadline.
+        case timedOut
         /// The helper kept returning no payload while a scriptable player
         /// reported that it was playing.
         case silentWhilePlaying(String)
@@ -47,7 +49,7 @@ public struct MediaStatus: Equatable, Sendable {
         public var isUsable: Bool {
             switch self {
             case .unknown, .working, .silent: true
-            case .missingExecutable, .spawnFailed, .exitedNonZero, .silentWhilePlaying, .unavailable: false
+            case .missingExecutable, .spawnFailed, .exitedNonZero, .timedOut, .silentWhilePlaying, .unavailable: false
             }
         }
 
@@ -59,6 +61,7 @@ public struct MediaStatus: Equatable, Sendable {
             case .missingExecutable: "Missing executable"
             case let .spawnFailed(message): "Could not start: \(message)"
             case let .exitedNonZero(code): "Exited with status \(code)"
+            case .timedOut: "Did not answer in time"
             case let .silentWhilePlaying(player): "Returned nothing while \(player) was playing"
             case .unavailable: "Unavailable"
             }

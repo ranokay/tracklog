@@ -57,9 +57,9 @@ struct MediaArbiterTests {
 
     @Test func theQuietCadenceFindsATrackInsideTheEngineLeadIn() {
         let quiet = TimeInterval(MediaArbiter.quietInterval.components.seconds)
-        let slowReadAllowance: TimeInterval = 5
+        let schedulingAllowance: TimeInterval = 2
 
-        #expect(quiet + slowReadAllowance <= ScrobbleEngine.Configuration().leadIn)
+        #expect(quiet + MediaHelperReader.readDeadline + schedulingAllowance <= ScrobbleEngine.Configuration().leadIn)
     }
 
     @Test func theRunningLoopUsesTheAdaptiveCadence() async {

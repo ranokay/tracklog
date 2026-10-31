@@ -28,9 +28,9 @@ public final class ScrobbleEngine {
         public var dedupWindow: TimeInterval
         /// Cap on one polling gap, so a stalled feed cannot count as listening.
         public var maxSampleGap: TimeInterval
-        /// A new track first seen playing this far in or less is taken to have
-        /// played from its start, so those seconds count. It is the media
-        /// feed's slowest poll, 15 seconds, plus room for a slow helper read.
+        /// The longest a new track can have played before the media feed
+        /// sees it: the slowest poll, 15 seconds, plus the helper's 3-second
+        /// read deadline and room for scheduling.
         public var leadIn: TimeInterval = 20
 
         public init(
@@ -122,12 +122,11 @@ public final class ScrobbleEngine {
         }
 
         if session == nil {
-            let inLeadIn = sample.isPlaying && sample.elapsed <= configuration.leadIn
             session = makeSession(
                 sample,
                 submitted: submitted,
                 startedAt: now.addingTimeInterval(-max(0, min(sample.elapsed, 3600))),
-                played: inLeadIn ? max(0, sample.elapsed) : 0,
+                played: unseenPlay(before: sample),
                 at: now,
             )
         }
@@ -192,6 +191,18 @@ public final class ScrobbleEngine {
     /// percentage. The current session picks it up with its next sample.
     public func setMinimumThreshold(_ seconds: TimeInterval) {
         configuration.minThreshold = seconds
+    }
+
+    /// What a new track played before it was first seen. The player resets
+    /// its reported timestamp on a start, a seek or a resume, so the time
+    /// since that report is uninterrupted play. Past the lead-in it was
+    /// already playing before Tracklog looked, and a source that reports no
+    /// timestamp of its own proves nothing; both count from zero.
+    private func unseenPlay(before sample: MediaSample) -> TimeInterval {
+        guard sample.isPlaying else { return 0 }
+        let sinceReport = sample.observedAt.timeIntervalSince(sample.timestamp)
+        guard sinceReport <= configuration.leadIn else { return 0 }
+        return max(0, min(sinceReport, sample.elapsed))
     }
 
     private func makeSession(
