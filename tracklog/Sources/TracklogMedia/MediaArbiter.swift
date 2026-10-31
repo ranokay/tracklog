@@ -1,22 +1,6 @@
 import Foundation
 import TracklogCore
 
-/// Asks for Automation lazily, through the host, and remembers a denial.
-///
-/// The production gate lives in the droplet because only it holds
-/// `host.permissions` and `host.preferences`. The arbiter asks this gate only
-/// at the first moment the fallback is needed, never at activation.
-@MainActor
-public protocol MediaAutomationPermissionGate: AnyObject {
-    /// Reads the current decision without prompting. A remembered denial is
-    /// reported as `.denied` even when TCC would ask again.
-    func authorization() -> MediaStatus.AutomationState
-    /// Asks the host for the permission. Only called from a fallback.
-    func requestAuthorization() async -> MediaStatus.AutomationState
-    /// Persists a denial so a later launch does not prompt again.
-    func rememberDenial()
-}
-
 /// Produces one now-playing stream from the helper and the Automation
 /// fallback.
 ///
@@ -30,8 +14,15 @@ public final class MediaArbiter: NowPlayingSource {
     /// Two seconds while a player is playing. The research found this
     /// defensible; a flat one-second loop is not.
     public static let playingInterval: Duration = .seconds(2)
-    /// Five seconds while paused or idle.
+    /// Five seconds while paused or idle, so a resume or the next track is
+    /// found quickly.
     public static let idleInterval: Duration = .seconds(5)
+    /// Fifteen seconds once nothing has played for `quietAfter`: polling a
+    /// silent Mac every five seconds all day is faster than the data changes.
+    /// The engine's lead-in keeps the seconds a track played before this
+    /// cadence found it.
+    public static let quietInterval: Duration = .seconds(15)
+    public static let quietAfter: TimeInterval = 120
     /// One Automation probe per candidate at the idle cadence.
     public static let automationProbeInterval: TimeInterval = 5
     /// While Automation is the playing source, its next sample must land
@@ -57,6 +48,9 @@ public final class MediaArbiter: NowPlayingSource {
     private var lastAutomationProbe: Date?
     private var lastEmittedSample: MediaSample?
     private var lastPublishedStatus: MediaStatus?
+    /// When the current stretch with nothing playing began, or `nil` while
+    /// something plays.
+    private var quietSince: Date?
 
     public init(
         helper: any MediaHelperReading,
@@ -126,6 +120,7 @@ public final class MediaArbiter: NowPlayingSource {
         lastAutomationProbe = nil
         lastEmittedSample = nil
         lastPublishedStatus = nil
+        quietSince = nil
     }
 
     /// One poll, exposed so tests and manual diagnostics can drive the
@@ -148,11 +143,20 @@ public final class MediaArbiter: NowPlayingSource {
             emission = await pollFallback()
         }
 
-        let interval = lastEmittedSample?.isPlaying == true
-            ? Self.playingInterval
-            : Self.idleInterval
+        let interval = nextInterval()
         publishStatus()
         return MediaPoll(emission: emission, interval: interval, status: mediaStatus)
+    }
+
+    private func nextInterval() -> Duration {
+        if lastEmittedSample?.isPlaying == true {
+            quietSince = nil
+            return Self.playingInterval
+        }
+        let current = now()
+        let since = quietSince ?? current
+        quietSince = since
+        return current.timeIntervalSince(since) < Self.quietAfter ? Self.idleInterval : Self.quietInterval
     }
 
     // MARK: - Health

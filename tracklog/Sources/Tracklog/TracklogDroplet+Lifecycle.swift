@@ -3,6 +3,21 @@ import DroppyKit
 import TracklogCore
 
 public extension TracklogDroplet {
+    /// Removal deletes every credential Tracklog saved, so no account's access
+    /// outlives the droplet. Local history and settings stay, as Droppy keeps
+    /// settings across removal; after a reinstall, activation unlinks each
+    /// connection that has no credential and keeps its listens. Removal is
+    /// never vetoed.
+    func prepareForRemoval() -> Bool {
+        guard host?.environment.isHarness != true else { return true }
+        do {
+            try KeychainCredentialStore().deleteAll()
+        } catch {
+            host?.log.error("Could not delete saved credentials on removal: \(error)")
+        }
+        return true
+    }
+
     func deactivate() {
         exportOperationID = nil
         exportTask?.cancel()

@@ -28,6 +28,10 @@ public final class ScrobbleEngine {
         public var dedupWindow: TimeInterval
         /// Cap on one polling gap, so a stalled feed cannot count as listening.
         public var maxSampleGap: TimeInterval
+        /// A new track first seen playing this far in or less is taken to have
+        /// played from its start, so those seconds count. It matches the
+        /// media feed's slowest poll, which can find a track that late.
+        public var leadIn: TimeInterval
 
         public init(
             scrobblePercent: Double = 0.5,
@@ -37,6 +41,7 @@ public final class ScrobbleEngine {
             settleTime: TimeInterval = 1,
             dedupWindow: TimeInterval = 8,
             maxSampleGap: TimeInterval = 5,
+            leadIn: TimeInterval = 15,
         ) {
             self.scrobblePercent = scrobblePercent
             self.maxThreshold = maxThreshold
@@ -45,6 +50,7 @@ public final class ScrobbleEngine {
             self.settleTime = settleTime
             self.dedupWindow = dedupWindow
             self.maxSampleGap = maxSampleGap
+            self.leadIn = leadIn
         }
     }
 
@@ -118,11 +124,12 @@ public final class ScrobbleEngine {
         }
 
         if session == nil {
+            let inLeadIn = sample.isPlaying && sample.elapsed <= configuration.leadIn
             session = makeSession(
                 sample,
                 submitted: submitted,
                 startedAt: now.addingTimeInterval(-max(0, min(sample.elapsed, 3600))),
-                played: 0,
+                played: inLeadIn ? max(0, sample.elapsed) : 0,
                 at: now,
             )
         }

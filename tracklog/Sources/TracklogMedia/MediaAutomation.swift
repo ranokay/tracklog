@@ -2,6 +2,22 @@ import AppKit
 import Foundation
 import TracklogCore
 
+/// Asks for Automation lazily, through the host, and remembers a denial.
+///
+/// The production gate lives in the droplet because only it holds
+/// `host.permissions` and `host.preferences`. The arbiter asks this gate only
+/// at the first moment the fallback is needed, never at activation.
+@MainActor
+public protocol MediaAutomationPermissionGate: AnyObject {
+    /// Reads the current decision without prompting. A remembered denial is
+    /// reported as `.denied` even when TCC would ask again.
+    func authorization() -> MediaStatus.AutomationState
+    /// Asks the host for the permission. Only called from a fallback.
+    func requestAuthorization() async -> MediaStatus.AutomationState
+    /// Persists a denial so a later launch does not prompt again.
+    func rememberDenial()
+}
+
 /// One scriptable player the Automation fallback may probe.
 public struct MediaAutomationCandidate: Equatable, Sendable {
     public let bundleID: String

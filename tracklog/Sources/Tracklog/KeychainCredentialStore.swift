@@ -6,9 +6,17 @@ import TracklogCore
 /// application-owned credential. The connection's local id is the account, so
 /// nothing about the service account is in the Keychain attributes.
 struct KeychainCredentialStore: CredentialStore {
+    /// Named after the droplet id, as Droppy asks, and scoped to the host
+    /// app. Droppy and Droppy Playground keep separate databases, so one
+    /// connection id names different connections in each, and an item one app
+    /// made makes the other ask for the login password.
+    static var hostService: String {
+        "droplet.tracklog." + (Bundle.main.bundleIdentifier ?? "host")
+    }
+
     private let service: String
 
-    init(service: String = "app.tracklog.credentials") {
+    init(service: String = Self.hostService) {
         self.service = service
     }
 
@@ -88,6 +96,31 @@ struct KeychainCredentialStore: CredentialStore {
             guard addStatus == errSecSuccess else {
                 throw KeychainCredentialError(status: addStatus)
             }
+        default:
+            throw KeychainCredentialError(status: status)
+        }
+    }
+
+    /// Deletes every item under this service, one account at a time: on the
+    /// login keychain a `SecItemDelete` that matches several items removes
+    /// only one of them.
+    func deleteAll() throws {
+        let query = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecMatchLimit: kSecMatchLimitAll,
+            kSecReturnAttributes: true,
+        ] as [CFString: Any]
+        var items: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &items)
+        switch status {
+        case errSecSuccess:
+            let accounts = (items as? [[String: Any]] ?? []).compactMap { $0[kSecAttrAccount as String] as? String }
+            for account in accounts {
+                try remove(account: account)
+            }
+        case errSecItemNotFound:
+            return
         default:
             throw KeychainCredentialError(status: status)
         }
