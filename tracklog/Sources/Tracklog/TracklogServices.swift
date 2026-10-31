@@ -81,8 +81,7 @@ struct TracklogServicesPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Last.fm app credentials")
                     Text(
-                        "Use your own API key and shared secret when the built-in pair is "
-                            + "missing or rejected by Last.fm.",
+                        "Save your Last.fm API key and shared secret before signing in.",
                     )
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
@@ -101,7 +100,7 @@ struct TracklogServicesPage: View {
                                                  ? "Last.fm app credentials"
                                                  : "Set up Last.fm app credentials",
                                              subtitle: state.lastFMOverridePresent
-                                                 ? "Stored in the Keychain and used instead of the built-in pair."
+                                                 ? "Stored in the Keychain and used for Last.fm requests."
                                                  : "Add your own API key and shared secret.",
                                              page: tracklogLastFMAppCredentialsPageID) {
                         SettingsLinkTile(systemImage: "key")

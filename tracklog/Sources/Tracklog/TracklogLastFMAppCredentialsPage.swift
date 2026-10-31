@@ -4,7 +4,7 @@ import TracklogCore
 
 /// The nested Last.fm application-credentials page under Services.
 ///
-/// It reports whether the compiled pair and a Keychain override exist, never
+/// It reports whether user-supplied credentials exist in the Keychain, never
 /// shows a saved value back, and saves a candidate only after Last.fm accepts
 /// it. Saving or removing a pair signs every Last.fm connection out; the page
 /// says so before the control is used.
@@ -35,11 +35,7 @@ struct TracklogLastFMAppCredentialsPage: View {
     }
 
     private var overrideSavedText: String {
-        if state.lastFMCompiledCredentialsPresent {
-            return "Enter both values again to replace it, or remove it to go back to the "
-                + "built-in pair."
-        }
-        return "Enter both values again to replace it, or remove it. Removing leaves Last.fm "
+        "Enter both values again to replace it, or remove it. Removing leaves Last.fm "
             + "without app credentials until you save another pair."
     }
 
@@ -49,21 +45,15 @@ struct TracklogLastFMAppCredentialsPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Current credentials")
                     Text(
-                        "Tracklog signs every Last.fm request with its own application key and "
-                            + "shared secret. If you registered your own Last.fm API application, "
-                            + "save its pair here to use it instead.",
+                        "Register a Last.fm API application and save its API key and shared "
+                            + "secret here before signing in.",
                     )
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 }
             } content: {
                 DropletSettingsCard {
-                    DropletControlRow(title: "Built-in credentials") {
-                        DropletValuePill(
-                            text: state.lastFMCompiledCredentialsPresent ? "Available" : "Missing",
-                        )
-                    }
-                    DropletControlRow(title: "Your override") {
+                    DropletControlRow(title: "Your credentials") {
                         DropletValuePill(
                             text: state.lastFMOverridePresent ? "Saved in the Keychain" : "Not set",
                         )
@@ -111,7 +101,7 @@ struct TracklogLastFMAppCredentialsPage: View {
         } content: {
             DropletSettingsCard {
                 if state.lastFMOverridePresent {
-                    DropletStackedRow(title: "Override saved") {
+                    DropletStackedRow(title: "Credentials saved") {
                         Text(overrideSavedText)
                             .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -135,13 +125,13 @@ struct TracklogLastFMAppCredentialsPage: View {
                 DropletControlRow(title: "Save") {
                     HStack(spacing: DroppySpacing.sm) {
                         if state.lastFMOverridePresent {
-                            Button("Remove override") {
+                            Button("Remove credentials") {
                                 remove()
                             }
                             .buttonStyle(DroppyQuietButtonStyle(size: .small))
                             .disabled(isWorking)
                         }
-                        Button(isSaving ? "Checking…" : "Save override") {
+                        Button(isSaving ? "Checking…" : "Save credentials") {
                             save()
                         }
                         .buttonStyle(DroppyAccentButtonStyle(size: .small))

@@ -26,8 +26,8 @@
     "gitlab": "ranokay"
   },
   "source": {
-    "repository": "https://gitlab.com/droppyformac1/droplets/-/tree/main/droplets/tracklog",
-    "license": "MIT"
+    "repository": "https://github.com/ranokay/tracklog",
+    "license": "Apache-2.0"
   },
   "screenshots": [],
   "keywords": [

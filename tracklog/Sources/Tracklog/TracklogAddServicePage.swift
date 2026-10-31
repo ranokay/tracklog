@@ -158,7 +158,7 @@ struct TracklogAddServicePage: View {
         if let problem = state.lastFMAppCredentialProblem {
             return problem.detail
         }
-        return "The built-in Last.fm app credentials are missing. "
+        return "Last.fm app credentials are not set. "
             + "Save your own API key and shared secret before signing in."
     }
 

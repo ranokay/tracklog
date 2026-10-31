@@ -9,7 +9,7 @@ the notch, the shelf, the lock screen and the menu bar.
 
 - Droplet id: `tracklog`. It is also `TracklogDroplet.id` in Swift and `id` in `droplet.json`; the three must agree or the loader refuses the bundle.
 - Swift product: `Tracklog`, a dynamic library. The harness target is `TracklogHarness`.
-- SDK checkout: `/Users/ranokay/Developer/droppykit` (DroppyKit 1.20.1). Docs online: https://getdroppy.app/docs/droppykit
+- SDK checkout: set `DROPPYKIT_ROOT` to your local checkout and add its `Scripts` directory to PATH (see [setup](README.md#sdk-setup)). The package requires DroppyKit 1.20.1 or compatible later 1.x. Docs online: https://getdroppy.app/docs/droppykit
 - Host: Droppy 15.3 or later, which runs an unsigned bundle once its user approves that build under Settings, Store, Local droplets and asks again each time it opens, or the free Droppy Playground (https://getdroppy.app/download/playground), which loads unsigned bundles without asking.
 
 ## The loop
@@ -35,7 +35,7 @@ validate and then draw nothing, so a green build is not the end.
 With the DroppyKit MCP server connected, the same steps are the tools `droppykit_build`,
 `droppykit_validate`, `droppykit_shots` and `droppykit_install`, and `droppykit_shots`
 returns the images inline. This package carries the server in `.mcp.json` (Claude Code)
-and `.cursor/mcp.json` (Cursor). Codex: `codex mcp add droppykit -- /Users/ranokay/Developer/droppykit/Scripts/droppykit mcp`.
+and `.cursor/mcp.json` (Cursor). Open this package as the client workspace. Codex: `codex mcp add droppykit -- droppykit mcp --package .`.
 The other tools are `droppykit_manifest` (a static check, no build), `droppykit_docs`
 (the guides and a search over the SDK sources), `droppykit_doctor`, `droppykit_new`,
 `droppykit_open_harness` and `droppykit_submit`.
@@ -140,25 +140,25 @@ package pins; `droppykit update` moves both to the newest release. A build that 
   the oldest DroppyKit API the droplet actually calls. `droppykit build` fails when it is
   older than that and names the calls and the version to set; set that version, never
   lower it to get a droplet loaded.
-- **Do not edit anything under `/Users/ranokay/Developer/droppykit`.** That is the SDK checkout; fixes there go
+- **Do not edit anything under `$DROPPYKIT_ROOT`.** That is the SDK checkout; fixes there go
   upstream. This package is where the work is.
 
 ## Where the truth is
 
 Read these before guessing at an API. They are on disk, in the SDK checkout.
 
-- Guides, as Markdown: `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/Documentation.docc/`
+- Guides, as Markdown: `$DROPPYKIT_ROOT/Sources/DroppyKit/Documentation.docc/`
   `CreateYourFirstDroplet.md`, `DropletSetup.md`, `DesignGuidelines.md`, `ShelfWidgets.md`,
   `LiveActivities.md`, `ExpandedSurfaces.md`, `SettingsPanes.md`, `Icons.md`, `Harness.md`,
   `HostSupport.md`, `Playground.md`, `Submitting.md`, and `BuildWithCodingAgents.md` for this
   workflow in full.
-- The surface protocols, one file each: `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/Capabilities/`
-- The host services a droplet calls: `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/Services/DropletServices.swift`
-  and `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/Core/DropletHost.swift`
-- The manifest type, with every field documented: `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/Bundle/DropletManifest.swift`
-- Design tokens and the settings components: `/Users/ranokay/Developer/droppykit/Sources/DroppyKit/DesignSystem/`
-- A complete droplet that uses every surface: `/Users/ranokay/Developer/droppykit/Examples/WorldClock/`
-- The compatibility promise and the version ledger: `/Users/ranokay/Developer/droppykit/COMPATIBILITY.md`
+- The surface protocols, one file each: `$DROPPYKIT_ROOT/Sources/DroppyKit/Capabilities/`
+- The host services a droplet calls: `$DROPPYKIT_ROOT/Sources/DroppyKit/Services/DropletServices.swift`
+  and `$DROPPYKIT_ROOT/Sources/DroppyKit/Core/DropletHost.swift`
+- The manifest type, with every field documented: `$DROPPYKIT_ROOT/Sources/DroppyKit/Bundle/DropletManifest.swift`
+- Design tokens and the settings components: `$DROPPYKIT_ROOT/Sources/DroppyKit/DesignSystem/`
+- A complete droplet that uses every surface: `$DROPPYKIT_ROOT/Examples/WorldClock/`
+- The compatibility promise and the version ledger: `$DROPPYKIT_ROOT/COMPATIBILITY.md`
 
 ## Surfaces
 
@@ -196,7 +196,7 @@ Tracklog.icon/                 placeholder icon for the harness; Jordy designs t
 Assets/Creator.png                square creator avatar, at least 256px, required
 .build/Tracklog.droplet        what droppykit build writes
 AGENTS.md, CLAUDE.md, .cursor/    this brief and the agent wiring
-.mcp.json, .cursor/mcp.json       the DroppyKit MCP server; absolute paths for this Mac
+.mcp.json, .cursor/mcp.json       the DroppyKit MCP server; uses droppykit on PATH and this package workspace
 ```
 
 ## Submitting
