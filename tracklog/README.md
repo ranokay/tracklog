@@ -49,6 +49,7 @@ mise run format      # apply SwiftFormat fixes
 ```
 
 ```bash
+cd tracklog          # from the repository root
 droppykit run        # open the droplet in Droppy's harness
 droppykit build      # produce Tracklog.droplet
 droppykit validate   # the checks the Store repository runs
