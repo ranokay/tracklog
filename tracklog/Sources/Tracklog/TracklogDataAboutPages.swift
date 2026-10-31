@@ -117,8 +117,8 @@ struct TracklogAboutPage: View {
                     DropletValuePill(text: droplet.dropletVersion)
                 }
                 DropletControlRow(title: "Licence") {
-                    Button("MIT") {
-                        droplet.openURL("https://opensource.org/license/mit") // NOSONAR: public licence link
+                    Button("Apache-2.0") {
+                        droplet.openURL("https://www.apache.org/licenses/LICENSE-2.0") // NOSONAR: public licence link
                     }
                     .buttonStyle(DroppyQuietButtonStyle(size: .small))
                 }

@@ -64,7 +64,7 @@ public protocol LastFMAppCredentialsProviding: Sendable {
 /// Resolves the Keychain override when the user saved one and falls back to
 /// the compiled pair only when no override is stored. A Keychain read failure
 /// is surfaced rather than mistaken for "no override", so a saved pair can
-/// never be silently replaced by the public compiled one. It reads the
+/// never be silently replaced by the unconfigured source-build fallback. It reads the
 /// credential store per request, so a change made on the app-credentials page
 /// takes effect without rebuilding adapters.
 public struct StoredLastFMAppCredentials: LastFMAppCredentialsProviding {

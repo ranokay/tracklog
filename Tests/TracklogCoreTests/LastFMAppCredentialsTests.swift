@@ -5,6 +5,31 @@ import Testing
 @Suite("Last.fm app credentials")
 @MainActor
 struct LastFMAppCredentialsTests {
+    @Test func aSourceBuildRequiresOwnCredentialsBeforeSendingRequests() async throws {
+        let store = MemoryCredentialStore()
+        let transport = ScriptedTransport([lastFMTokenResponse()])
+        let adapter = LastFMAdapter(
+            transport: transport,
+            appCredentials: StoredLastFMAppCredentials(credentialStore: store),
+        )
+
+        await #expect(throws: LastFMError.missingAppCredentials) {
+            _ = try await adapter.requestToken()
+        }
+        #expect(await transport.requests.isEmpty)
+
+        let pair = try #require(
+            LastFMAppCredentialOverride(validating: "source-key", sharedSecret: "source-secret"),
+        )
+        try await store.saveLastFMAppCredentialOverride(pair)
+        _ = try await adapter.requestToken()
+
+        let request = try #require(await transport.requests.first)
+        let params = formParameters(request)
+        #expect(params["api_key"] == "source-key")
+        #expect(params["api_sig"] == signedParameters(params, secret: "source-secret"))
+    }
+
     @Test func anOverrideRoundTripsThroughTheOneAppCredentialSlot() async throws {
         let store = MemoryCredentialStore()
         let override = try #require(

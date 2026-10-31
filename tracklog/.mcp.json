@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "droppykit": {
-      "command": "/Users/ranokay/Developer/droppykit/Scripts/droppykit",
+      "command": "droppykit",
       "args": [
         "mcp",
         "--package",
-        "/Users/ranokay/Downloads/workspaces/tracklog/tracklog"
+        "."
       ]
     }
   }

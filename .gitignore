@@ -5,3 +5,8 @@ shots/
 Package.resolved
 
 .vscode/
+# Local credentials and review artifacts
+.env
+.env.*
+lastfm.json
+.scratch/

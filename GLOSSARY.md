@@ -10,7 +10,7 @@ The protocol family a connection speaks: Last.fm, Libre.fm/GNU FM, ListenBrainz,
 
 ## App credentials
 
-The Last.fm application's API key and shared secret, which sign every request. Tracklog compiles in the project's own public pair; a listener may save an override in the Keychain, and the override takes precedence. The pair is never shown back, written to the database, logged or exported. Changing it invalidates every Last.fm session, so every Last.fm connection becomes needs sign-in and its pending deliveries are held until it reconnects.
+The Last.fm application's API key and shared secret, which sign every request. Source builds contain no application pair. A listener saves their own pair in the Keychain before signing in; the credential provider reads that pair for each request. The pair is never shown back, written to the database, logged or exported. Changing it invalidates every Last.fm session, so every Last.fm connection becomes needs sign-in and its pending deliveries are held until it reconnects.
 
 ## Identity
 

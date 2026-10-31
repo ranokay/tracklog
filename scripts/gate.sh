@@ -14,6 +14,11 @@ if ! command -v hk >/dev/null 2>&1; then
     exit 1
 fi
 
+echo "==> license resources"
+for notice in LICENSE NOTICE THIRD_PARTY_NOTICES.txt; do
+    cmp "$notice" "tracklog/Assets/Licenses/$notice"
+done
+
 echo "==> lint"
 hk check --all
 

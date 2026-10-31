@@ -1,0 +1,81 @@
+DroppyKit SDK and scaffold material
+==================================
+Upstream: https://gitlab.com/droppyformac1/droppykit
+License inspected at revision: 3d728a7981975714057650f80639c1e27d512fdb
+Tracklog declares a compatible version range starting at 1.20.1. This notice
+records the locally resolved revision; later SDK versions retain their own terms.
+
+DroppyKit is an external dependency, not Tracklog-owned Apache-2.0 software.
+The SDK-generated developer instructions and scaffold material retain the SDK's
+terms where applicable. Assets/Creator.png and Tracklog.icon/Assets/mark.png
+are SDK-generated placeholders used for SDK-dependent development and builds.
+They are not Tracklog-owned Apache-2.0 artwork. No rights to Droppy or DroppyKit
+names or logos are granted by Tracklog's license.
+
+DroppyKit SDK License 1.0
+
+Copyright (c) 2026 Jordy Spruit. All rights reserved.
+
+1. Definitions.
+   "SDK" means this software and its documentation, in source or built form,
+   including the DroppyKit module, the development harness, the scripts, the
+   examples, and the docs. "Droppy" means the Droppy application for macOS
+   published by the copyright holder. "Droplet" means a plug-in bundle for
+   Droppy built with the SDK.
+
+2. License grant. Subject to the terms below, you are granted a worldwide,
+   royalty-free, non-exclusive, non-transferable license to:
+   a. view, use, and modify the SDK solely to develop, test, and distribute
+      Droplets for Droppy;
+   b. compile the SDK and link Droplets against it as part of that
+      development;
+   c. redistribute parts of the SDK only to the extent a Droplet's build or
+      submission technically requires;
+   d. fork the SDK on its official hosting solely to prepare contributions
+      back to it.
+
+3. Your Droplets are yours. This license claims no rights over the code,
+   assets, or ideas in Droplets you create. Only the SDK itself is covered
+   by these terms.
+
+4. Restrictions. Except as section 2 expressly allows, you may not:
+   a. use the SDK, in whole or in part, in or with any software other than
+      Droppy;
+   b. incorporate the SDK or substantial portions of it into another SDK,
+      framework, library, application, or service;
+   c. redistribute, sublicense, sell, rent, or publicly mirror the SDK,
+      modified or unmodified;
+   d. use the SDK to develop, or to assist in developing, a product that
+      replaces or competes with Droppy or its notch, island, shelf, or HUD
+      surfaces;
+   e. remove or alter this license, the copyright notice, or attribution
+      notices in the SDK.
+
+5. Contributions. By submitting a contribution to the SDK you license it to
+   the copyright holder under this license, and you additionally grant the
+   copyright holder a perpetual, irrevocable, worldwide right to use,
+   modify, relicense, and incorporate it into Droppy, the SDK, and related
+   products under any terms.
+
+6. Trademarks. This license grants no rights to the "Droppy" or "DroppyKit"
+   names, logos, or related marks. Droplet names must not suggest they are
+   published by Droppy itself.
+
+7. Termination. Your rights end automatically if you breach this license.
+   For a first breach, your rights are reinstated if you cure the breach
+   within 30 days of becoming aware of it. Sections 3, 5, 6, 8, and 9
+   survive termination.
+
+8. Disclaimer of warranty. THE SDK IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+   ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+   NON-INFRINGEMENT.
+
+9. Limitation of liability. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE
+   FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT, OR
+   OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SDK OR ITS
+   USE.
+
+10. Prior versions. SDK releases tagged v0.7.0 and earlier were published
+    under the Apache License, Version 2.0, and remain available under that
+    license. This license governs all later revisions and releases.
