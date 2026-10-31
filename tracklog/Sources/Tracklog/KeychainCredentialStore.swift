@@ -103,7 +103,8 @@ struct KeychainCredentialStore: CredentialStore {
 
     /// Deletes every item under this service, one account at a time: on the
     /// login keychain a `SecItemDelete` that matches several items removes
-    /// only one of them.
+    /// only one of them. A failed delete does not stop the others; the first
+    /// failure is thrown once every account has been tried.
     func deleteAll() throws {
         let query = [
             kSecClass: kSecClassGenericPassword,
@@ -116,8 +117,16 @@ struct KeychainCredentialStore: CredentialStore {
         switch status {
         case errSecSuccess:
             let accounts = (items as? [[String: Any]] ?? []).compactMap { $0[kSecAttrAccount as String] as? String }
+            var firstFailure: (any Error)?
             for account in accounts {
-                try remove(account: account)
+                do {
+                    try remove(account: account)
+                } catch {
+                    firstFailure = firstFailure ?? error
+                }
+            }
+            if let firstFailure {
+                throw firstFailure
             }
         case errSecItemNotFound:
             return

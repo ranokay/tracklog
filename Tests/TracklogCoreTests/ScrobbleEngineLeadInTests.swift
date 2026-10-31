@@ -27,8 +27,9 @@ struct ScrobbleEngineLeadInTests {
         let engine = ScrobbleEngine()
         var effects: [ScrobbleEffect] = []
 
-        // The quiet cadence finds the track 14 seconds after it started.
-        for second in stride(from: 14.0, through: 40.0, by: 2.0) {
+        // A 15-second quiet poll and a slow helper read find the track 16
+        // seconds after it started.
+        for second in stride(from: 16.0, through: 40.0, by: 2.0) {
             effects += engine.ingest(sample(track, at: second, elapsed: second))
         }
 
@@ -45,7 +46,7 @@ struct ScrobbleEngineLeadInTests {
     @Test func aTrackFirstSeenPastItsLeadInCountsOnlyWhatPlaysAfter() {
         let engine = ScrobbleEngine()
 
-        _ = engine.ingest(sample(Track(title: "Track", duration: 200), at: 0, elapsed: 16))
+        _ = engine.ingest(sample(Track(title: "Track", duration: 200), at: 0, elapsed: 21))
 
         #expect(engine.status.played == 0)
     }

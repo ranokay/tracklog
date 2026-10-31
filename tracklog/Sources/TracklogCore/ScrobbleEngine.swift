@@ -29,9 +29,9 @@ public final class ScrobbleEngine {
         /// Cap on one polling gap, so a stalled feed cannot count as listening.
         public var maxSampleGap: TimeInterval
         /// A new track first seen playing this far in or less is taken to have
-        /// played from its start, so those seconds count. It matches the
-        /// media feed's slowest poll, which can find a track that late.
-        public var leadIn: TimeInterval = 15
+        /// played from its start, so those seconds count. It is the media
+        /// feed's slowest poll, 15 seconds, plus room for a slow helper read.
+        public var leadIn: TimeInterval = 20
 
         public init(
             scrobblePercent: Double = 0.5,

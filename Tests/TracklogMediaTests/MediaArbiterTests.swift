@@ -55,6 +55,13 @@ struct MediaArbiterTests {
         #expect(await arbiter.pollOnce().interval == .seconds(5), "a new quiet stretch starts over")
     }
 
+    @Test func theQuietCadenceFindsATrackInsideTheEngineLeadIn() {
+        let quiet = TimeInterval(MediaArbiter.quietInterval.components.seconds)
+        let slowReadAllowance: TimeInterval = 5
+
+        #expect(quiet + slowReadAllowance <= ScrobbleEngine.Configuration().leadIn)
+    }
+
     @Test func theRunningLoopUsesTheAdaptiveCadence() async {
         let helper = FakeHelper(results: [.sample(playingSample()), .empty])
         var sleeps: [Duration] = []
