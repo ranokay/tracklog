@@ -980,7 +980,94 @@ struct ChartServiceTests {
         #expect(state.listens.contains { $0.processed.title == "Last.fm Continuity" })
     }
 
+    @Test func lastFMAllTimeRowsStayReadyWhenTheAccountTotalFails() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                return lastFMChartResponse(type: .artists, rows: [("Blondie", "", 42, "artist-mbid")])
+            case "user.getInfo":
+                if await flags.isFailing() {
+                    return HTTPResponse(statusCode: 500, body: Data())
+                }
+                return lastFMUserInfoResponse(playcount: 9_999)
+            default:
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        let infoAfterLink = await lastFMUserInfoRequestCount(transport)
+
+        await flags.setFailing(true)
+        await runtime.charts?.show()
+        #expect(state.chartState.phase == .ready)
+        let snapshot = try #require(state.chartState.snapshot)
+        #expect(snapshot.items.first?.title == "Blondie")
+        #expect(snapshot.items.first?.identityKey == "mbid:artist-mbid")
+        #expect(snapshot.countUnit == .plays)
+        #expect(snapshot.localTotal == nil, "Last.fm never invents a list-derived period total")
+        #expect(state.chartState.totals == .unavailable(.accountTotal(.offline)))
+        #expect(state.chartState.totalFailure == .offline)
+        let infoAfterFailedTotal = await lastFMUserInfoRequestCount(transport)
+        #expect(infoAfterFailedTotal == infoAfterLink + 1, "the list succeeded with one failed total attempt")
+        let topAfterShow = await lastFMTopRequestCount(transport)
+        #expect(topAfterShow == 1)
+
+        clock.advance(to: now.addingTimeInterval(ChartFreshness.interval))
+        #expect(await chartWaitUntil {
+            state.chartState.snapshot?.savedAt == clock.now
+        }, "the healthy list refreshed at its own deadline")
+        let topAfterAutomatic = await lastFMTopRequestCount(transport)
+        #expect(topAfterAutomatic == topAfterShow + 1)
+        #expect(
+            await lastFMUserInfoRequestCount(transport) == infoAfterFailedTotal,
+            "the failed account total was not retried automatically",
+        )
+        #expect(state.chartState.totals == .unavailable(.accountTotal(.offline)))
+        #expect(state.chartState.totalFailure == .offline)
+        #expect(state.chartState.snapshot?.items.first?.identityKey == "mbid:artist-mbid")
+
+        await flags.setFailing(false)
+        await runtime.charts?.refresh()
+        #expect(await lastFMUserInfoRequestCount(transport) == infoAfterFailedTotal + 1)
+        #expect(await lastFMTopRequestCount(transport) == topAfterAutomatic + 1)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 9_999,
+            serviceName: "Last.fm",
+            savedAt: clock.now,
+        )))
+        #expect(state.chartState.totalFailure == nil)
+        #expect(state.chartState.phase == .ready)
+        #expect(
+            state.chartState.snapshot?.items.first?.identityKey == "mbid:artist-mbid",
+            "manual recovery keeps the provider list identity",
+        )
+        #expect(state.chartState.snapshot?.localTotal == nil)
+    }
+
     // MARK: - Helpers
+
+    private func lastFMUserInfoRequestCount(_ transport: ChartHTTPTransport) async -> Int {
+        await transport.recordedRequests.filter { chartMethod($0) == "user.getInfo" }.count
+    }
+
+    private func lastFMTopRequestCount(_ transport: ChartHTTPTransport) async -> Int {
+        await transport.recordedRequests.filter(chartIsLastFMTopRequest).count
+    }
 
     private struct ServiceRead {
         let state: TracklogAppState

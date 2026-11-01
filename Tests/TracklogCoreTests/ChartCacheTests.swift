@@ -1352,7 +1352,6 @@ struct ChartCacheTests {
         #expect(state.chartState.snapshot == original, "the failed refresh kept the saved rows and age")
         #expect(state.chartState.snapshot?.savedAt == original.savedAt)
         #expect(state.chartState.phase == .ready)
-        #expect(clock.sleeperCount == 0, "a failed scheduled refresh does not arm another wake")
 
         let requestsAfterFailure = await chartStatsRequestCount(transport)
         clock.advance(to: now.addingTimeInterval(2 * ChartFreshness.interval))
@@ -1361,6 +1360,158 @@ struct ChartCacheTests {
             await chartStatsRequestCount(transport) == requestsAfterFailure,
             "a failed scheduled refresh is not retried by another clock advance",
         )
+    }
+
+    @Test func anAutomaticTotalRefreshDoesNotRetryAFailedList() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let original = try #require(state.chartState.snapshot)
+        #expect(await chartStatsRequestCount(transport) == 1)
+        #expect(await chartAccountTotalRequestCount(transport) == 1)
+
+        clock.advance(to: now.addingTimeInterval(5 * 60))
+        await flags.setFailing(true)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.snapshot == original, "the failed list keeps its original rows and age")
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+        let statsAfterFailure = await chartStatsRequestCount(transport)
+        let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
+
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        #expect(await chartWaitUntil {
+            if case let .account(total) = state.chartState.totals {
+                return total.savedAt == clock.now
+            }
+            return false
+        }, "the healthy total reached its own deadline")
+        #expect(
+            await chartStatsRequestCount(transport) == statsAfterFailure,
+            "the total's automatic refresh did not retry the failed list",
+        )
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 1)
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+
+        clock.advance(to: now.addingTimeInterval(35 * 60))
+        #expect(await chartWaitUntil {
+            if case let .account(total) = state.chartState.totals {
+                return total.savedAt == clock.now
+            }
+            return false
+        }, "the total's next deadline still refreshes independently")
+        #expect(
+            await chartStatsRequestCount(transport) == statsAfterFailure,
+            "a second total deadline still does not retry the failed list",
+        )
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 2)
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+
+        await flags.setFailing(false)
+        await runtime.charts?.refresh()
+        #expect(await chartStatsRequestCount(transport) == statsAfterFailure + 1)
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+    }
+
+    @Test func anAutomaticListRefreshDoesNotRetryAFailedTotal() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let originalTotal: ChartAccountTotal
+        if case let .account(total) = state.chartState.totals {
+            originalTotal = total
+        } else {
+            #expect(Bool(false), "expected an account total")
+            return
+        }
+        #expect(await chartStatsRequestCount(transport) == 1)
+        #expect(await chartAccountTotalRequestCount(transport) == 1)
+
+        clock.advance(to: now.addingTimeInterval(5 * 60))
+        await flags.setFailingTotal(true)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.totals == .account(originalTotal), "the failed total keeps its original saved age")
+        #expect(state.chartState.totalFailure == .offline)
+        let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
+
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        #expect(await chartWaitUntil {
+            state.chartState.snapshot?.savedAt == clock.now
+        }, "the healthy list reached its own deadline")
+        #expect(
+            await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
+            "the list's automatic refresh did not retry the failed total",
+        )
+        #expect(state.chartState.totals == .account(originalTotal))
+        #expect(state.chartState.totalFailure == .offline)
+
+        clock.advance(to: now.addingTimeInterval(35 * 60))
+        #expect(await chartWaitUntil {
+            state.chartState.snapshot?.savedAt == clock.now
+        }, "the list's next deadline still refreshes independently")
+        #expect(
+            await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
+            "a second list deadline still does not retry the failed total",
+        )
+        #expect(state.chartState.totals == .account(originalTotal))
+        #expect(state.chartState.totalFailure == .offline)
+
+        await flags.setFailingTotal(false)
+        await runtime.charts?.refresh()
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 1)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+        #expect(state.chartState.totalFailure == nil)
     }
 
     @Test func hidingStopsTheFreshnessWakeAndShowingAgainRefreshes() async throws {
@@ -1637,20 +1788,6 @@ struct ChartCacheTests {
     ) async -> Bool {
         let deadline = ContinuousClock.now.advanced(by: timeout)
         while await chartStatsRequestCount(transport) < target {
-            if ContinuousClock.now >= deadline {
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return true
-    }
-
-    private func chartWaitUntil(
-        timeout: Duration = .seconds(5),
-        _ condition: () -> Bool,
-    ) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        while !condition() {
             if ContinuousClock.now >= deadline {
                 return false
             }
