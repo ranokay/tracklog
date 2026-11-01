@@ -152,10 +152,16 @@ actor ChartHoldGate {
         await withCheckedContinuation { held.append($0) }
     }
 
-    func waitUntilEntered(_ count: Int = 1) async {
+    @discardableResult
+    func waitUntilEntered(_ count: Int = 1, timeout: Duration = .seconds(5)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while entered < count {
-            await Task.yield()
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(10))
         }
+        return true
     }
 
     func release() {

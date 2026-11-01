@@ -49,7 +49,7 @@ struct TakeoverHeader: View {
     let width: CGFloat
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        HStack(alignment: .center, spacing: 0) {
             Picker(
                 "Sections",
                 selection: Binding(
@@ -64,15 +64,17 @@ struct TakeoverHeader: View {
             .controlSize(.small)
             .labelsHidden()
             .frame(width: 164)
-            .padding(.leading, DroppySpacing.xl)
             .accessibilityLabel(Text("Sections"))
+
+            Spacer(minLength: DroppySpacing.md)
 
             if state.takeoverSection == .charts {
                 connectionSwitcher
                     .frame(width: 208, alignment: .trailing)
-                    .offset(x: max(0, width - DroppySpacing.xl - 208))
             }
         }
+        .padding(.leading, DroppySpacing.xl)
+        .padding(.trailing, DroppySpacing.xl)
         .frame(width: width, height: 36, alignment: .topLeading)
     }
 
@@ -83,6 +85,7 @@ struct TakeoverHeader: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .lineLimit(1)
+                .padding(.trailing, DroppySpacing.md)
                 .frame(width: 208, alignment: .trailing)
                 .accessibilityLabel(Text("Current connection, none"))
         } else {
