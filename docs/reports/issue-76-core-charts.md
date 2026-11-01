@@ -28,14 +28,14 @@
 
 Headless shots were rendered after build and each report had `problems: []`:
 
-`charts-normal`, `charts-loading`, `charts-empty`, `charts-not-ready`, `charts-failed`, `charts-failed-saved`, `charts-long-names`, `charts-no-connection`, `charts-local`, `charts-libre-fallback`, `charts-all-time`, `charts-paused`, `charts-off`, `charts-settings`.
+`charts-normal`, `charts-loading`, `charts-empty`, `charts-not-ready`, `charts-failed`, `charts-failed-saved`, `charts-long-names`, `charts-no-connection`, `charts-local`, `charts-libre-fallback`, `charts-all-time`, `charts-paused`, `charts-off`, `charts-idle`, `charts-settings`.
 
 The running harness was also driven through its accessibility tree:
 
 - Opening the surface with no chart override showed **History first**.
 - Switching Charts → On this Mac → Albums → Month changed the visible heading and rows through the real read model.
 - The current-connection read switcher remained at the trailing edge of the section row; source, type and period controls exposed selected states.
-- Paused and off turns the pinned strip into the state bar while Charts remains visible.
+- Paused and off turns the pinned strip into the state bar while Charts remains visible; with no playback the strip is absent.
 - Row accessibility labels are `Rank 1, Blondie, 42 plays` (or listens), with source/period as the value; source/type/period choices expose `Selected` and section controls are a native radio group.
 - The Charts Settings page renders through `TRACKLOG_HARNESS_SETTINGS_PAGE=charts`.
 
