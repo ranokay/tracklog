@@ -39,7 +39,7 @@ Headless shots were rendered after build and each report had `problems: []`:
 
 `charts-normal`, `charts-loading`, `charts-empty`, `charts-not-ready`, `charts-failed`, `charts-failed-saved`, `charts-long-names`, `charts-no-connection`, `charts-local`, `charts-libre-fallback`, `charts-all-time`, `charts-all-time-total-failed`, `charts-paused`, `charts-off`, `charts-idle`, `charts-contrast`, `charts-settings`.
 
-The harness shot width is fixed at 1180, which crops about 19 points from the right edge of the 899-point takeover stage. Full-width native window screenshots were therefore captured at 1320 points and inspected for normal, long names, failed, ListenBrainz not-ready, All-time total failure, local mode and Custom Settings: `docs/reports/issue-76/live-*.png`. The headless pair still shows both hardware styles; the live screenshots show the full-width running window.
+The harness shot width is fixed at 1180, which crops about 19 points from the right edge of the 899-point takeover stage. Full-width native window screenshots were therefore captured at 1320 points and inspected for normal, long names, failed, ListenBrainz not-ready, All-time total failure, local mode, no connection and Custom Settings: `docs/reports/issue-76/live-*.png`. The headless pair still shows both hardware styles; the live screenshots show the full-width running window.
 
 The running harness was also driven through its accessibility tree:
 
