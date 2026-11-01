@@ -25,6 +25,8 @@ public final class ChartReadModel {
     private var refreshTaskIsForced = false
     private var pendingForcedRefresh: UUID?
     private var artworkTask: Task<Void, Never>?
+    private var freshnessTask: Task<Void, Never>?
+    private var freshnessToken: UUID?
     private var activeToken: UUID?
     private var currentScopeKey: String?
     private var lastConnectionKey = "none"
@@ -89,6 +91,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         removeObservers()
@@ -116,6 +119,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         state.chartState.isRefreshing = false
@@ -135,6 +139,7 @@ public final class ChartReadModel {
         refreshTask = nil
         refreshTaskIsForced = false
         pendingForcedRefresh = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         state.chartState.snapshot = nil
@@ -233,6 +238,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         state.chartState = ChartViewState(selection: selection)
@@ -256,6 +262,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         state.chartState = ChartViewState(selection: new)
@@ -263,6 +270,7 @@ public final class ChartReadModel {
 
     private func load(force: Bool) async {
         guard isActive, isShowing else { return }
+        defer { rescheduleFreshnessWake() }
         normalizeCurrentSelection()
         let request: ChartRequest
         do {
@@ -894,6 +902,57 @@ public final class ChartReadModel {
     private func isStale(_ savedAt: Date?) -> Bool {
         guard let savedAt else { return true }
         return clock.now.timeIntervalSince(savedAt) >= ChartFreshness.interval
+    }
+
+    // MARK: - Freshness
+
+    private func cancelFreshnessWake() {
+        freshnessTask?.cancel()
+        freshnessTask = nil
+        freshnessToken = nil
+    }
+
+    /// Arms exactly one wake for the earliest fresh list or account-total
+    /// deadline. A stale or failed read has no deadline in the future, so it
+    /// never re-arms and cannot become a poll loop. The token and the load's
+    /// own generation checks reject a wake that became obsolete while asleep.
+    private func rescheduleFreshnessWake() {
+        cancelFreshnessWake()
+        guard isActive, isShowing else { return }
+        let now = clock.now
+        var deadlines: [Date] = []
+        if let snapshot = state.chartState.snapshot {
+            let deadline = snapshot.savedAt.addingTimeInterval(ChartFreshness.interval)
+            if deadline > now {
+                deadlines.append(deadline)
+            }
+        }
+        if case let .account(total) = state.chartState.totals {
+            let deadline = total.savedAt.addingTimeInterval(ChartFreshness.interval)
+            if deadline > now {
+                deadlines.append(deadline)
+            }
+        }
+        guard let deadline = deadlines.min() else { return }
+        let clock = clock
+        let token = UUID()
+        freshnessToken = token
+        freshnessTask = Task { [weak self] in
+            do {
+                try await clock.sleep(until: deadline)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  isActive,
+                  isShowing,
+                  freshnessToken == token
+            else { return }
+            freshnessTask = nil
+            freshnessToken = nil
+            await load(force: false)
+        }
     }
 
     private func chartFailure(for error: any Error) -> ChartFailure {
