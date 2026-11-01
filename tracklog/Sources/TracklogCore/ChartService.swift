@@ -38,7 +38,10 @@ public protocol ChartServiceReading: Sendable {
 enum ChartIdentity {
     /// A provider MBID is preferred. Without one, a source-scoped fallback key
     /// still names the row; it is never fed through local metadata merging.
+    /// The source is part of the key so the same named row from another
+    /// service cannot share an identity.
     static func serviceKey(
+        source: ServiceKind,
         providerID: String?,
         type: ChartType,
         title: String,
@@ -50,7 +53,12 @@ enum ChartIdentity {
                 return "mbid:\(trimmed)"
             }
         }
-        return "fallback:\(type.rawValue):\(Identity.joined([title, subtitle]))"
+        return [
+            "fallback",
+            source.rawValue,
+            type.rawValue,
+            Identity.joined([title, subtitle]),
+        ].joined(separator: ":")
     }
 
     static func nextRank(_ index: Int) -> Int {

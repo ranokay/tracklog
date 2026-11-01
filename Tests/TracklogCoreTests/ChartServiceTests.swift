@@ -61,7 +61,7 @@ struct ChartServiceTests {
         #expect(first.title == "Blondie")
         #expect(first.count == 42)
         #expect(second.providerID == nil)
-        #expect(second.identityKey.hasPrefix("fallback:"))
+        #expect(second.identityKey.hasPrefix("fallback:lastfm:"))
         #expect(state.chartState.periodDetail == "Rolling 7 days")
         #expect(ChartCopy.periodLabel(state.chartState, calendar: chartCalendar(utc)) == "Rolling 7 days")
         #expect(ChartCopy.listTitle(type: .artists, period: "Rolling 7 days") == "Top 50 artists · Rolling 7 days")
@@ -106,6 +106,12 @@ struct ChartServiceTests {
         #expect(tracksSnapshot.items.first?.title == "Heart of Glass")
 
         await runtime.charts?.selectType(.artists)
+        let typeRequests = await transport.recordedRequests.filter(chartIsLastFMTopRequest)
+        for method in ["user.getTopArtists", "user.getTopAlbums", "user.getTopTracks"] {
+            let request = try #require(typeRequests.last { chartMethod($0) == method })
+            #expect(formParameters(request)["limit"] == "50")
+            #expect(formParameters(request)["period"] == "7day")
+        }
         await runtime.charts?.selectPeriod(.allTime)
         #expect(state.chartState.periodDetail == "All time")
         #expect(state.chartState.totals == .account(ChartAccountTotal(
@@ -189,6 +195,7 @@ struct ChartServiceTests {
         #expect(snapshot.returnedRange?.end == periodEnd)
         #expect(snapshot.returnedRange?.lastUpdated == updated)
         #expect(second.providerID == nil)
+        #expect(second.identityKey.hasPrefix("fallback:listenbrainz:"))
         #expect(state.chartState.periodDetail == "Previous completed week")
         #expect(ChartCopy.periodLabel(state.chartState, calendar: chartCalendar(utc)) == "Previous completed week")
         #expect(ChartCopy.countUnit(1, .listens) == "listen")
@@ -409,6 +416,516 @@ struct ChartServiceTests {
         _ = try await runtime.link(kind: .listenBrainz, credential: "token")
         await runtime.charts?.show()
         #expect(state.chartState.phase == .failed(.rateLimited(retryAfter: 30)))
+    }
+
+    @Test func lastFMChartPeriodsUseNativeRollingValues() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMChartResponse(type: .artists, rows: [("Blondie", "", 42, "artist-mbid")])
+            case "user.getInfo":
+                lastFMUserInfoResponse(playcount: 9_999)
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+        for period in [ChartPeriod.month, .year, .allTime] {
+            await runtime.charts?.selectPeriod(period)
+        }
+
+        let requests = await transport.recordedRequests.filter(chartIsLastFMTopRequest)
+        #expect(requests.count == 4)
+        #expect(requests.compactMap { formParameters($0)["period"] } == ["7day", "1month", "12month", "overall"])
+        for request in requests {
+            #expect(formParameters(request)["limit"] == "50")
+            #expect(formParameters(request)["user"] == "listener")
+        }
+    }
+
+    @Test func lastFMChartKeepsTheFirstFiftyProviderRows() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let rows: [(String, String, Int, String)] = (0 ..< 51).map { index in
+            (
+                "Artist \(index + 1)",
+                "",
+                index == 1 ? 999 : 100 - index,
+                index == 1 ? "" : "mbid-\(index + 1)",
+            )
+        }
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMChartResponse(type: .artists, rows: rows)
+            case "user.getInfo":
+                lastFMUserInfoResponse()
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+
+        let snapshot = try #require(state.chartState.snapshot)
+        #expect(snapshot.items.count == 50, "the first 50 returned entities are kept")
+        #expect(snapshot.items.map(\.rank) == Array(1 ... 50), "provider rank is preserved")
+        #expect(snapshot.items.first?.title == "Artist 1", "provider order is not re-sorted by count")
+        #expect(snapshot.items.first?.count == 100)
+        #expect(snapshot.items.last?.title == "Artist 50")
+        #expect(!snapshot.items.contains { $0.title == "Artist 51" })
+        let missingID = try #require(snapshot.items.dropFirst().first)
+        #expect(missingID.providerID == nil)
+        #expect(missingID.identityKey.hasPrefix("fallback:lastfm:artists:"))
+    }
+
+    @Test func lastFMChartKeepsProviderRanksAndNamedFallbackIDs() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMChartResponse(
+                    type: .artists,
+                    rows: [("First", "", 1, "mbid-first"), ("Second", "", 999, "")],
+                    ranks: [7, 2],
+                )
+            case "user.getInfo":
+                lastFMUserInfoResponse()
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+
+        let items = try #require(state.chartState.snapshot?.items)
+        #expect(items.map(\.rank) == [7, 2], "the provider's rank is kept, not the array index")
+        #expect(items.first?.title == "First", "provider order is kept even when its count is lower")
+        #expect(items.first?.identityKey == "mbid:mbid-first")
+        #expect(items.dropFirst().first?.providerID == nil)
+        #expect(items.dropFirst().first?.identityKey.hasPrefix("fallback:lastfm:artists:") == true)
+    }
+
+    @Test func lastFMChartRateLimitIsNotOffline() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMErrorResponse(code: 29, message: "Rate limit exceeded")
+            case "user.getInfo":
+                lastFMUserInfoResponse()
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+
+        #expect(state.chartState.phase == .failed(.rateLimited(retryAfter: nil)))
+        #expect(state.chartState.snapshot == nil)
+    }
+
+    @Test func serviceChartsClampTodayAndCustomToWeek() async throws {
+        for period in [ChartPeriod.today, .custom] {
+            let database = try TemporaryDatabase()
+            let now = chartDate(2026, 10, 31, 12)
+            let clock = FakeClock(now)
+            let transport = ChartHTTPTransport { request in
+                switch chartMethod(request) {
+                case "user.getTopArtists":
+                    lastFMChartResponse(type: .artists, rows: [("Blondie", "", 42, "artist-mbid")])
+                case "user.getInfo":
+                    lastFMUserInfoResponse()
+                default:
+                    HTTPResponse(statusCode: 404, body: Data())
+                }
+            }
+            let state = TracklogAppState()
+            let calendarBox = ChartCalendarBox(chartCalendar(utc))
+            let runtime = makeChartRuntime(
+                database: database,
+                clock: clock,
+                transport: transport,
+                state: state,
+                selection: chartSelection(
+                    source: .service,
+                    period: period,
+                    now: now,
+                    calendar: calendarBox.calendar,
+                ),
+                calendarBox: calendarBox,
+            )
+            await runtime.start()
+            _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+            await runtime.charts?.show()
+
+            #expect(state.chartState.selection.period == .week, "\(period) is local-only")
+            let request = try #require(
+                await transport.recordedRequests.last(where: chartIsLastFMTopRequest),
+            )
+            #expect(formParameters(request)["period"] == "7day")
+        }
+    }
+
+    @Test func allTimeListSucceedsWhenTheTotalFails() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            if path.contains("/stats/user/") {
+                return listenBrainzStatsResponse(
+                    type: .artists,
+                    rows: [("Blondie", "", 42, "artist-mbid")],
+                    from: chartDate(2026, 10, 20),
+                    end: chartDate(2026, 10, 27),
+                    lastUpdated: chartDate(2026, 10, 28, 6),
+                )
+            }
+            return HTTPResponse(statusCode: 500, body: Data())
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.totals == .unavailable(.accountTotal(.offline)))
+        #expect(state.chartState.totalFailure == .offline)
+    }
+
+    @Test func allTimeTotalSucceedsWhenTheListFails() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            if path.contains("/stats/user/") {
+                return HTTPResponse(statusCode: 401, body: Data())
+            }
+            if path.contains("listen-count") {
+                return listenBrainzCountResponse(9_876)
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        #expect(state.chartState.phase == .failed(.needsSignIn))
+        #expect(state.chartState.snapshot == nil)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 9_876,
+            serviceName: "ListenBrainz",
+            savedAt: now,
+        )))
+        #expect(state.chartState.totalFailure == nil)
+    }
+
+    @Test func changingTheReadCursorDoesNotChangeDeliveryTargets() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            if chartMethod(request) == "user.getInfo" {
+                return lastFMUserInfoResponse()
+            }
+            if chartMethod(request) == "user.getTopArtists" {
+                return lastFMChartResponse(type: .artists, rows: [("Blondie", "", 42, "artist-mbid")])
+            }
+            if path.contains("/stats/user/") {
+                return listenBrainzStatsResponse(
+                    type: .artists,
+                    rows: [("Talking Heads", "", 30, "artist-mbid-2")],
+                    from: chartDate(2026, 10, 20),
+                    end: chartDate(2026, 10, 27),
+                    lastUpdated: chartDate(2026, 10, 28, 6),
+                )
+            }
+            if path.contains("listen-count") {
+                return listenBrainzCountResponse(500)
+            }
+            if chartMethod(request) == "track.scrobble" {
+                return lastFMScrobbleResponse(codes: [0])
+            }
+            if chartMethod(request) == "track.updateNowPlaying" || path.contains("submit-listens") {
+                return chartJSONResponse(["status": "ok"])
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            scrobblingEnabled: true,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        let brainz = try await runtime.link(kind: .listenBrainz, credential: "token")
+        let lastFM = try await runtime.link(kind: .lastFM, credential: "session-key")
+        try await runtime.setCurrentConnection(lastFM.id)
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+
+        try await runtime.setCurrentConnection(brainz.id)
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.items.first?.title == "Talking Heads")
+        #expect(state.connections.filter(\.isEnabled).count == 2)
+
+        let track = Track(
+            title: "Cursor Continuity",
+            artist: "Blondie",
+            album: "Parallel Lines",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+            clock.now = now.addingTimeInterval(second)
+            await runtime.ingest(MediaSample(
+                track: track,
+                elapsed: second,
+                playbackRate: 1,
+                isPlaying: true,
+                timestamp: clock.now,
+            ))
+        }
+        let listen = try #require(state.listens.first { $0.processed.title == "Cursor Continuity" })
+        let deliveries = try await store.deliveries(for: listen.id ?? -1)
+        #expect(
+            Set(deliveries.map(\.connectionID)) == Set([brainz.id, lastFM.id].compactMap(\.self)),
+            "the chart cursor selected a source, not the delivery target set",
+        )
+    }
+
+    @Test func aLateServiceResponseAfterSourceChangeCannotOverwriteLocalCharts() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let gate = ChartHoldGate()
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let store = try SQLiteListenStore(url: database.url)
+        try await store.insert(chartListen(title: "Local Song", artist: "Local Artist", startedAt: now))
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await gate.startHolding()
+        let show = Task { await runtime.charts?.show() }
+        #expect(await gate.waitUntilEntered(1), "the service read is held")
+        await runtime.charts?.selectSource(.local)
+        #expect(state.chartState.effectiveSource.isLocal)
+        #expect(state.chartState.snapshot?.localTotal == 1)
+        await gate.release()
+        await show.value
+
+        #expect(state.chartState.effectiveSource.isLocal)
+        #expect(state.chartState.snapshot?.items.first?.title == "Local Artist")
+        #expect(try await store.chartCacheCount() == 1, "only the local row is cached")
+    }
+
+    @Test func aLateResponseAfterPeriodChangeCannotBecomeCurrentOrBeCached() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let store = try SQLiteListenStore(url: database.url)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await gate.startHolding()
+        let show = Task { await runtime.charts?.show() }
+        #expect(await gate.waitUntilEntered(1), "the week read is held")
+        let switchPeriod = Task { await runtime.charts?.selectPeriod(.month) }
+        #expect(await gate.waitUntilEntered(2), "the month read is held")
+        await gate.release()
+        await show.value
+        await switchPeriod.value
+
+        #expect(state.chartState.snapshot?.period == .month)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(try await store.chartCacheCount() == 1, "the obsolete week response was never stored")
+    }
+
+    @Test func delayedLastFMChartWorkDoesNotBlockCaptureOrDelivery() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let gate = ChartHoldGate()
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getInfo":
+                return lastFMUserInfoResponse()
+            case "user.getTopArtists":
+                await gate.enter()
+                return lastFMChartResponse(type: .artists, rows: [("Blondie", "", 42, "artist-mbid")])
+            case "track.updateNowPlaying":
+                return chartJSONResponse([:])
+            case "track.scrobble":
+                return lastFMScrobbleResponse(codes: [0])
+            default:
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            scrobblingEnabled: true,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+
+        await gate.startHolding()
+        let show = Task { await runtime.charts?.show() }
+        #expect(await gate.waitUntilEntered(1), "the Last.fm chart read is held")
+        #expect(state.chartState.phase == .loading)
+
+        let track = Track(
+            title: "Last.fm Continuity",
+            artist: "Blondie",
+            album: "Parallel Lines",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+            clock.now = now.addingTimeInterval(second)
+            await runtime.ingest(MediaSample(
+                track: track,
+                elapsed: second,
+                playbackRate: 1,
+                isPlaying: true,
+                timestamp: clock.now,
+            ))
+        }
+        #expect(state.nowPlaying?.track.title == "Last.fm Continuity")
+        let listen = try #require(state.listens.first { $0.processed.title == "Last.fm Continuity" })
+        #expect(state.historyCount == 1)
+        clock.advance(to: clock.now.addingTimeInterval(2))
+        let delivered = await chartWaitForDelivery(store, listenID: listen.id ?? -1)
+        #expect(delivered?.state == .delivered, "the Last.fm delivery progressed while charts were held")
+        #expect(await transport.recordedRequests.contains { chartMethod($0) == "track.scrobble" })
+        #expect(state.chartState.phase == .loading, "capture and delivery did not wait for charts")
+
+        await gate.release()
+        await show.value
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.listens.contains { $0.processed.title == "Last.fm Continuity" })
     }
 
     // MARK: - Helpers

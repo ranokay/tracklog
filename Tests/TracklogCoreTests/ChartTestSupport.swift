@@ -238,6 +238,58 @@ func chartSelection(
 
 // MARK: - Runtime composition
 
+// swiftlint:disable:next cyclomatic_complexity
+func listenBrainzTransport(
+    flags: ChartFlags,
+    gate: ChartHoldGate? = nil,
+) -> ChartHTTPTransport {
+    ChartHTTPTransport { request in
+        let path = chartListenBrainzPath(request)
+        if path.hasSuffix("validate-token") {
+            return listenBrainzValidResponse()
+        }
+        if path.contains("submit-listens") {
+            return chartJSONResponse(["status": "ok"])
+        }
+        if path.contains("/stats/user/") {
+            if let gate {
+                await gate.enter()
+            }
+            if await flags.isNotReady() {
+                return HTTPResponse(statusCode: 204, body: Data())
+            }
+            if await flags.isFailing() {
+                throw URLError(.notConnectedToInternet)
+            }
+            let type: ChartType = path.contains("/artists")
+                ? .artists
+                : path.contains("/releases") ? .albums : .tracks
+            let rows: [(String, String, Int, String)] = switch type {
+            case .artists:
+                [("Blondie", "", 42, "artist-mbid"), ("Talking Heads", "", 30, "artist-mbid-2")]
+            case .albums:
+                [("Parallel Lines", "Blondie", 42, "release-mbid")]
+            case .tracks:
+                [("Heart of Glass", "Blondie", 42, "recording-mbid")]
+            }
+            return listenBrainzStatsResponse(
+                type: type,
+                rows: rows,
+                from: chartDate(2026, 10, 20),
+                end: chartDate(2026, 10, 27),
+                lastUpdated: chartDate(2026, 10, 28, 6),
+            )
+        }
+        if path.contains("listen-count") {
+            if await flags.isFailingTotal() {
+                throw URLError(.notConnectedToInternet)
+            }
+            return listenBrainzCountResponse(500)
+        }
+        return HTTPResponse(statusCode: 404, body: Data())
+    }
+}
+
 @MainActor
 func makeChartRuntime(
     database: TemporaryDatabase,
@@ -279,14 +331,16 @@ func makeChartRuntime(
 func lastFMChartResponse(
     type: ChartType,
     rows: [(title: String, subtitle: String, count: Int, mbid: String)],
+    ranks: [Int]? = nil,
 ) -> HTTPResponse {
     var items: [[String: Any]] = []
     for (index, row) in rows.enumerated() {
+        let rank = ranks.map { index < $0.count ? $0[index] : index + 1 } ?? index + 1
         var item: [String: Any] = [
             "name": row.title,
             "playcount": String(row.count),
             "mbid": row.mbid,
-            "@attr": ["rank": String(index + 1)],
+            "@attr": ["rank": String(rank)],
         ]
         if type != .artists {
             item["artist"] = ["name": row.subtitle]
