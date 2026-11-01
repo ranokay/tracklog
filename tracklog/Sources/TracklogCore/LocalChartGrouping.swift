@@ -90,6 +90,7 @@ public struct LocalChartAggregator {
             let subtitleKey = albumArtist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? artist.trimmingCharacters(in: .whitespacesAndNewlines)
                 : albumArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !subtitleKey.isEmpty else { return nil }
             return GroupedFields(
                 key: Identity.joined([album, subtitleKey]),
                 title: album.trimmingCharacters(in: .whitespacesAndNewlines),

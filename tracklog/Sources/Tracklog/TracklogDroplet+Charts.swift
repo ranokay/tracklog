@@ -51,6 +51,13 @@ public extension TracklogDroplet {
         }
     }
 
+    /// Settings' Open Charts: select the saved local Custom range first, then
+    /// present the takeover so it cannot show the range last browsed.
+    func openSavedCharts() async {
+        await runtime?.charts?.selectSavedCustomRange()
+        presentCharts()
+    }
+
     func presentCharts() {
         state.setTakeoverSection(.charts)
         guard let host else { return }

@@ -135,7 +135,16 @@ struct TracklogChartsView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(count) \(caption)"))
+        .accessibilityLabel(Text(totalAccessibilityLabel(count: count, caption: caption, savedAt: savedAt)))
+    }
+
+    private func totalAccessibilityLabel(count: Int, caption: String, savedAt: Date?) -> String {
+        ChartCopy.totalLabel(
+            count: count,
+            caption: caption,
+            savedAt: savedAt,
+            age: savedAt.map(relativeAge) ?? "",
+        )
     }
 
     private func unavailableTotal(_ reason: ChartTotalsUnavailable) -> some View {
@@ -284,10 +293,10 @@ struct TracklogChartsView: View {
                         unit: unit,
                         artwork: item.artworkHash.flatMap { state.artworkByHash[$0] },
                         sourceLabel: sourceLabel,
-                        periodLabel: periodCaption,
+                        periodLabel: periodLabel,
                     )
                 }
-                Text("\(items.count) \(state.chartState.selection.type.displayName.lowercased()) shown")
+                Text(ChartCopy.shownCount(items.count, type: state.chartState.selection.type))
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
                     .frame(maxWidth: .infinity)
@@ -362,7 +371,7 @@ struct TracklogChartsView: View {
     private var notReadyState: some View {
         ChartEmptyPanel(
             title: "Statistics are not ready",
-            message: "\(sourceLabel) has not finished calculating this period. Try again later; Tracklog does not poll it continuously.",
+            message: "\(sourceLabel) has not finished calculating this period. Try again when the statistics are ready.",
             symbol: "clock.badge.exclamationmark",
         ) {
             Button("Try again") {
@@ -426,7 +435,7 @@ struct TracklogChartsView: View {
             }
             return ChartNotice(
                 title: title,
-                detail: "\(savedAgeText) · \(sourceLabel), \(periodCaption), \(state.chartState.selection.type.displayName.lowercased())",
+                detail: "\(savedAgeText) · \(sourceLabel), \(periodLabel), \(state.chartState.selection.type.displayName.lowercased())",
                 showsRetry: true,
                 showsSettings: failureOffersSettings(failure),
             )
@@ -499,17 +508,12 @@ struct TracklogChartsView: View {
         }
     }
 
-    private var periodCaption: String {
-        ChartWindows.caption(
-            selection: state.chartState.selection,
-            calendar: ChartCalendar.current,
-        )
+    private var periodLabel: String {
+        ChartCopy.periodLabel(state.chartState, calendar: ChartCalendar.current)
     }
 
     private var listTitle: String {
-        let type = state.chartState.selection.type.displayName.lowercased()
-        let top50 = (state.chartState.snapshot?.items.count ?? 0) >= ChartLimits.topEntityLimit
-        return "Top \(top50 ? "50 " : "")\(type) · \(periodCaption)"
+        ChartCopy.listTitle(type: state.chartState.selection.type, period: periodLabel)
     }
 
     private var savedAgeText: String {
@@ -695,7 +699,7 @@ struct ChartRankRow: View {
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .monospacedDigit()
                     .lineLimit(1)
-                Text(unit.plural)
+                Text(ChartCopy.countUnit(item.count, unit))
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
             }
@@ -705,7 +709,7 @@ struct ChartRankRow: View {
         .frame(height: 68)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
-        .accessibilityValue(Text("\(sourceLabel), \(periodLabel)"))
+        .accessibilityValue(Text(ChartCopy.rowAccessibilityValue(source: sourceLabel, period: periodLabel)))
         .overlay(alignment: .bottom) {
             if SurfaceContrast.isIncreased(colorContrast) {
                 SurfaceSeparator()
@@ -715,12 +719,13 @@ struct ChartRankRow: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = ["Rank \(item.rank)", item.title]
-        if !item.subtitle.isEmpty {
-            parts.append(item.subtitle)
-        }
-        parts.append("\(item.count) \(unit.plural)")
-        return parts.joined(separator: ", ")
+        ChartCopy.rowAccessibilityLabel(
+            rank: item.rank,
+            title: item.title,
+            subtitle: item.subtitle,
+            count: item.count,
+            unit: unit,
+        )
     }
 }
 

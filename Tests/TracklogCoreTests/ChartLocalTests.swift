@@ -179,6 +179,49 @@ struct ChartLocalTests: CaptureTestHelpers {
         #expect(stored.contains { $0.processed.album == "Other" && $0.processed.albumArtist == "Album Artist" })
     }
 
+    @Test func albumGroupingRequiresAlbumAndAnArtistFallback() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        let rows: [(String, String, String, String)] = [
+            ("A", "", "Unknown", ""),
+            ("B", "   ", "Unknown", "  "),
+            ("C", "", "Known", "Album Artist"),
+            ("D", "Track Artist", "Fallback", "   "),
+        ]
+        for (index, row) in rows.enumerated() {
+            try await store.insert(chartListen(
+                title: row.0,
+                artist: row.1,
+                album: row.2,
+                albumArtist: row.3,
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        var selection = chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar)
+        selection.type = .albums
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: selection,
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        await runtime.charts?.show()
+
+        let snapshot = try #require(state.chartState.snapshot)
+        #expect(snapshot.localTotal == 4)
+        #expect(snapshot.omittedCount == 2, "an album with no album artist or track artist is omitted")
+        #expect(snapshot.items.count == 2)
+        #expect(snapshot.items.contains { $0.title == "Known" && $0.subtitle == "Album Artist" })
+        #expect(snapshot.items.contains { $0.title == "Fallback" && $0.subtitle == "Track Artist" })
+    }
+
     @Test func localArtworkChoiceIsDeterministic() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -241,6 +284,9 @@ struct ChartLocalTests: CaptureTestHelpers {
         await runtime.charts?.show()
         #expect(state.chartState.snapshot?.localTotal == 2)
         #expect(state.chartState.snapshot?.items.map(\.title) == ["Artist 0", "Artist 1"])
+        #expect(ChartCopy.periodLabel(state.chartState, calendar: chartCalendar(utc)) == "Today")
+        #expect(ChartCopy.listTitle(type: .artists, period: "Today") == "Top 50 artists · Today")
+        #expect(ChartCopy.rowAccessibilityValue(source: "On this Mac", period: "Today") == "On this Mac, Today")
     }
 
     @Test func aTimeZoneChangeRecomputesTheLocalWindowWhileOpen() async throws {
@@ -349,6 +395,18 @@ struct ChartLocalTests: CaptureTestHelpers {
 
         await runtime.charts?.show()
         #expect(state.chartState.snapshot?.localTotal == 2, "the end date runs through its next midnight")
+
+        await runtime.charts?.selectPeriod(.week)
+        await runtime.charts?.selectSource(.service)
+        #expect(state.chartState.selection.period == .week)
+        #expect(state.chartState.selection.source == .service)
+        await runtime.charts?.selectSavedCustomRange()
+        #expect(state.chartState.selection.period == .custom)
+        #expect(state.chartState.selection.source == .local)
+        #expect(state.chartState.selection.customStart == ChartDate(2026, 10, 1))
+        #expect(state.chartState.selection.customEnd == ChartDate(2026, 10, 14))
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.localTotal == 2)
 
         do {
             try await runtime.charts?.saveCustomRange(

@@ -1,4 +1,4 @@
-// swiftlint:disable function_body_length large_tuple type_body_length optional_data_string_conversion
+// swiftlint:disable file_length function_body_length large_tuple type_body_length optional_data_string_conversion
 import Foundation
 import Testing
 @testable import TracklogCore
@@ -63,6 +63,27 @@ struct ChartServiceTests {
         #expect(second.providerID == nil)
         #expect(second.identityKey.hasPrefix("fallback:"))
         #expect(state.chartState.periodDetail == "Rolling 7 days")
+        #expect(ChartCopy.periodLabel(state.chartState, calendar: chartCalendar(utc)) == "Rolling 7 days")
+        #expect(ChartCopy.listTitle(type: .artists, period: "Rolling 7 days") == "Top 50 artists · Rolling 7 days")
+        #expect(ChartCopy.countUnit(1, .plays) == "play")
+        #expect(ChartCopy.countUnit(2, .plays) == "plays")
+        #expect(ChartCopy.rowAccessibilityLabel(
+            rank: 1,
+            title: "Blondie",
+            subtitle: "",
+            count: 1,
+            unit: .plays,
+        ) == "Rank 1, Blondie, 1 play")
+        #expect(ChartCopy.rowAccessibilityValue(
+            source: "Last.fm · listener",
+            period: "Rolling 7 days",
+        ) == "Last.fm · listener, Rolling 7 days")
+        #expect(ChartCopy.totalLabel(
+            count: 1,
+            caption: "local listens",
+            savedAt: now,
+            age: "8 min ago",
+        ) == "1 local listens, saved 8 min ago")
         #expect(state.chartState.totals == .unavailable(.rangeTotals))
 
         let chartRequests = await transport.recordedRequests.filter(chartIsLastFMTopRequest)
@@ -169,6 +190,12 @@ struct ChartServiceTests {
         #expect(snapshot.returnedRange?.lastUpdated == updated)
         #expect(second.providerID == nil)
         #expect(state.chartState.periodDetail == "Previous completed week")
+        #expect(ChartCopy.periodLabel(state.chartState, calendar: chartCalendar(utc)) == "Previous completed week")
+        #expect(ChartCopy.countUnit(1, .listens) == "listen")
+        #expect(ChartCopy.rowAccessibilityValue(
+            source: "ListenBrainz · listener",
+            period: "Previous completed week",
+        ) == "ListenBrainz · listener, Previous completed week")
         #expect(state.chartState.totals == .unavailable(.rangeTotals))
 
         let statsRequest = try #require(
@@ -382,4 +409,4 @@ struct ChartServiceTests {
     }
 }
 
-// swiftlint:enable function_body_length large_tuple type_body_length optional_data_string_conversion
+// swiftlint:enable file_length function_body_length large_tuple type_body_length optional_data_string_conversion

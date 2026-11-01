@@ -60,6 +60,9 @@ enum HarnessDemo {
         }
 
         if let chartFixture {
+            if chartFixture.linksListenBrainz {
+                _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+            }
             if chartFixture.linksLastFM {
                 _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
             }

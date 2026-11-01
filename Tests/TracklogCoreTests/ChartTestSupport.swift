@@ -27,6 +27,71 @@ actor ChartHTTPTransport: HTTPTransport {
     }
 }
 
+/// A credential store whose next connection read can be held and then answered
+/// with nil, a value or an error. Used to prove a late credential outcome
+/// cannot publish over a newer source or a deactivated read model.
+actor DelayedCredentialStore: CredentialStore {
+    enum ReadOutcome: Sendable {
+        case value(String?)
+        case failure
+    }
+
+    private let base = MemoryCredentialStore()
+    private var pending: ReadOutcome?
+    private var entered = false
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func holdNextRead(_ outcome: ReadOutcome) {
+        pending = outcome
+        entered = false
+    }
+
+    func waitUntilRead() async {
+        guard !entered else { return }
+        await withCheckedContinuation { enteredContinuation = $0 }
+    }
+
+    func release() {
+        let continuation = releaseContinuation
+        releaseContinuation = nil
+        continuation?.resume()
+    }
+
+    func credential(forConnection id: Int64) async throws -> String? {
+        if let outcome = pending {
+            pending = nil
+            entered = true
+            enteredContinuation?.resume()
+            enteredContinuation = nil
+            await withCheckedContinuation { releaseContinuation = $0 }
+            switch outcome {
+            case let .value(value):
+                return value
+            case .failure:
+                throw URLError(.cannotDecodeContentData)
+            }
+        }
+        return try await base.credential(forConnection: id)
+    }
+
+    func saveCredential(_ credential: String, forConnection id: Int64) async throws {
+        try await base.saveCredential(credential, forConnection: id)
+    }
+
+    func deleteCredential(forConnection id: Int64) async throws {
+        try await base.deleteCredential(forConnection: id)
+    }
+
+    func appCredential() async throws -> String? {
+        try await base.appCredential()
+    }
+
+    func saveAppCredential(_ credential: String?) async throws {
+        try await base.saveAppCredential(credential)
+    }
+}
+
 /// A flag a test flips after a successful read, without rebuilding the
 /// transport or the read model.
 actor ChartFlags {
@@ -165,7 +230,7 @@ func makeChartRuntime(
     selection: ChartSelection,
     calendarBox: ChartCalendarBox,
     historyPageSize: Int = 100,
-    credentials: MemoryCredentialStore = MemoryCredentialStore(),
+    credentials: any CredentialStore = MemoryCredentialStore(),
     scrobblingEnabled: Bool = false,
     nowPlayingEnabled: Bool = true,
     persistSelection: (@MainActor (ChartSelection) -> Void)? = nil,

@@ -706,6 +706,195 @@ struct ChartCacheTests {
         #expect(state.chartState.snapshot == nil)
     }
 
+    @Test func aDelayedMissingCredentialCannotOverwriteANewSelection() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let credentials = DelayedCredentialStore()
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            credentials: credentials,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await credentials.holdNextRead(.value(nil))
+        let show = Task { await runtime.charts?.show() }
+        await credentials.waitUntilRead()
+        await runtime.charts?.selectSource(.local)
+        await credentials.release()
+        await show.value
+
+        #expect(state.chartState.effectiveSource.isLocal)
+        #expect(state.chartState.effectiveSource.serviceKind == nil)
+        #expect(state.chartState.selection.source == .local)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .empty)
+        #expect(state.chartState.snapshot?.localTotal == 0)
+        #expect(try await store.chartCacheCount() == 1)
+        let payloads = try await store.chartCachePayloads()
+        #expect(!payloads.contains { data in
+            String(data: data, encoding: .utf8)?.contains("list\u{1F}service") == true
+        })
+    }
+
+    @Test func aDelayedCredentialErrorCannotPublishAfterDeactivation() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let credentials = DelayedCredentialStore()
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            credentials: credentials,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await credentials.holdNextRead(.failure)
+        let show = Task { await runtime.charts?.show() }
+        await credentials.waitUntilRead()
+        runtime.stop()
+        await credentials.release()
+        await show.value
+
+        #expect(runtime.charts?.isActive == false)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.snapshot == nil)
+        #expect(try await store.chartCacheCount() == 0)
+    }
+
+    @Test func localAggregationDoesNotBlockCaptureDeliveryOrHistory() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 200 {
+            try await store.insert(chartListen(
+                title: "Seed \(index)",
+                artist: "Artist \(index % 20)",
+                startedAt: now.addingTimeInterval(Double(index) - 1_000),
+            ))
+        }
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            scrobblingEnabled: true,
+            nowPlayingEnabled: false,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
+        let gate = ChartHoldGate()
+        await gate.startHolding()
+        await runtimeStore.chartReader?.setRowObserver { row in
+            if row == 64 {
+                await gate.enter()
+            }
+        }
+
+        let chartTask = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        #expect(state.chartState.phase == .loading)
+
+        let track = Track(
+            title: "During local chart",
+            artist: "Blondie",
+            album: "Parallel Lines",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+            clock.now = now.addingTimeInterval(second)
+            await runtime.ingest(MediaSample(
+                track: track,
+                elapsed: second,
+                playbackRate: 1,
+                isPlaying: true,
+                timestamp: clock.now,
+            ))
+        }
+        let listen = try #require(state.listens.first { $0.processed.title == "During local chart" })
+        #expect(state.historyCount == 201)
+        let delivered = await chartWaitForDelivery(store, listenID: listen.id ?? -1)
+        #expect(delivered?.state == .delivered)
+        #expect(state.chartState.phase == .loading, "the chart scan did not block capture")
+
+        await gate.release()
+        await chartTask.value
+        #expect(state.chartState.snapshot?.localTotal == 200, "the scan keeps its consistent starting snapshot")
+        #expect(state.historyCount == 201)
+    }
+
+    @Test func dismissingALocalScanCancelsItWithoutCaching() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 100 {
+            try await store.insert(chartListen(
+                title: "Seed \(index)",
+                artist: "Artist \(index % 10)",
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
+        let gate = ChartHoldGate()
+        await gate.startHolding()
+        await runtimeStore.chartReader?.setRowObserver { row in
+            if row == 64 {
+                await gate.enter()
+            }
+        }
+
+        let chartTask = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        runtime.charts?.hide()
+        await gate.release()
+        await chartTask.value
+        #expect(state.chartState.snapshot == nil)
+        #expect(try await store.chartCacheCount() == 0)
+    }
+
     // MARK: - Fixtures
 
     private func listenBrainzTransport(

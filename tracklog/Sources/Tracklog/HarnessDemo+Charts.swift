@@ -15,6 +15,7 @@ enum HarnessChartFixture: String {
     case local
     case libreFallback = "libre-fallback"
     case allTime = "all-time"
+    case allTimeTotalFailed = "all-time-total-failed"
 
     static var selected: HarnessChartFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CHARTS"] ?? ""
@@ -23,7 +24,7 @@ enum HarnessChartFixture: String {
 
     var selection: ChartSelection {
         var selection = ChartSelection.initial(now: Date(), calendar: ChartCalendar.current)
-        selection.period = self == .allTime ? .allTime : .week
+        selection.period = (self == .allTime || self == .allTimeTotalFailed) ? .allTime : .week
         selection.type = .artists
         switch self {
         case .local:
@@ -38,11 +39,15 @@ enum HarnessChartFixture: String {
 
     var linksLastFM: Bool {
         switch self {
-        case .normal, .loading, .empty, .notReady, .failed, .failedSaved, .longNames, .allTime:
+        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed:
             true
-        case .noConnection, .local, .libreFallback:
+        case .notReady, .noConnection, .local, .libreFallback:
             false
         }
+    }
+
+    var linksListenBrainz: Bool {
+        self == .notReady
     }
 
     var linksLibreFM: Bool {
@@ -59,7 +64,7 @@ enum HarnessChartFixtures {
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         case .longNames:
             ChartServicePage(items: rows(type: type, long: true), returnedRange: nil)
-        case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime:
+        case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         }
     }
@@ -136,7 +141,7 @@ enum HarnessChartFixtures {
         case .loading:
             try? await Task.sleep(for: .seconds(30))
             return 12_345
-        case .failed, .failedSaved:
+        case .failed, .failedSaved, .allTimeTotalFailed:
             throw ServiceFailure.retryable
         case .notReady:
             throw ChartServiceError.notReady
@@ -181,7 +186,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
             try? await Task.sleep(for: .seconds(30))
         }
         switch fixture {
-        case .loading, .normal, .longNames:
+        case .loading, .normal, .longNames, .allTimeTotalFailed:
             let page = HarnessChartFixtures.page(type: type, fixture: fixture)
             return ChartServicePage(
                 items: Array(page.items.prefix(limit)),
@@ -233,7 +238,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
             try? await Task.sleep(for: .seconds(30))
         }
         switch fixture {
-        case .loading, .normal, .longNames:
+        case .loading, .normal, .longNames, .allTimeTotalFailed:
             let page = HarnessChartFixtures.page(type: type, fixture: fixture)
             return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
         case .empty:

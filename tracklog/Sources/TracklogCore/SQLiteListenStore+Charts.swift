@@ -4,52 +4,17 @@ import SQLite3
 // MARK: - Exact local grouping
 
 extension SQLiteListenStore: ChartStore {
-    /// Streams the whole stored range once, oldest first, and groups it in
-    /// Swift so the existing Identity normalization is the only key rule.
-    /// SQLite's `lower()` is ASCII-only and would disagree with stored keys.
+    /// The scan runs on its own read-only connection, so the writer actor is
+    /// free for capture, History and delivery while a large local read runs.
     public func localChart(
         type: ChartType,
         window: LocalChartWindow,
         limit: Int,
     ) async throws -> LocalChartAggregate {
-        let handle = try database()
-        let filter = window.range == nil ? "" : "WHERE started_at >= ? AND started_at < ?"
-        let statement = try prepare(
-            handle,
-            """
-            SELECT title, artist, album, album_artist, artwork_hash
-            FROM listens
-            \(filter)
-            ORDER BY started_at ASC, id ASC
-            """,
-        )
-        defer { sqlite3_finalize(statement) }
-
-        if let range = window.range {
-            sqlite3_bind_double(statement, 1, range.lowerBound.timeIntervalSince1970)
-            sqlite3_bind_double(statement, 2, range.upperBound.timeIntervalSince1970)
+        guard let chartReader else {
+            throw DatabaseError.open("the local chart reader is unavailable")
         }
-
-        var aggregator = LocalChartAggregator(type: type)
-
-        while true {
-            switch sqlite3_step(statement) {
-            case SQLITE_ROW:
-                aggregator.add(
-                    title: text(statement, 0),
-                    artist: text(statement, 1),
-                    album: text(statement, 2),
-                    albumArtist: text(statement, 3),
-                    artworkHash: sqlite3_column_type(statement, 4) == SQLITE_NULL
-                        ? nil
-                        : text(statement, 4),
-                )
-            case SQLITE_DONE:
-                return aggregator.finish(limit: limit)
-            default:
-                throw DatabaseError.sqlite(errorMessage(handle))
-            }
-        }
+        return try await chartReader.localChart(type: type, window: window, limit: limit)
     }
 }
 

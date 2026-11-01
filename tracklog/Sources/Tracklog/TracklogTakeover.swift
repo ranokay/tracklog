@@ -79,7 +79,7 @@ struct TakeoverHeader: View {
     @ViewBuilder
     private var connectionSwitcher: some View {
         if state.connections.isEmpty {
-            Text("No connection")
+            Text("None")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                 .lineLimit(1)

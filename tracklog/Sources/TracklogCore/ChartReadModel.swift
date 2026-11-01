@@ -162,7 +162,7 @@ public final class ChartReadModel {
     }
 
     /// Saving from Settings is the only way a Custom range enters the
-    /// selection. The takeover has already been dismissed by the caller.
+    /// selection.
     public func saveCustomRange(start: ChartDate, end: ChartDate) async throws {
         guard end >= start else { throw ChartValidationError.reversedCustomRange }
         try await store.clearLocalCustomChartCaches()
@@ -171,6 +171,18 @@ public final class ChartReadModel {
         new.period = .custom
         new.customStart = start
         new.customEnd = end
+        applySelection(new)
+        if isShowing {
+            await load(force: false)
+        }
+    }
+
+    /// Settings' Open Charts always returns to the last saved local Custom
+    /// dates, even after the listener has browsed another source or period.
+    public func selectSavedCustomRange() async {
+        var new = selection
+        new.source = .local
+        new.period = .custom
         applySelection(new)
         if isShowing {
             await load(force: false)
@@ -403,7 +415,8 @@ public final class ChartReadModel {
     }
 
     private func loadService(_ request: ChartRequest, force: Bool) async {
-        guard case let .service(connectionID, kind, _, _, _) = request.effective,
+        guard isCurrent(request),
+              case let .service(connectionID, kind, _, _, _) = request.effective,
               let connection = request.connection,
               let client = clients[kind],
               let listKey = request.listKey
@@ -420,12 +433,14 @@ public final class ChartReadModel {
             guard let stored = try await credentials.credential(forConnection: connectionID),
                   !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
+                guard isCurrent(request) else { return }
                 recordListFailure(.needsSignIn, request: request)
                 recordTotalFailure(.needsSignIn, request: request)
                 return
             }
             credential = stored
         } catch {
+            guard isCurrent(request) else { return }
             recordListFailure(.needsSignIn, request: request)
             recordTotalFailure(.needsSignIn, request: request)
             return

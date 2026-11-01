@@ -4,8 +4,8 @@ import TracklogCore
 
 let tracklogChartsPageID = "charts"
 
-/// Charts' only typed surface. Custom dates are chosen here, the takeover is
-/// already dismissed, and Save never opens the takeover by itself.
+/// Charts' only typed surface. The dates choose what this Mac's local history
+/// shows; saving keeps this page open and Open Charts shows the saved range.
 struct TracklogChartsSettingsPage: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -31,9 +31,9 @@ struct TracklogChartsSettingsPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     settingsSectionHeader("Local Custom range")
                     Text(
-                        "Dates apply to this Mac's local history in the current time zone. "
-                            + "The takeover closes while you type, and saving only stores the range. "
-                            + "Open Charts returns to it explicitly.",
+                        "Choose the dates to include from this Mac's listening history. "
+                            + "Saving keeps this page open. Open Charts shows the saved range; "
+                            + "dates you have not saved are not used there.",
                     )
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
@@ -49,6 +49,7 @@ struct TracklogChartsSettingsPage: View {
                         )
                         .labelsHidden()
                         .datePickerStyle(.compact)
+                        .disabled(isSaving)
                     }
                     DropletStackedRow(title: "End date") {
                         DatePicker(
@@ -59,12 +60,29 @@ struct TracklogChartsSettingsPage: View {
                         )
                         .labelsHidden()
                         .datePickerStyle(.compact)
+                        .disabled(isSaving)
                     }
-                    DropletStackedRow(title: "Save and return") {
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Saved range: \(savedRangeText)")
+                            .font(.caption)
+                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if hasDateChanges {
+                            Text("Unsaved changes. Open Charts uses the saved range.")
+                                .font(.caption)
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, DroppySpacing.xs)
+
+                    DropletStackedRow(title: "Range actions") {
                         HStack(spacing: DroppySpacing.sm) {
                             if isSaving {
                                 ProgressView()
                                     .controlSize(.small)
+                                    .accessibilityLabel(Text("Saving range"))
                             }
                             Button("Save range") {
                                 save()
@@ -72,9 +90,10 @@ struct TracklogChartsSettingsPage: View {
                             .buttonStyle(DroppyAccentButtonStyle(size: .small))
                             .disabled(isSaving)
                             Button("Open Charts") {
-                                droplet.presentCharts()
+                                Task { await droplet.openSavedCharts() }
                             }
                             .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                            .disabled(isSaving)
                         }
                     }
                     if !errorText.isEmpty {
@@ -94,6 +113,27 @@ struct TracklogChartsSettingsPage: View {
                 }
             }
         }
+        .onChange(of: startDate) {
+            errorText = ""
+            savedText = ""
+        }
+        .onChange(of: endDate) {
+            errorText = ""
+            savedText = ""
+        }
+    }
+
+    private var savedRangeText: String {
+        let calendar = ChartCalendar.current
+        let start = state.chartState.selection.customStart.formatted(in: calendar)
+        let end = state.chartState.selection.customEnd.formatted(in: calendar)
+        return "\(start) – \(end)"
+    }
+
+    private var hasDateChanges: Bool {
+        let calendar = ChartCalendar.current
+        return ChartDate(startDate, calendar: calendar) != state.chartState.selection.customStart
+            || ChartDate(endDate, calendar: calendar) != state.chartState.selection.customEnd
     }
 
     private func save() {
@@ -112,7 +152,7 @@ struct TracklogChartsSettingsPage: View {
             do {
                 try await droplet.saveChartCustomRange(start: start, end: end)
                 isSaving = false
-                savedText = "Saved \(start.formatted(in: calendar)) to \(end.formatted(in: calendar)). Open Charts to browse it."
+                savedText = "Saved \(start.formatted(in: calendar)) to \(end.formatted(in: calendar)). Open Charts shows this range."
             } catch {
                 isSaving = false
                 errorText = (error as? LocalizedError)?.errorDescription ?? "The range could not be saved."
