@@ -748,6 +748,39 @@ struct ChartCacheTests {
         })
     }
 
+    @Test func aDelayedBlankCredentialCannotOverwriteANewSelection() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let credentials = DelayedCredentialStore()
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+            credentials: credentials,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await credentials.holdNextRead(.value("   "))
+        let show = Task { await runtime.charts?.show() }
+        await credentials.waitUntilRead()
+        await runtime.charts?.selectSource(.local)
+        await credentials.release()
+        await show.value
+
+        #expect(state.chartState.effectiveSource.isLocal)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .empty)
+    }
+
     @Test func aDelayedCredentialErrorCannotPublishAfterDeactivation() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)

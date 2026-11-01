@@ -25,7 +25,7 @@
 
 ## Observable test evidence
 
-`swift test --package-path Tests`: **561 tests in 92 suites passed**. The new focused suites are:
+`swift test --package-path Tests`: **562 tests in 92 suites passed**. The new focused suites are:
 
 - `ChartCalendarTests`: exact start/end membership, Monday week starts, month/year starts, leap day, DST 23/25-hour days, time-zone change, inclusive Custom end, reversed rejection.
 - `ChartLocalTests`: 120 listens across three delivery targets, pending/retrying/abandoned/zero-target rows and a 10-row History page still total 120 once and list 50; normalization, album-artist fallback, track grouping across albums/players, stable omissions and feedback identity; deterministic artwork; Today boundaries; time-zone recomputation while open; bounded local caches; Custom save/reject; History-first default and selection persistence.
