@@ -23,6 +23,7 @@ public final class ChartReadModel {
     private var generation = 0
     private var refreshTask: Task<Bool, Never>?
     private var refreshTaskIsForced = false
+    private var pendingForcedRefresh = false
     private var artworkTask: Task<Void, Never>?
     private var activeToken: UUID?
     private var currentScopeKey: String?
@@ -79,6 +80,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
+        pendingForcedRefresh = false
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -105,6 +107,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
+        pendingForcedRefresh = false
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -125,6 +128,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
+        pendingForcedRefresh = false
         activeToken = nil
         currentScopeKey = nil
         state.chartState.snapshot = nil
@@ -220,6 +224,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
+        pendingForcedRefresh = false
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -242,6 +247,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
+        pendingForcedRefresh = false
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -277,9 +283,15 @@ public final class ChartReadModel {
 
         if currentScopeKey == request.scopeKey, let refreshTask {
             let isForced = refreshTaskIsForced
+            if force, !isForced {
+                pendingForcedRefresh = true
+            }
             let didFetch = await refreshTask.value
-            if force, !isForced, !didFetch, isCurrent(request) {
-                await load(force: true)
+            if force, pendingForcedRefresh, !isForced {
+                pendingForcedRefresh = false
+                if !didFetch, isCurrent(request) {
+                    await load(force: true)
+                }
             }
             return
         }
@@ -298,7 +310,15 @@ public final class ChartReadModel {
         refreshTaskIsForced = force
         let task = Task { [weak self] in
             guard let self else { return false }
-            let didFetch = await performLoad(request, force: force)
+            var didFetch = await performLoad(request, force: force)
+            while pendingForcedRefresh, isCurrent(request) {
+                pendingForcedRefresh = false
+                if didFetch {
+                    break
+                }
+                refreshTaskIsForced = true
+                didFetch = await performLoad(request, force: true) || didFetch
+            }
             if activeToken == token {
                 refreshTask = nil
                 refreshTaskIsForced = false

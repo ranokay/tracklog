@@ -260,12 +260,7 @@ struct ChartCacheTests {
         }
         await gate.startHolding()
         await heldStore.releaseCacheRead()
-        for _ in 0 ..< 100 {
-            if await gate.enteredCount() >= 1 {
-                break
-            }
-            await Task.yield()
-        }
+        #expect(await gate.waitUntilEntered(1), "the refresh fetch reaches the held transport")
         #expect(state.chartState.snapshot?.items.first?.title == "Cached")
         await gate.release()
         await showing.value
