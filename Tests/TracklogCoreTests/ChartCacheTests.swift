@@ -706,6 +706,142 @@ struct ChartCacheTests {
         #expect(state.chartState.snapshot == nil)
     }
 
+    @Test func switchingLocalTypeWhileAScanIsHeldUsesANewConnection() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 200 {
+            try await store.insert(chartListen(
+                title: "Seed \(index)",
+                artist: "Artist \(index % 20)",
+                album: "Album \(index % 10)",
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
+        let gate = ChartHoldGate()
+        let counter = ChartHoldCounter()
+        await gate.startHolding()
+        await runtimeStore.chartReader?.setRowObserver { row in
+            if row == 64, await counter.takeFirst() {
+                await gate.enter()
+            }
+        }
+
+        let first = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        await runtime.charts?.selectType(.albums)
+        #expect(state.chartState.snapshot?.type == .albums)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.refreshFailure == nil)
+
+        await gate.release()
+        await first.value
+        #expect(state.chartState.snapshot?.type == .albums)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(try await store.chartCacheCount() == 1)
+    }
+
+    @Test func hidingAndReopeningWhileALocalScanIsHeldUsesANewConnection() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 200 {
+            try await store.insert(chartListen(
+                title: "Seed \(index)",
+                artist: "Artist \(index % 20)",
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
+        let gate = ChartHoldGate()
+        let counter = ChartHoldCounter()
+        await gate.startHolding()
+        await runtimeStore.chartReader?.setRowObserver { row in
+            if row == 64, await counter.takeFirst() {
+                await gate.enter()
+            }
+        }
+
+        let first = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        runtime.charts?.hide()
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.localTotal == 200)
+        #expect(state.chartState.refreshFailure == nil)
+
+        await gate.release()
+        await first.value
+        #expect(state.chartState.snapshot?.localTotal == 200)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(try await store.chartCacheCount() == 1)
+    }
+
+    @Test func closingWhileALocalScanIsHeldDoesNotReuseTheClosedConnection() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 100 {
+            try await store.insert(chartListen(
+                title: "Seed \(index)",
+                artist: "Artist \(index % 10)",
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
+        let gate = ChartHoldGate()
+        await gate.startHolding()
+        await runtimeStore.chartReader?.setRowObserver { row in
+            if row == 64 {
+                await gate.enter()
+            }
+        }
+
+        let show = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        await runtimeStore.close()
+        await gate.release()
+        await show.value
+        #expect(state.chartState.phase == .failed(.localRead))
+        #expect(try await store.chartCacheCount() == 0)
+    }
+
     @Test func aDelayedMissingCredentialCannotOverwriteANewSelection() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)

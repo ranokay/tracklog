@@ -1,4 +1,4 @@
-// swiftlint:disable large_tuple
+// swiftlint:disable file_length large_tuple
 import Foundation
 @testable import TracklogCore
 
@@ -89,6 +89,17 @@ actor DelayedCredentialStore: CredentialStore {
 
     func saveAppCredential(_ credential: String?) async throws {
         try await base.saveAppCredential(credential)
+    }
+}
+
+/// Holds only the first scan that reaches a row boundary, so a second local
+/// read can complete on its own connection while the first remains suspended.
+actor ChartHoldCounter {
+    private var seen = 0
+
+    func takeFirst() -> Bool {
+        seen += 1
+        return seen == 1
     }
 }
 
@@ -396,4 +407,4 @@ func chartIsLastFMTopRequest(_ request: HTTPRequest) -> Bool {
     ["user.getTopArtists", "user.getTopAlbums", "user.getTopTracks"].contains(chartMethod(request))
 }
 
-// swiftlint:enable large_tuple
+// swiftlint:enable file_length large_tuple

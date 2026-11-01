@@ -1,42 +1,24 @@
 import Foundation
 import SQLite3
 
-/// A dedicated read-only SQLite connection for local chart aggregation. It
-/// keeps the full-history scan off the writer/capture actor, reads one
-/// consistent WAL snapshot, and yields often enough to observe cancellation.
+/// A dedicated read-only SQLite reader for local chart aggregation. Each
+/// request owns its own connection and transaction, so overlapping selections
+/// and a close cannot share statements or transaction state. The reader yields
+/// often enough to observe cancellation and stops using a connection only
+/// after its own defer closes it.
 actor ChartReadConnection {
-    private nonisolated(unsafe) var connection: OpaquePointer?
     private let url: URL
+    private var isClosed = false
     /// Installed only by the focused occupancy test; the production
     /// composition leaves it nil.
     private var rowObserver: (@Sendable (Int) async -> Void)?
 
-    init(url: URL) throws {
+    init(url: URL) {
         self.url = url
-        var handle: OpaquePointer?
-        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
-        guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
-            let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
-            if let handle {
-                sqlite3_close(handle)
-            }
-            throw DatabaseError.open(message)
-        }
-        sqlite3_busy_timeout(handle, 1_000)
-        connection = handle
-    }
-
-    deinit {
-        if let connection {
-            sqlite3_close(connection)
-        }
     }
 
     func close() {
-        if let connection {
-            sqlite3_close(connection)
-            self.connection = nil
-        }
+        isClosed = true
     }
 
     /// A test seam that lets a scan pause at a row boundary. Production
@@ -45,15 +27,16 @@ actor ChartReadConnection {
         rowObserver = observer
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     func localChart(
         type: ChartType,
         window: LocalChartWindow,
         limit: Int,
     ) async throws -> LocalChartAggregate {
-        guard let handle = connection else {
+        guard !isClosed else {
             throw DatabaseError.open("the chart reader is closed")
         }
+        let handle = try openReadOnly()
+        defer { sqlite3_close(handle) }
 
         try execute(handle, "BEGIN DEFERRED")
         do {
@@ -89,18 +72,16 @@ actor ChartReadConnection {
                     )
                     rowIndex += 1
                     if rowIndex % 64 == 0 {
-                        if Task.isCancelled {
-                            throw CancellationError()
-                        }
+                        try checkOwnership()
                         await Task.yield()
+                        try checkOwnership()
                         if let observer = rowObserver {
                             await observer(rowIndex)
+                            try checkOwnership()
                         }
                     }
                 case SQLITE_DONE:
-                    if Task.isCancelled {
-                        throw CancellationError()
-                    }
+                    try checkOwnership()
                     try execute(handle, "COMMIT")
                     return aggregator.finish(limit: limit)
                 default:
@@ -111,6 +92,26 @@ actor ChartReadConnection {
             try? execute(handle, "ROLLBACK")
             throw error
         }
+    }
+
+    private func checkOwnership() throws {
+        if Task.isCancelled || isClosed {
+            throw CancellationError()
+        }
+    }
+
+    private func openReadOnly() throws -> OpaquePointer {
+        var handle: OpaquePointer?
+        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
+            let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            if let handle {
+                sqlite3_close(handle)
+            }
+            throw DatabaseError.open(message)
+        }
+        sqlite3_busy_timeout(handle, 1_000)
+        return handle
     }
 
     private func execute(_ handle: OpaquePointer, _ sql: String) throws {

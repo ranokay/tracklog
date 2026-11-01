@@ -106,11 +106,23 @@ struct TracklogChartsView: View {
         case let .local(count):
             totalValue(count, caption: "local listens")
         case let .account(total):
-            totalValue(
-                total.value,
-                caption: "\(total.serviceName) · account total",
-                savedAt: total.savedAt,
-            )
+            VStack(alignment: .leading, spacing: 1) {
+                totalValue(
+                    total.value,
+                    caption: "\(total.serviceName) · account total",
+                    savedAt: total.savedAt,
+                )
+                if let failure = state.chartState.totalFailure {
+                    Text("Could not refresh account total · showing saved total")
+                        .font(.caption2)
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(totalFailureDetail(failure))
+                        .font(.caption2)
+                        .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                }
+            }
+            .accessibilityElement(children: .contain)
         case let .unavailable(reason):
             unavailableTotal(reason)
         }
@@ -224,11 +236,6 @@ struct TracklogChartsView: View {
                 .padding(.top, DroppySpacing.xs)
                 .accessibilityAddTraits(.isHeader)
 
-            if let detail = state.chartState.periodDetail {
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-            }
             if let returned = state.chartState.snapshot?.returnedRange {
                 Text(returnedRangeText(returned))
                     .font(.caption)

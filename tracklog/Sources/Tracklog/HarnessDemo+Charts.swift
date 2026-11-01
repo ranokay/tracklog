@@ -16,6 +16,7 @@ enum HarnessChartFixture: String {
     case libreFallback = "libre-fallback"
     case allTime = "all-time"
     case allTimeTotalFailed = "all-time-total-failed"
+    case allTimeTotalSavedFailed = "all-time-total-saved-failed"
 
     static var selected: HarnessChartFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CHARTS"] ?? ""
@@ -24,7 +25,7 @@ enum HarnessChartFixture: String {
 
     var selection: ChartSelection {
         var selection = ChartSelection.initial(now: Date(), calendar: ChartCalendar.current)
-        selection.period = (self == .allTime || self == .allTimeTotalFailed) ? .allTime : .week
+        selection.period = (self == .allTime || self == .allTimeTotalFailed || self == .allTimeTotalSavedFailed) ? .allTime : .week
         selection.type = .artists
         switch self {
         case .local:
@@ -39,7 +40,7 @@ enum HarnessChartFixture: String {
 
     var linksLastFM: Bool {
         switch self {
-        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed:
+        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             true
         case .notReady, .noConnection, .local, .libreFallback:
             false
@@ -64,7 +65,8 @@ enum HarnessChartFixtures {
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         case .longNames:
             ChartServicePage(items: rows(type: type, long: true), returnedRange: nil)
-        case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed:
+        case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed,
+             .allTimeTotalSavedFailed:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         }
     }
@@ -141,7 +143,7 @@ enum HarnessChartFixtures {
         case .loading:
             try? await Task.sleep(for: .seconds(30))
             return 12_345
-        case .failed, .failedSaved, .allTimeTotalFailed:
+        case .failed, .failedSaved, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             throw ServiceFailure.retryable
         case .notReady:
             throw ChartServiceError.notReady
@@ -186,7 +188,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
             try? await Task.sleep(for: .seconds(30))
         }
         switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed:
+        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             let page = HarnessChartFixtures.page(type: type, fixture: fixture)
             return ChartServicePage(
                 items: Array(page.items.prefix(limit)),
@@ -238,7 +240,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
             try? await Task.sleep(for: .seconds(30))
         }
         switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed:
+        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             let page = HarnessChartFixtures.page(type: type, fixture: fixture)
             return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
         case .empty:
@@ -305,6 +307,19 @@ extension HarnessDemoStore {
     func chartCache(_ key: ChartCacheKey) async throws -> ChartCacheEntry? {
         if let entry = chartRows[key] {
             return entry
+        }
+        if HarnessChartFixture.selected == .allTimeTotalSavedFailed,
+           key.kind == .total,
+           key.source == .service {
+            let total = ChartAccountTotal(
+                value: 4_321,
+                serviceName: "Last.fm",
+                savedAt: Date().addingTimeInterval(-2 * 60 * 60),
+            )
+            return ChartCacheEntry(
+                savedAt: total.savedAt,
+                payload: (try? JSONEncoder().encode(total)) ?? Data(),
+            )
         }
         guard HarnessChartFixture.selected == .failedSaved,
               key.kind == .list,
