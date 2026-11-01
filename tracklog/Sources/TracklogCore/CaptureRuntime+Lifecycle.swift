@@ -4,6 +4,7 @@ import Foundation
 
 public extension CaptureRuntime {
     func stop() {
+        charts?.deactivate()
         pauseTask?.cancel()
         pauseTask = nil
         deliveryRefreshTask?.cancel()

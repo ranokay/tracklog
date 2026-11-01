@@ -28,13 +28,16 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 /// versioned migrations, and the durable duplicate key.
 public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore,
     ConnectionUnlinkStore, ConnectionReplaceStore, DeliveryStore, FeedbackStore {
-    public static let schemaVersion = 9
+    public static let schemaVersion = 10
 
     static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once
     /// no other reference can reach it.
     private nonisolated(unsafe) var connection: OpaquePointer?
     private let url: URL
+    /// The local chart scan's own read-only connection: a full-history read
+    /// must not occupy the writer actor that capture and delivery use.
+    let chartReader: ChartReadConnection?
 
     public init(url: URL) throws {
         try self.init(url: url, migrations: Self.schemaMigrations)
@@ -43,6 +46,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
     init(url: URL, migrations: [Migration]) throws {
         self.url = url
         connection = try Self.open(url: url, migrations: migrations)
+        chartReader = try? ChartReadConnection(url: url)
     }
 
     deinit {
@@ -91,6 +95,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
             sqlite3_close(connection)
             self.connection = nil
         }
+        await chartReader?.close()
     }
 
     // MARK: - Opening and migrating

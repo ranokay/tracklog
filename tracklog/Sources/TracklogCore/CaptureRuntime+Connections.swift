@@ -31,6 +31,7 @@ extension CaptureRuntime {
         invalidateSignInRecoveries()
         evaluateSignInHUD()
         scheduleStuckEvaluation()
+        charts?.connectionsChanged()
     }
 }
 

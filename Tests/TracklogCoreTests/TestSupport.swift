@@ -106,6 +106,12 @@ final class TemporaryDatabase {
         try data.write(to: url)
     }
 
+    func execute(_ sql: String) throws {
+        try withSQLite { handle in
+            try SQLiteListenStore.execute(handle, sql)
+        }
+    }
+
     /// Inserts a delivery the way a build before unlink support wrote one,
     /// when the table had no denormalized service kind.
     func insertLegacyDelivery(listenID: Int64, connectionID: Int64, state: String = "waiting") throws {

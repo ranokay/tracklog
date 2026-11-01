@@ -81,6 +81,27 @@ Checks:
 - Opening Settings dismisses the takeover.
 - No text field exists anywhere in the takeover.
 
+## Charts takeover
+
+Expected structure:
+
+- The section control names `History` and `Charts`; reopening the takeover starts at History.
+- The Charts rail holds Service / On this Mac, the period choices, the source note and the supported total. The current-connection read switcher sits at the trailing end of the section row.
+- Each ranked row is one element: `Rank <n>, <title>, <subtitle>, <count> listens` (or `plays`), with the source and period as its value.
+- Saved age and Refresh are separate controls; Refresh has a 24 pt target and says what it reloads.
+- Empty, statistics-not-ready, loading, no-connection, offline-with-saved-data and failed-without-data are separate spoken states with their own actions.
+- Libre.fm says it has no charts API and names the local history fallback.
+
+Checks:
+
+- Source, period and chart-type controls expose their selected state, not only a fill.
+- The range total is named as local listens or as an account total; an unavailable total is spoken as unavailable, never zero.
+- `Custom` dismisses the takeover and opens the Settings page; no text field exists in the takeover.
+- Saved rows remain with their original age after a failed refresh.
+- The pinned strip keeps playing, paused, off and idle presentations on both sections.
+- Icon-only controls meet the 24 pt target.
+- The takeover remains pointer-and-VoiceOver only. Record the lack of a keyboard path as a known gap, not a pass.
+
 ## Settings
 
 Settings is the only typed surface and must be fully keyboard-operable.
@@ -88,7 +109,7 @@ Settings is the only typed surface and must be fully keyboard-operable.
 Checks:
 
 - Root `scrobbling` and the pages `services`, `edits`, `blocks`, `data`,
-  `about`, plus `apps`, `lastfm-credentials`, `add-service` and per-connection
+  `about`, plus `apps`, `charts`, `lastfm-credentials`, `add-service` and per-connection
   pages are reachable.
 - Every control is reachable with Tab/Shift-Tab and operable with Space,
   Return or the arrow keys.
@@ -144,6 +165,7 @@ Fill in for each smoke:
 | --- | --- | --- | --- | --- | --- |
 | Shelf widget | | | | | |
 | History | | | | | |
+| Charts | | | | | |
 | Settings | | | | | |
 | HUD | | | | | |
 

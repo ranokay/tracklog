@@ -85,10 +85,20 @@ public extension SQLiteListenStore {
         let handle = try database()
         try Self.execute(handle, "BEGIN IMMEDIATE")
         do {
-            guard try readConnection(id: id, handle: handle) != nil else {
+            guard let existing = try readConnection(id: id, handle: handle) else {
                 throw ConnectionError.unknownConnection(id: id)
             }
             try updateConnectionRow(connection, id: id, handle: handle)
+            // A different identity can never inherit the old account's remote
+            // chart rows. The delete shares the replacement transaction, so a
+            // failure leaves both the old connection and its cache intact.
+            if existing.identity != connection.identity || existing.endpoint != connection.endpoint {
+                try deleteRemoteChartCaches(
+                    endpoint: existing.endpoint.description,
+                    account: existing.identity,
+                    handle: handle,
+                )
+            }
             let abandoned = try abandonPending(forConnection: id, reason: reason, handle: handle)
             let stored = try readConnection(id: id, handle: handle) ?? connection
             try Self.execute(handle, "COMMIT")
@@ -103,6 +113,13 @@ public extension SQLiteListenStore {
         let handle = try database()
         try Self.execute(handle, "BEGIN IMMEDIATE")
         do {
+            if let existing = try readConnection(id: id, handle: handle) {
+                try deleteRemoteChartCaches(
+                    endpoint: existing.endpoint.description,
+                    account: existing.identity,
+                    handle: handle,
+                )
+            }
             try deleteConnectionRow(id: id, handle: handle)
             try Self.execute(handle, "COMMIT")
         } catch {
@@ -115,6 +132,17 @@ public extension SQLiteListenStore {
         let handle = try database()
         try Self.execute(handle, "BEGIN IMMEDIATE")
         do {
+            guard let existing = try readConnection(id: id, handle: handle) else {
+                throw ConnectionError.unknownConnection(id: id)
+            }
+            // Eviction is part of the unlink transaction, not a best-effort
+            // follow-up: if it cannot run, the connection stays linked and its
+            // cache still belongs to it. A later relink cannot see old rows.
+            try deleteRemoteChartCaches(
+                endpoint: existing.endpoint.description,
+                account: existing.identity,
+                handle: handle,
+            )
             let abandoned = try abandonPending(forConnection: id, reason: reason, handle: handle)
             try deleteConnectionRow(id: id, handle: handle)
             try Self.execute(handle, "COMMIT")

@@ -2,7 +2,8 @@
 
 A scrobbler droplet for [Droppy](https://getdroppy.app) that brings your listening
 history to the notch: Last.fm, ListenBrainz, and Libre.fm or another GNU FM server, with a
-local queue, a local history, metadata edits and blocks.
+local queue, a local history, metadata edits and blocks, and charts for this Mac's
+listening or the current service account.
 
 - **Droplet package:** [`tracklog/`](tracklog/) — SwiftPM, DroppyKit, SwiftUI.
 - **Map:** [issue #1](https://github.com/ranokay/tracklog/issues/1).

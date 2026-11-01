@@ -91,6 +91,13 @@ struct TracklogSettings: View {
                     }
                     .id(tracklogBlocksPageID)
                     TracklogSettingsPageLink(droplet: droplet,
+                                             "Charts",
+                                             subtitle: "Choose the local Custom date range.",
+                                             page: tracklogChartsPageID) {
+                        SettingsLinkTile(systemImage: "chart.bar.xaxis")
+                    }
+                    .id(tracklogChartsPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
                                              "Data",
                                              subtitle: "Media diagnostics and your portable settings export.",
                                              page: tracklogDataPageID) {

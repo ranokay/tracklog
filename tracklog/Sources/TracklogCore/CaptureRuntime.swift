@@ -1,3 +1,4 @@
+// swiftlint:disable file_length type_body_length function_body_length
 import Foundation
 
 /// The capture composition seam: one clock, one now-playing source, one
@@ -28,6 +29,10 @@ public final class CaptureRuntime {
     let sendNowPlaying: (@MainActor (Track) -> Void)?
     let engine: ScrobbleEngine
     let historyPageSize: Int
+    /// Core charts' one read model. Nil when the store cannot aggregate local
+    /// history or no credential store exists, which is only a test/harness
+    /// composition.
+    public let charts: ChartReadModel?
 
     var started = false
     /// Identifies the start that owns `started`, so a cancelled older start
@@ -95,6 +100,9 @@ public final class CaptureRuntime {
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
+        chartSelection: ChartSelection = .standard,
+        persistChartSelection: (@MainActor (ChartSelection) -> Void)? = nil,
+        chartCalendar: @escaping @MainActor () -> Calendar = { ChartCalendar.current },
     ) {
         self.state = state
         self.clock = clock
@@ -171,6 +179,22 @@ public final class CaptureRuntime {
         state.lastFMOverridePresent = false
         state.mediaStatus = source.mediaStatus
 
+        if let chartStore = store as? any ChartStore, let credentials {
+            charts = ChartReadModel(
+                state: state,
+                store: chartStore,
+                credentials: credentials,
+                serviceClients: serviceAdapters.compactMap { $0 as? any ChartServiceReading },
+                artworkStore: store as? any ArtworkStore,
+                clock: clock,
+                calendar: chartCalendar,
+                selection: chartSelection,
+                persistSelection: persistChartSelection,
+            )
+        } else {
+            charts = nil
+        }
+
         wireOutboxCallbacks()
     }
 
@@ -197,6 +221,9 @@ public final class CaptureRuntime {
         sendNowPlaying: (@MainActor (Track) -> Void)? = nil,
         configuration: ScrobbleEngine.Configuration = ScrobbleEngine.Configuration(),
         historyPageSize: Int = 100,
+        chartSelection: ChartSelection = .standard,
+        persistChartSelection: (@MainActor (ChartSelection) -> Void)? = nil,
+        chartCalendar: @escaping @MainActor () -> Calendar = { ChartCalendar.current },
     ) -> CaptureRuntime {
         var store: SQLiteListenStore?
         var failure: CaptureFailure?
@@ -234,6 +261,9 @@ public final class CaptureRuntime {
             sendNowPlaying: sendNowPlaying,
             configuration: configuration,
             historyPageSize: historyPageSize,
+            chartSelection: chartSelection,
+            persistChartSelection: persistChartSelection,
+            chartCalendar: chartCalendar,
         )
     }
 
@@ -327,6 +357,7 @@ extension CaptureRuntime {
         startGeneration += 1
         let generation = startGeneration
         state.mediaStatus = source.mediaStatus
+        charts?.activate()
         clearExpiredPauseOnActivation()
 
         if let store {
@@ -382,3 +413,5 @@ extension CaptureRuntime {
         return true
     }
 }
+
+// swiftlint:enable file_length type_body_length function_body_length

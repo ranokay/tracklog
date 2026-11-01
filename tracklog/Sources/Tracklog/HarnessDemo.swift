@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import TracklogCore
 
@@ -45,6 +46,7 @@ enum HarnessDemo {
     @MainActor
     static func showNowPlaying(on runtime: CaptureRuntime) async {
         let state = HarnessDemoState.selected
+        let chartFixture = HarnessChartFixture.selected
 
         if state.isPlaying {
             await runtime.ingest(
@@ -57,7 +59,17 @@ enum HarnessDemo {
             )
         }
 
-        if state.connectsAService {
+        if let chartFixture {
+            if chartFixture.linksListenBrainz {
+                _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+            }
+            if chartFixture.linksLastFM {
+                _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
+            }
+            if chartFixture.linksLibreFM {
+                _ = try? await runtime.link(kind: .libreFM, credential: "demo-token")
+            }
+        } else if state.connectsAService {
             // One demo connection makes the pending banner, queue badge and
             // love action real instead of a screenshot-only fixture. Its
             // adapter is offline and never sends.
@@ -125,7 +137,7 @@ final class HarnessDemoSource: NowPlayingSource {
 }
 
 actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore,
-    DeliveryStore, FeedbackStore {
+    DeliveryStore, FeedbackStore, ChartStore {
     var listens: [Listen]
     private var artworks: [String: StoredArtwork]
     private var artworkHashes: [String: String]
@@ -135,6 +147,7 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     var deliveryRows: [Delivery]
     var feedbackRows: [String: TrackFeedback]
     var linkedConnections: [Connection] = []
+    var chartRows: [ChartCacheKey: ChartCacheEntry] = [:]
     var currentConnection: Int64?
     var nextConnectionID: Int64 = 1
     private var nextListenID: Int64 = 1_000

@@ -41,6 +41,8 @@ extension TracklogDroplet: SettingsPagesProviding {
             AnyView(TracklogEditsPage(droplet: self, state: state))
         case tracklogBlocksPageID:
             AnyView(TracklogBlocksPage(droplet: self, state: state))
+        case tracklogChartsPageID:
+            AnyView(TracklogChartsSettingsPage(droplet: self, state: state))
         case tracklogDataPageID:
             AnyView(TracklogDataPage(droplet: self, state: state))
         case tracklogAboutPageID:
@@ -90,6 +92,11 @@ extension TracklogDroplet: SettingsPagesProviding {
                 title: "Blocks",
                 keywords: ["blocked", "hide", "podcast", "artist", "album", "wildcard"],
                 anchorID: tracklogBlocksPageID,
+            ),
+            SettingsSearchEntry(
+                title: "Charts",
+                keywords: ["custom", "range", "dates", "local", "statistics"],
+                anchorID: tracklogChartsPageID,
             ),
             SettingsSearchEntry(
                 title: "Data",

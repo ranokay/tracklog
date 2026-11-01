@@ -8,6 +8,8 @@ extension TracklogDroplet {
         let store = HarnessDemoStore()
         let credentials = MemoryCredentialStore()
         let demoState = HarnessDemoState.selected
+        let chartSelection = HarnessChartFixture.selected?.selection
+            ?? ChartSelection.initial(now: Date(), calendar: ChartCalendar.current)
         return CaptureRuntime(
             state: state,
             clock: SystemClock(),
@@ -20,12 +22,15 @@ extension TracklogDroplet {
             serviceAdapters: [
                 HarnessDemoServiceAdapter(),
                 HarnessDemoLastFMAdapter(),
+                HarnessDemoLibreFMAdapter(),
             ],
             hud: hud,
             settings: CaptureSettings(
                 scrobblingEnabled: demoState.scrobblingEnabled,
                 pausedUntil: demoState == .paused ? Date().addingTimeInterval(60 * 60) : nil,
             ),
+            chartSelection: chartSelection,
+            chartCalendar: { ChartCalendar.current },
         )
     }
 
@@ -57,6 +62,10 @@ extension TracklogDroplet {
         )
         let appCredentials = StoredLastFMAppCredentials(credentialStore: credentials)
         lastFMAppCredentialsProvider = appCredentials
+        let chartSelection = host.preferences.value(
+            forKey: "chartSelection",
+            default: ChartSelection.standard,
+        )
         return CaptureRuntime.open(
             state: state,
             databaseURL: databaseURL,
@@ -103,6 +112,11 @@ extension TracklogDroplet {
             persistLastFMInvalidationPending: { pending in
                 host.preferences.setValue(pending, forKey: "lastFMInvalidationPending")
             },
+            chartSelection: chartSelection,
+            persistChartSelection: { selection in
+                host.preferences.setValue(selection, forKey: "chartSelection")
+            },
+            chartCalendar: { ChartCalendar.current },
         )
     }
 
