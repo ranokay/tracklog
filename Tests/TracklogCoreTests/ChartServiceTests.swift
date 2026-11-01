@@ -506,6 +506,58 @@ struct ChartServiceTests {
         #expect(missingID.identityKey.hasPrefix("fallback:lastfm:artists:"))
     }
 
+    @Test func lastFMChartCapsEveryEntityTypeAtFifty() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let artistRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
+            ("Artist \(index + 1)", "", 100 - index, "artist-\(index + 1)")
+        }
+        let albumRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
+            ("Album \(index + 1)", "Artist \(index + 1)", 100 - index, "album-\(index + 1)")
+        }
+        let trackRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
+            ("Track \(index + 1)", "Artist \(index + 1)", 100 - index, "track-\(index + 1)")
+        }
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMChartResponse(type: .artists, rows: artistRows)
+            case "user.getTopAlbums":
+                lastFMChartResponse(type: .albums, rows: albumRows)
+            case "user.getTopTracks":
+                lastFMChartResponse(type: .tracks, rows: trackRows)
+            case "user.getInfo":
+                lastFMUserInfoResponse()
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+
+        for type in ChartType.allCases {
+            await runtime.charts?.selectType(type)
+            let snapshot = try #require(state.chartState.snapshot)
+            #expect(snapshot.type == type)
+            #expect(snapshot.items.count == 50, "\(type) keeps only the first 50 returned entities")
+            #expect(snapshot.items.map(\.rank) == Array(1 ... 50))
+            #expect(snapshot.items.first?.title.hasSuffix("1") == true)
+            #expect(snapshot.items.last?.title.hasSuffix("50") == true)
+        }
+    }
+
     @Test func lastFMChartKeepsProviderRanksAndNamedFallbackIDs() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
