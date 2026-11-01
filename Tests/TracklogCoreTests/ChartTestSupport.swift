@@ -158,6 +158,10 @@ actor ChartHoldGate {
         }
     }
 
+    func enteredCount() -> Int {
+        entered
+    }
+
     func release() {
         holding = false
         let waiting = held

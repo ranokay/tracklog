@@ -188,6 +188,129 @@ struct ChartCacheTests {
         #expect(await chartStatsRequestCount(transport) == 2, "two refreshes share one request")
     }
 
+    @Test func aManualRefreshDuringAFreshCacheReadForcesOneFetch() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        let connection = try await store.save(Connection(
+            kind: .listenBrainz,
+            endpoint: .listenBrainz,
+            identity: "listener",
+            createdAt: now,
+        ))
+        let connectionID = try #require(connection.id)
+        let selection = chartSelection(
+            source: .service,
+            period: .week,
+            now: now,
+            calendar: chartCalendar(utc),
+        )
+        let key = ChartCacheKey(
+            kind: .list,
+            source: .service,
+            serviceKind: .listenBrainz,
+            endpoint: connection.endpoint.description,
+            account: connection.identity,
+            chartType: .artists,
+            period: .week,
+        )
+        let cached = ChartSnapshot(
+            scopeKey: key.rawKey,
+            type: .artists,
+            period: .week,
+            items: [ChartItem(rank: 1, title: "Cached", count: 1, identityKey: "cached")],
+            localTotal: nil,
+            omittedCount: 0,
+            returnedRange: nil,
+            countUnit: .listens,
+            savedAt: now.addingTimeInterval(-60),
+        )
+        let cachedPayload = try JSONEncoder().encode(cached)
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: cached.savedAt, payload: cachedPayload),
+            for: key,
+        )
+        let credentials = MemoryCredentialStore()
+        try await credentials.saveCredential("token", forConnection: connectionID)
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: ChartFlags(), gate: gate)
+        let state = TracklogAppState()
+        state.connections = [connection]
+        state.currentConnectionID = connectionID
+        let heldStore = HeldCacheChartStore(base: store)
+        let model = ChartReadModel(
+            state: state,
+            store: heldStore,
+            credentials: credentials,
+            serviceClients: [ListenBrainzAdapter(transport: transport)],
+            clock: clock,
+            calendar: { chartCalendar(utc) },
+            selection: selection,
+        )
+        model.activate()
+
+        await heldStore.holdNextCacheRead()
+        let showing = Task { await model.show() }
+        await heldStore.waitUntilCacheRead()
+        let firstRefresh = Task { await model.refresh() }
+        let secondRefresh = Task { await model.refresh() }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+        await gate.startHolding()
+        await heldStore.releaseCacheRead()
+        for _ in 0 ..< 100 {
+            if await gate.enteredCount() >= 1 {
+                break
+            }
+            await Task.yield()
+        }
+        #expect(state.chartState.snapshot?.items.first?.title == "Cached")
+        await gate.release()
+        await showing.value
+        await firstRefresh.value
+        await secondRefresh.value
+
+        #expect(await chartStatsRequestCount(transport) == 1, "both manual refreshes share one forced fetch")
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+    }
+
+    @Test func aManualRefreshDuringAnInitialFetchCoalesces() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await gate.startHolding()
+        let showing = Task { await runtime.charts?.show() }
+        await gate.waitUntilEntered(1)
+        let refreshing = Task { await runtime.charts?.refresh() }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+        await gate.release()
+        await showing.value
+        await refreshing.value
+
+        #expect(await chartStatsRequestCount(transport) == 1, "the manual refresh shares the fetch already underway")
+    }
+
     @Test func aLateResponseAfterSelectionChangeCannotBecomeCurrentOrBeCached() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -1121,6 +1244,71 @@ struct ChartCacheTests {
         await transport.recordedRequests.filter {
             chartListenBrainzPath($0).contains("/stats/user/")
         }.count
+    }
+}
+
+/// Holds the first chart cache read so a test can issue a manual refresh while
+/// the initial show is still deciding whether it needs the network.
+private actor HeldCacheChartStore: ChartStore {
+    private let base: SQLiteListenStore
+    private var shouldHold = false
+    private var readEntered = false
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    init(base: SQLiteListenStore) {
+        self.base = base
+    }
+
+    func holdNextCacheRead() {
+        shouldHold = true
+        readEntered = false
+    }
+
+    func waitUntilCacheRead() async {
+        while !readEntered {
+            await Task.yield()
+        }
+    }
+
+    func releaseCacheRead() {
+        shouldHold = false
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+
+    func chartCache(_ key: ChartCacheKey) async throws -> ChartCacheEntry? {
+        if shouldHold {
+            shouldHold = false
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+                readEntered = true
+            }
+        }
+        return try await base.chartCache(key)
+    }
+
+    func saveChartCache(_ entry: ChartCacheEntry, for key: ChartCacheKey) async throws {
+        try await base.saveChartCache(entry, for: key)
+    }
+
+    func evictChartCaches(endpoint: String, account: String) async throws {
+        try await base.evictChartCaches(endpoint: endpoint, account: account)
+    }
+
+    func pruneChartCaches() async throws {
+        try await base.pruneChartCaches()
+    }
+
+    func clearLocalCustomChartCaches() async throws {
+        try await base.clearLocalCustomChartCaches()
+    }
+
+    func localChart(
+        type: ChartType,
+        window: LocalChartWindow,
+        limit: Int,
+    ) async throws -> LocalChartAggregate {
+        try await base.localChart(type: type, window: window, limit: limit)
     }
 }
 
