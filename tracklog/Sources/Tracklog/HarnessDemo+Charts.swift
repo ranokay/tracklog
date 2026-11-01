@@ -17,6 +17,8 @@ enum HarnessChartFixture: String {
     case allTime = "all-time"
     case allTimeTotalFailed = "all-time-total-failed"
     case allTimeTotalSavedFailed = "all-time-total-saved-failed"
+    case localEmpty = "local-empty"
+    case localMissingMetadata = "local-missing-metadata"
 
     static var selected: HarnessChartFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CHARTS"] ?? ""
@@ -28,12 +30,24 @@ enum HarnessChartFixture: String {
         selection.period = (self == .allTime || self == .allTimeTotalFailed || self == .allTimeTotalSavedFailed) ? .allTime : .week
         selection.type = .artists
         switch self {
-        case .local:
+        case .local, .localEmpty, .localMissingMetadata:
             selection.source = .local
         case .libreFallback, .noConnection:
             selection.source = .service
         default:
             selection.source = .service
+        }
+        if self == .localEmpty {
+            selection.period = .custom
+            selection.customStart = ChartDate(2020, 1, 1)
+            selection.customEnd = ChartDate(2020, 1, 2)
+        } else if self == .localMissingMetadata {
+            selection.period = .custom
+            selection.type = .albums
+            let calendar = ChartCalendar.current
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+            selection.customStart = ChartDate(yesterday, calendar: calendar)
+            selection.customEnd = selection.customStart
         }
         return selection
     }
@@ -42,7 +56,7 @@ enum HarnessChartFixture: String {
         switch self {
         case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             true
-        case .notReady, .noConnection, .local, .libreFallback:
+        case .notReady, .noConnection, .local, .libreFallback, .localEmpty, .localMissingMetadata:
             false
         }
     }
@@ -59,14 +73,14 @@ enum HarnessChartFixture: String {
 enum HarnessChartFixtures {
     static func page(type: ChartType, fixture: HarnessChartFixture) -> ChartServicePage {
         switch fixture {
-        case .empty:
+        case .empty, .localEmpty:
             ChartServicePage(items: [], returnedRange: nil)
         case .loading:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         case .longNames:
             ChartServicePage(items: rows(type: type, long: true), returnedRange: nil)
         case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed,
-             .allTimeTotalSavedFailed:
+             .allTimeTotalSavedFailed, .localMissingMetadata:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         }
     }
@@ -147,7 +161,7 @@ enum HarnessChartFixtures {
             throw ServiceFailure.retryable
         case .notReady:
             throw ChartServiceError.notReady
-        case .empty:
+        case .empty, .localEmpty, .localMissingMetadata:
             return 0
         case .normal, .longNames, .noConnection, .local, .libreFallback, .allTime:
             return 12_345
@@ -194,7 +208,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
                 items: Array(page.items.prefix(limit)),
                 returnedRange: nil,
             )
-        case .empty:
+        case .empty, .localEmpty, .localMissingMetadata:
             return ChartServicePage(items: [], returnedRange: nil)
         case .notReady:
             throw ChartServiceError.notReady
@@ -243,7 +257,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
         case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             let page = HarnessChartFixtures.page(type: type, fixture: fixture)
             return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
-        case .empty:
+        case .empty, .localEmpty, .localMissingMetadata:
             return ChartServicePage(items: [], returnedRange: nil)
         case .notReady:
             throw ChartServiceError.notReady
