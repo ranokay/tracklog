@@ -306,6 +306,107 @@ struct ChartCacheTests {
         #expect(await chartStatsRequestCount(transport) == 1, "the manual refresh shares the fetch already underway")
     }
 
+    @Test func aManualRefreshDuringATotalOnlyFetchStillRefreshesTheList() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        let connection = try await store.save(Connection(
+            kind: .listenBrainz,
+            endpoint: .listenBrainz,
+            identity: "listener",
+            createdAt: now,
+        ))
+        let connectionID = try #require(connection.id)
+        let selection = chartSelection(
+            source: .service,
+            period: .allTime,
+            now: now,
+            calendar: chartCalendar(utc),
+        )
+        let key = ChartCacheKey(
+            kind: .list,
+            source: .service,
+            serviceKind: .listenBrainz,
+            endpoint: connection.endpoint.description,
+            account: connection.identity,
+            chartType: .artists,
+            period: .allTime,
+        )
+        let cached = ChartSnapshot(
+            scopeKey: key.rawKey,
+            type: .artists,
+            period: .allTime,
+            items: [ChartItem(rank: 1, title: "Cached", count: 1, identityKey: "cached")],
+            localTotal: nil,
+            omittedCount: 0,
+            returnedRange: nil,
+            countUnit: .listens,
+            savedAt: now.addingTimeInterval(-60),
+        )
+        let cachedPayload = try JSONEncoder().encode(cached)
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: cached.savedAt, payload: cachedPayload),
+            for: key,
+        )
+        let credentials = MemoryCredentialStore()
+        try await credentials.saveCredential("token", forConnection: connectionID)
+        let totalGate = ChartHoldGate()
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.contains("/stats/user/") {
+                return listenBrainzStatsResponse(
+                    type: .artists,
+                    rows: [("Blondie", "", 42, "artist-mbid")],
+                    from: chartDate(2026, 10, 20),
+                    end: chartDate(2026, 10, 27),
+                    lastUpdated: chartDate(2026, 10, 28, 6),
+                )
+            }
+            if path.contains("listen-count") {
+                await totalGate.enter()
+                return listenBrainzCountResponse(321)
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let state = TracklogAppState()
+        state.connections = [connection]
+        state.currentConnectionID = connectionID
+        let model = ChartReadModel(
+            state: state,
+            store: store,
+            credentials: credentials,
+            serviceClients: [ListenBrainzAdapter(transport: transport)],
+            clock: clock,
+            calendar: { chartCalendar(utc) },
+            selection: selection,
+        )
+        model.activate()
+
+        await totalGate.startHolding()
+        let showing = Task { await model.show() }
+        #expect(await totalGate.waitUntilEntered(1), "the initial total fetch reaches the held transport")
+        let refreshing = Task { await model.refresh() }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+        await totalGate.release()
+        await showing.value
+        await refreshing.value
+
+        let stats = await transport.recordedRequests.filter {
+            chartListenBrainzPath($0).contains("/stats/user/")
+        }
+        #expect(stats.count == 1, "the manual refresh also refreshes the cached list")
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 321,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+    }
+
     @Test func aLateResponseAfterSelectionChangeCannotBecomeCurrentOrBeCached() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)

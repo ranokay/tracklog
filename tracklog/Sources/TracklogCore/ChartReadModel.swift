@@ -21,9 +21,9 @@ public final class ChartReadModel {
     private let log: (@MainActor (String) -> Void)?
 
     private var generation = 0
-    private var refreshTask: Task<Bool, Never>?
+    private var refreshTask: Task<ChartLoadOutcome, Never>?
     private var refreshTaskIsForced = false
-    private var pendingForcedRefresh = false
+    private var pendingForcedRefresh: UUID?
     private var artworkTask: Task<Void, Never>?
     private var activeToken: UUID?
     private var currentScopeKey: String?
@@ -80,7 +80,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
-        pendingForcedRefresh = false
+        pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -107,7 +107,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
-        pendingForcedRefresh = false
+        pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -128,7 +128,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
-        pendingForcedRefresh = false
+        pendingForcedRefresh = nil
         activeToken = nil
         currentScopeKey = nil
         state.chartState.snapshot = nil
@@ -224,7 +224,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
-        pendingForcedRefresh = false
+        pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -247,7 +247,7 @@ public final class ChartReadModel {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskIsForced = false
-        pendingForcedRefresh = false
+        pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
         activeToken = nil
@@ -283,13 +283,14 @@ public final class ChartReadModel {
 
         if currentScopeKey == request.scopeKey, let refreshTask {
             let isForced = refreshTaskIsForced
-            if force, !isForced {
-                pendingForcedRefresh = true
+            let waiterToken = activeToken
+            if force, !isForced, let waiterToken {
+                pendingForcedRefresh = waiterToken
             }
-            let didFetch = await refreshTask.value
-            if force, pendingForcedRefresh, !isForced {
-                pendingForcedRefresh = false
-                if !didFetch, isCurrent(request) {
+            let outcome = await refreshTask.value
+            if force, !isForced, let waiterToken, pendingForcedRefresh == waiterToken {
+                pendingForcedRefresh = nil
+                if !outcome.satisfies(request), isCurrent(request) {
                     await load(force: true)
                 }
             }
@@ -306,34 +307,37 @@ public final class ChartReadModel {
         }
 
         let token = UUID()
+        pendingForcedRefresh = nil
         activeToken = token
         refreshTaskIsForced = force
         let task = Task { [weak self] in
-            guard let self else { return false }
-            var didFetch = await performLoad(request, force: force)
-            while pendingForcedRefresh, isCurrent(request) {
-                pendingForcedRefresh = false
-                if didFetch {
+            guard let self else { return ChartLoadOutcome() }
+            var outcome = await performLoad(request, force: force)
+            while pendingForcedRefresh == token, isCurrent(request) {
+                pendingForcedRefresh = nil
+                if outcome.satisfies(request) {
                     break
                 }
+                guard activeToken == token else { break }
                 refreshTaskIsForced = true
-                didFetch = await performLoad(request, force: true) || didFetch
+                let forcedOutcome = await performLoad(request, force: true)
+                outcome.merge(forcedOutcome)
             }
             if activeToken == token {
                 refreshTask = nil
                 refreshTaskIsForced = false
                 activeToken = nil
             }
-            return didFetch
+            return outcome
         }
         refreshTask = task
         _ = await task.value
     }
 
-    /// Returns whether this pass actually asked the store or the service for
-    /// data, so an explicit refresh that arrived during a cache-only pass can
-    /// still force one read without duplicating a read already underway.
-    private func performLoad(_ request: ChartRequest, force: Bool) async -> Bool {
+    /// Returns which reads this pass actually attempted, so an explicit
+    /// refresh that arrived during a cache-only or total-only pass can force
+    /// the missing read without duplicating one already underway.
+    private func performLoad(_ request: ChartRequest, force: Bool) async -> ChartLoadOutcome {
         if !didPruneCache {
             didPruneCache = true
             do {
@@ -351,7 +355,7 @@ public final class ChartReadModel {
         if let key = request.totalKey {
             cachedTotal = await loadCachedTotal(for: key)
         }
-        guard isCurrent(request) else { return false }
+        guard isCurrent(request) else { return ChartLoadOutcome() }
 
         if let cachedSnapshot,
            state.chartState.snapshot == nil
@@ -397,7 +401,7 @@ public final class ChartReadModel {
 
         if !listNeedsRefresh, !totalNeedsRefresh {
             state.chartState.isRefreshing = false
-            return false
+            return ChartLoadOutcome()
         }
 
         state.chartState.isRefreshing = true
@@ -406,14 +410,18 @@ public final class ChartReadModel {
             state.chartState.totals = .loading
         }
 
+        let outcome = ChartLoadOutcome(
+            fetchedList: listNeedsRefresh,
+            fetchedTotal: totalNeedsRefresh,
+        )
         if request.serviceKind != nil {
             await loadService(request, force: force)
         } else {
             await loadLocal(request)
         }
-        guard isCurrent(request) else { return true }
+        guard isCurrent(request) else { return outcome }
         state.chartState.isRefreshing = false
-        return true
+        return outcome
     }
 
     private func loadLocal(_ request: ChartRequest) async {
@@ -696,6 +704,20 @@ public final class ChartReadModel {
     }
 
     // MARK: - Request resolution
+
+    private struct ChartLoadOutcome {
+        var fetchedList = false
+        var fetchedTotal = false
+
+        func satisfies(_ request: ChartRequest) -> Bool {
+            fetchedList && (request.totalKey == nil || fetchedTotal)
+        }
+
+        mutating func merge(_ other: ChartLoadOutcome) {
+            fetchedList = fetchedList || other.fetchedList
+            fetchedTotal = fetchedTotal || other.fetchedTotal
+        }
+    }
 
     private struct ChartRequest {
         let generation: Int
