@@ -254,7 +254,7 @@ struct ChartCacheTests {
 
         await heldStore.holdNextCacheRead()
         let showing = Task { await model.show() }
-        await heldStore.waitUntilCacheRead()
+        #expect(await heldStore.waitUntilCacheRead(), "the initial cache read is entered")
         let firstRefresh = Task { await model.refresh() }
         let secondRefresh = Task { await model.refresh() }
         #expect(await joins.wait(for: 2), "both manual refreshes join the cache-only read")
@@ -1382,10 +1382,16 @@ private actor HeldCacheChartStore: ChartStore {
         readEntered = false
     }
 
-    func waitUntilCacheRead() async {
+    @discardableResult
+    func waitUntilCacheRead(timeout: Duration = .seconds(5)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while !readEntered {
-            await Task.yield()
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(10))
         }
+        return true
     }
 
     func releaseCacheRead() {
