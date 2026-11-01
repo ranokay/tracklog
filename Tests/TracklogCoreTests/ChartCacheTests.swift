@@ -291,14 +291,14 @@ struct ChartCacheTests {
         )
         await runtime.start()
         _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        let joins = RefreshJoinCounter()
+        runtime.charts?.setRefreshJoinObserver { joins.signal() }
 
         await gate.startHolding()
         let showing = Task { await runtime.charts?.show() }
         #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         let refreshing = Task { await runtime.charts?.refresh() }
-        for _ in 0 ..< 20 {
-            await Task.yield()
-        }
+        #expect(await joins.wait(for: 1), "the manual refresh joins the in-flight fetch")
         await gate.release()
         await showing.value
         await refreshing.value
@@ -382,14 +382,14 @@ struct ChartCacheTests {
             selection: selection,
         )
         model.activate()
+        let joins = RefreshJoinCounter()
+        model.setRefreshJoinObserver { joins.signal() }
 
         await totalGate.startHolding()
         let showing = Task { await model.show() }
         #expect(await totalGate.waitUntilEntered(1), "the initial total fetch reaches the held transport")
         let refreshing = Task { await model.refresh() }
-        for _ in 0 ..< 20 {
-            await Task.yield()
-        }
+        #expect(await joins.wait(for: 1), "the manual refresh joins the held total read")
         await totalGate.release()
         await showing.value
         await refreshing.value
