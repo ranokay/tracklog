@@ -38,17 +38,17 @@ public extension LastFMClient {
         switch type {
         case .artists:
             guard let items = try? JSONDecoder().decode(LastFMTopArtistsPayload.self, from: data)
-                .topartists?.artist
+                .topartists?.artist?.entries
             else { throw LastFMError.malformedResponse }
             entries = items
         case .albums:
             guard let items = try? JSONDecoder().decode(LastFMTopAlbumsPayload.self, from: data)
-                .topalbums?.album
+                .topalbums?.album?.entries
             else { throw LastFMError.malformedResponse }
             entries = items
         case .tracks:
             guard let items = try? JSONDecoder().decode(LastFMTopTracksPayload.self, from: data)
-                .toptracks?.track
+                .toptracks?.track?.entries
             else { throw LastFMError.malformedResponse }
             entries = items
         }

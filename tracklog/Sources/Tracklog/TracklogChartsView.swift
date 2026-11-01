@@ -331,10 +331,12 @@ struct TracklogChartsView: View {
             message: emptyMessage,
             symbol: "music.note.list",
         ) {
-            Button("Show all time") {
-                Task { await droplet.selectChartPeriod(.allTime) }
+            if state.chartState.selection.period != .allTime {
+                Button("Show all time") {
+                    Task { await droplet.selectChartPeriod(.allTime) }
+                }
+                .buttonStyle(DroppyQuietButtonStyle(size: .small))
             }
-            .buttonStyle(DroppyQuietButtonStyle(size: .small))
             if !isLocalDisplayed, state.currentConnection != nil {
                 Button("Use local history") {
                     Task { await droplet.selectChartSource(.local) }
@@ -351,10 +353,12 @@ struct TracklogChartsView: View {
                 + "still included in the range total, but this list needs \(missingMetadataField).",
             symbol: "questionmark.folder",
         ) {
-            Button("Show all time") {
-                Task { await droplet.selectChartPeriod(.allTime) }
+            if state.chartState.selection.period != .allTime {
+                Button("Show all time") {
+                    Task { await droplet.selectChartPeriod(.allTime) }
+                }
+                .buttonStyle(DroppyQuietButtonStyle(size: .small))
             }
-            .buttonStyle(DroppyQuietButtonStyle(size: .small))
         }
     }
 
@@ -575,7 +579,13 @@ struct TracklogChartsView: View {
 
     private var emptyMessage: String {
         if isLocalDisplayed {
+            if state.chartState.selection.period == .allTime {
+                return "Play something on this Mac."
+            }
             return "Play something on this Mac, or try another period."
+        }
+        if state.chartState.selection.period == .allTime {
+            return "This account has no listens in its history."
         }
         return "Try another period, or browse this Mac's local history."
     }

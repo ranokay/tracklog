@@ -311,6 +311,46 @@ struct ChartServiceTests {
         #expect(state.chartState.snapshot == nil)
     }
 
+    @Test func lastFMSingleItemObjectResponsesDecode() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            switch chartMethod(request) {
+            case "user.getTopArtists":
+                lastFMSingleChartResponse(type: .artists)
+            case "user.getTopAlbums":
+                lastFMSingleChartResponse(type: .albums)
+            case "user.getTopTracks":
+                lastFMSingleChartResponse(type: .tracks)
+            case "user.getInfo":
+                lastFMUserInfoResponse()
+            default:
+                HTTPResponse(statusCode: 404, body: Data())
+            }
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .lastFM, credential: "session-key")
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.items.count == 1)
+        #expect(state.chartState.snapshot?.items.first?.title == "Solo Artists")
+
+        await runtime.charts?.selectType(.albums)
+        #expect(state.chartState.snapshot?.items.first?.title == "Solo Albums")
+        await runtime.charts?.selectType(.tracks)
+        #expect(state.chartState.snapshot?.items.first?.title == "Solo Tracks")
+    }
+
     @Test func lastFMAppCredentialFailureIsDistinctFromAnAccountFailure() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)

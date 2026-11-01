@@ -309,6 +309,34 @@ func lastFMChartResponse(
     return chartJSONResponse(json)
 }
 
+/// The same single ranked item as a JSON object, which Last.fm can return
+/// instead of a one-element array.
+func lastFMSingleChartResponse(type: ChartType) -> HTTPResponse {
+    var item: [String: Any] = [
+        "name": "Solo \(type.displayName)",
+        "playcount": "1",
+        "mbid": "",
+        "@attr": ["rank": "1"],
+    ]
+    if type != .artists {
+        item["artist"] = ["name": "Solo Artist"]
+    }
+    let container: String
+    let itemKey: String
+    switch type {
+    case .artists:
+        container = "topartists"
+        itemKey = "artist"
+    case .albums:
+        container = "topalbums"
+        itemKey = "album"
+    case .tracks:
+        container = "toptracks"
+        itemKey = "track"
+    }
+    return chartJSONResponse([container: [itemKey: item]])
+}
+
 func lastFMUserInfoResponse(name: String = "listener", playcount: Int? = nil) -> HTTPResponse {
     var user: [String: Any] = ["name": name]
     if let playcount {

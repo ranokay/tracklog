@@ -81,8 +81,23 @@ struct LastFMTopArtistsPayload: Decodable {
     let topartists: LastFMTopArtistsValue?
 }
 
+/// Last.fm can return a single ranked entry as an object and several as an
+/// array. Both are valid JSON for the same response field.
+struct LastFMChartEntryList: Decodable {
+    let entries: [LastFMChartEntry]
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let list = try? container.decode([LastFMChartEntry].self) {
+            entries = list
+        } else {
+            entries = try [container.decode(LastFMChartEntry.self)]
+        }
+    }
+}
+
 struct LastFMTopArtistsValue: Decodable {
-    let artist: [LastFMChartEntry]?
+    let artist: LastFMChartEntryList?
 }
 
 struct LastFMTopAlbumsPayload: Decodable {
@@ -90,7 +105,7 @@ struct LastFMTopAlbumsPayload: Decodable {
 }
 
 struct LastFMTopAlbumsValue: Decodable {
-    let album: [LastFMChartEntry]?
+    let album: LastFMChartEntryList?
 }
 
 struct LastFMTopTracksPayload: Decodable {
@@ -98,7 +113,7 @@ struct LastFMTopTracksPayload: Decodable {
 }
 
 struct LastFMTopTracksValue: Decodable {
-    let track: [LastFMChartEntry]?
+    let track: LastFMChartEntryList?
 }
 
 struct ScrobblePayload: Decodable {
