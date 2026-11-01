@@ -177,7 +177,7 @@ struct ChartCacheTests {
 
         await gate.startHolding()
         let first = Task { await runtime.charts?.refresh() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         let second = Task { await runtime.charts?.refresh() }
         for _ in 0 ..< 20 {
             await Task.yield()
@@ -249,15 +249,15 @@ struct ChartCacheTests {
             selection: selection,
         )
         model.activate()
+        let joins = RefreshJoinCounter()
+        model.setRefreshJoinObserver { joins.signal() }
 
         await heldStore.holdNextCacheRead()
         let showing = Task { await model.show() }
         await heldStore.waitUntilCacheRead()
         let firstRefresh = Task { await model.refresh() }
         let secondRefresh = Task { await model.refresh() }
-        for _ in 0 ..< 20 {
-            await Task.yield()
-        }
+        #expect(await joins.wait(for: 2), "both manual refreshes join the cache-only read")
         await gate.startHolding()
         await heldStore.releaseCacheRead()
         #expect(await gate.waitUntilEntered(1), "the refresh fetch reaches the held transport")
@@ -294,7 +294,7 @@ struct ChartCacheTests {
 
         await gate.startHolding()
         let showing = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         let refreshing = Task { await runtime.charts?.refresh() }
         for _ in 0 ..< 20 {
             await Task.yield()
@@ -430,9 +430,9 @@ struct ChartCacheTests {
 
         await gate.startHolding()
         let show = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         let switchType = Task { await runtime.charts?.selectType(.albums) }
-        await gate.waitUntilEntered(2)
+        #expect(await gate.waitUntilEntered(2), "the held transport is entered")
         #expect(state.chartState.snapshot == nil, "the old selection's rows are gone while the new one loads")
         await gate.release()
         await show.value
@@ -630,7 +630,7 @@ struct ChartCacheTests {
         _ = try await runtime.link(kind: .listenBrainz, credential: "token")
         await gate.startHolding()
         let show = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         runtime.stop()
         #expect(runtime.charts?.isActive == false)
         await gate.release()
@@ -722,7 +722,7 @@ struct ChartCacheTests {
 
         await gate.startHolding()
         let chartTask = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         #expect(state.chartState.phase == .loading)
 
         let track = Track(
@@ -960,7 +960,7 @@ struct ChartCacheTests {
         }
 
         let first = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         await runtime.charts?.selectType(.albums)
         #expect(state.chartState.snapshot?.type == .albums)
         #expect(state.chartState.phase == .ready)
@@ -1007,7 +1007,7 @@ struct ChartCacheTests {
         }
 
         let first = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         runtime.charts?.hide()
         await runtime.charts?.show()
         #expect(state.chartState.snapshot?.localTotal == 200)
@@ -1053,7 +1053,7 @@ struct ChartCacheTests {
         }
 
         let show = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         await runtimeStore.close()
         await gate.release()
         await show.value
@@ -1210,7 +1210,7 @@ struct ChartCacheTests {
         }
 
         let chartTask = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         #expect(state.chartState.phase == .loading)
 
         let track = Track(
@@ -1275,7 +1275,7 @@ struct ChartCacheTests {
         }
 
         let chartTask = Task { await runtime.charts?.show() }
-        await gate.waitUntilEntered(1)
+        #expect(await gate.waitUntilEntered(1), "the held transport is entered")
         runtime.charts?.hide()
         await gate.release()
         await chartTask.value
@@ -1340,6 +1340,28 @@ struct ChartCacheTests {
         await transport.recordedRequests.filter {
             chartListenBrainzPath($0).contains("/stats/user/")
         }.count
+    }
+}
+
+/// Counts manual refreshes that joined an in-flight read, so a test can wait
+/// for both callers instead of guessing with task yields.
+@MainActor
+private final class RefreshJoinCounter {
+    private var count = 0
+
+    func signal() {
+        count += 1
+    }
+
+    func wait(for target: Int, timeout: Duration = .seconds(5)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while count < target {
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return true
     }
 }
 

@@ -30,6 +30,12 @@ public final class ChartReadModel {
     private var lastConnectionKey = "none"
     private var observers: [NSObjectProtocol] = []
     private var didPruneCache = false
+    /// Installed only by focused refresh-join tests; production leaves nil.
+    private var refreshJoinObserver: (@MainActor () -> Void)?
+
+    func setRefreshJoinObserver(_ observer: (@MainActor () -> Void)?) {
+        refreshJoinObserver = observer
+    }
 
     public init(
         state: TracklogAppState,
@@ -286,6 +292,7 @@ public final class ChartReadModel {
             let waiterToken = activeToken
             if force, !isForced, let waiterToken {
                 pendingForcedRefresh = waiterToken
+                refreshJoinObserver?()
             }
             let outcome = await refreshTask.value
             if force, !isForced, let waiterToken, pendingForcedRefresh == waiterToken {
