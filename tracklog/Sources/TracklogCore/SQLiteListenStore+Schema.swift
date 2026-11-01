@@ -227,6 +227,36 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 10) { handle in
+                // One bounded cache row per chart result. The key is the full
+                // scope string; the columns exist so unlink and Custom pruning
+                // can delete without decoding a payload.
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE chart_cache (
+                        key TEXT PRIMARY KEY,
+                        kind TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        service_kind TEXT NOT NULL DEFAULT '',
+                        endpoint TEXT NOT NULL DEFAULT '',
+                        account TEXT NOT NULL DEFAULT '',
+                        chart_type TEXT NOT NULL DEFAULT '',
+                        period TEXT NOT NULL DEFAULT '',
+                        time_zone TEXT NOT NULL DEFAULT '',
+                        window_start REAL NOT NULL DEFAULT -1,
+                        window_end REAL NOT NULL DEFAULT -1,
+                        schema_version INTEGER NOT NULL,
+                        saved_at REAL NOT NULL,
+                        payload BLOB NOT NULL
+                    );
+                    CREATE INDEX chart_cache_scope
+                        ON chart_cache (source, endpoint, account);
+                    CREATE INDEX chart_cache_selection
+                        ON chart_cache (kind, chart_type, period);
+                    """,
+                )
+            },
         ]
     }
 

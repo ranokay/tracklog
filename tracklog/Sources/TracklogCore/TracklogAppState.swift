@@ -123,6 +123,11 @@ public final class TracklogAppState: ObservableObject {
     /// The nested Settings page the harness is previewing. Production never
     /// sets this; the host's own page opener drives nested pages there.
     @Published public internal(set) var harnessSettingsPage: String?
+    /// The takeover's section. Reopening starts at History; Charts keeps its
+    /// source and period in ``chartState``.
+    @Published public internal(set) var takeoverSection: TakeoverSection = .history
+    /// The one Core charts read model's published state.
+    @Published public internal(set) var chartState = ChartViewState(selection: .standard)
 
     public var pendingCount: Int {
         pendingQueue.count
@@ -169,6 +174,10 @@ public final class TracklogAppState: ObservableObject {
 
     public func setHarnessSettingsPage(_ id: String?) {
         harnessSettingsPage = id
+    }
+
+    public func setTakeoverSection(_ section: TakeoverSection) {
+        takeoverSection = section
     }
 
     public func togglePendingList() {

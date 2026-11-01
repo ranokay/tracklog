@@ -28,7 +28,7 @@ public enum DatabaseError: Error, Equatable, CustomStringConvertible {
 /// versioned migrations, and the durable duplicate key.
 public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ConnectionStore,
     ConnectionUnlinkStore, ConnectionReplaceStore, DeliveryStore, FeedbackStore {
-    public static let schemaVersion = 9
+    public static let schemaVersion = 10
 
     static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     /// The connection is only touched inside the actor, and by `deinit` once

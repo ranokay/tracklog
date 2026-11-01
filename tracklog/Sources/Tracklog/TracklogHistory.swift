@@ -32,7 +32,7 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
     public func makeExpandedSurfaceView(_ id: ExpandedSurfaceID, context: ExpandedSurfaceContext) -> AnyView {
         guard id == tracklogHistorySurfaceID else { return AnyView(EmptyView()) }
         return AnyView(
-            TracklogHistory(droplet: self, state: state, context: context)
+            TracklogTakeover(droplet: self, state: state)
                 .id(context.presentation.id),
         )
     }
@@ -53,17 +53,17 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
         presentation _: ExpandedSurfacePresentation,
         reason _: ExpandedSurfaceDismissalReason,
     ) {
+        hideCharts()
         // The view owns only transient scroll state; the next presentation is
         // a fresh view that reloads the first page.
     }
 }
 
-// MARK: - The surface
+// MARK: - The History section
 
-private struct TracklogHistory: View {
+struct TracklogHistoryContent: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
-    let context: ExpandedSurfaceContext
 
     /// The first item at the top edge, tracked so a listen arriving above the
     /// viewport does not move the row the user is reading.
@@ -79,16 +79,9 @@ private struct TracklogHistory: View {
                 PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
             }
             content
-            bottomBar
         }
-        .frame(
-            width: context.availableSize.width,
-            height: context.availableSize.height,
-            alignment: .topLeading,
-        )
-        .animation(TracklogMotion.stateAnimation, value: bottomBarKey)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { await droplet.reloadHistory() }
-        .onDisappear { state.setPendingListExpanded(false) }
     }
 
     // MARK: Header
@@ -107,56 +100,6 @@ private struct TracklogHistory: View {
         .padding(.horizontal, DroppySpacing.xl)
         .padding(.top, DroppySpacing.lg)
         .padding(.bottom, DroppySpacing.sm)
-    }
-
-    /// Paused and off turn the pinned strip into a state bar, so recovery is
-    /// in the same place whether or not a track is playing.
-    @ViewBuilder private var bottomBar: some View {
-        if !state.scrobblingEnabled {
-            if state.connections.isEmpty {
-                HistoryStateBar(
-                    droplet: droplet,
-                    text: "Scrobbling is off",
-                    actionTitle: "Connect a service",
-                    action: { droplet.openServicesPage() },
-                )
-            } else {
-                HistoryStateBar(
-                    droplet: droplet,
-                    text: "Scrobbling is off",
-                    actionTitle: "Turn on",
-                    action: { droplet.setScrobblingEnabled(true) },
-                )
-            }
-        } else if let until = state.pausedUntil {
-            HistoryStateBar(
-                droplet: droplet,
-                text: "Scrobbling paused until \(until.formatted(date: .omitted, time: .shortened))",
-                actionTitle: "Resume",
-                action: { droplet.resumeCapture() },
-            )
-        } else if let sample = state.nowPlaying {
-            NowPlayingStrip(
-                droplet: droplet,
-                sample: sample,
-                status: state.status,
-                isLoved: state.nowPlayingIsLoved,
-                canLove: state.feedbackSupport.canLove,
-            )
-        }
-    }
-
-    private var bottomBarKey: String {
-        if !state.scrobblingEnabled {
-            return state.connections.isEmpty ? "off.connect" : "off.connections"
-        }
-        if let until = state.pausedUntil {
-            return "paused.\(until.timeIntervalSince1970)"
-        }
-        if let sample = state.nowPlaying {
-            return "track.\(sample.track.identity)"
-        }
-        return "none"
     }
 
     private var totalCount: Int {

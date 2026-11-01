@@ -133,6 +133,10 @@ public final class TracklogDroplet: NSObject, Droplet {
             await runtime.start()
             if isHarness {
                 await HarnessDemo.showNowPlaying(on: runtime)
+                if ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "charts"
+                    || HarnessChartFixture.selected != nil {
+                    state.setTakeoverSection(.charts)
+                }
                 // The HUD page renders nothing until the droplet presents, so
                 // the shot needs one deterministic card. It goes through the
                 // same host session and announcement path as a real event.
@@ -271,6 +275,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     }
 
     public func presentHistory(expandingPending: Bool = false) {
+        state.setTakeoverSection(.history)
         guard let host else { return }
         if expandingPending {
             state.setPendingListExpanded(true)
