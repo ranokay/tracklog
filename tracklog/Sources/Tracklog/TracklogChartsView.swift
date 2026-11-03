@@ -238,15 +238,18 @@ struct TracklogChartsView: View {
 
             if let snapshot = state.chartState.snapshot,
                let returned = snapshot.returnedRange {
-                Text(ChartCopy.returnedRangeLabel(
-                    returned,
-                    period: snapshot.period,
-                    now: Date(),
-                    calendar: ChartCalendar.current,
-                ))
-                .font(.caption)
-                .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(ChartCopy.returnedRangeLabel(
+                        returned,
+                        period: snapshot.period,
+                        serviceKind: state.chartState.effectiveSource.serviceKind,
+                        now: context.date,
+                        calendar: ChartCalendar.current,
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if let omission = omissionText {
                 Text(omission)

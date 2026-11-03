@@ -73,36 +73,41 @@ public enum ChartCopy {
     public static func returnedRangeLabel(
         _ range: ChartReturnedRange,
         period: ChartPeriod,
+        serviceKind: ServiceKind?,
         now: Date,
         calendar: Calendar,
     ) -> String {
-        let end = period == .allTime ? range.end : range.end.addingTimeInterval(-1)
-        let span = "Returned span \(utcDate(range.start, calendar)) – \(utcDate(end, calendar))"
+        let end: Date = if serviceKind == .listenBrainz, period != .allTime {
+            range.end.addingTimeInterval(-1)
+        } else {
+            range.end
+        }
+        let locale = calendar.locale ?? .autoupdatingCurrent
+        let span = "Returned span \(utcDate(range.start, locale: locale)) – \(utcDate(end, locale: locale))"
         let age = "data ends \(relativeAge(end, now: now))"
         guard let updated = range.lastUpdated else {
             return "\(span) · \(age)"
         }
-        return "\(span) · \(age) · statistics updated \(localDateTime(updated, calendar))"
+        return "\(span) · \(age) · statistics updated \(localDateTime(updated, locale: locale, in: calendar))"
     }
 
-    private static func utcDate(_ date: Date, _ calendar: Calendar) -> String {
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(identifier: "UTC")!
+    private static func utcDate(_ date: Date, locale: Locale) -> String {
+        let calendar = ChartCalendar.utc
         let style = Date.FormatStyle(
             date: .abbreviated,
             time: .omitted,
-            locale: calendar.locale ?? .autoupdatingCurrent,
-            calendar: utc,
-            timeZone: utc.timeZone,
+            locale: locale,
+            calendar: calendar,
+            timeZone: calendar.timeZone,
         )
         return date.formatted(style)
     }
 
-    private static func localDateTime(_ date: Date, _ calendar: Calendar) -> String {
+    private static func localDateTime(_ date: Date, locale: Locale, in calendar: Calendar) -> String {
         let style = Date.FormatStyle(
             date: .abbreviated,
             time: .shortened,
-            locale: calendar.locale ?? .autoupdatingCurrent,
+            locale: locale,
             calendar: calendar,
             timeZone: calendar.timeZone,
         )

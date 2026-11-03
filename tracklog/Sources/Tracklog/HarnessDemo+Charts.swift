@@ -71,7 +71,8 @@ enum HarnessChartFixture: String {
         switch self {
         case .notReady, .listenBrainz, .rateLimitedSaved:
             true
-        default:
+        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed,
+             .appCredentials, .needsSignIn, .noConnection, .local, .libreFallback, .localEmpty, .localMissingMetadata:
             false
         }
     }
@@ -130,10 +131,7 @@ enum HarnessChartFixtures {
     /// the next Monday 00:00 UTC as an exclusive end for a completed week.
     /// The statistics job then updates some days later.
     static func listenBrainzReturnedRange(now: Date) -> ChartReturnedRange {
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(identifier: "UTC")!
-        utc.firstWeekday = 2
-        utc.minimumDaysInFirstWeek = 4
+        let utc = ChartCalendar.utc
         let weekStart = utc.dateInterval(of: .weekOfYear, for: now)?.start
             ?? now.addingTimeInterval(-7 * 86_400)
         let end = weekStart
@@ -376,7 +374,8 @@ extension HarnessDemoStore {
               key.source == .service,
               let type = key.chartType
         else { return nil }
-        let returnedRange: ChartReturnedRange? = fixture == .rateLimitedSaved
+        let isListenBrainz = fixture == .rateLimitedSaved
+        let returnedRange: ChartReturnedRange? = isListenBrainz
             ? HarnessChartFixtures.listenBrainzReturnedRange(now: Date())
             : nil
         let snapshot = ChartSnapshot(
@@ -387,7 +386,7 @@ extension HarnessDemoStore {
             localTotal: nil,
             omittedCount: 0,
             returnedRange: returnedRange,
-            countUnit: fixture == .rateLimitedSaved ? .listens : .plays,
+            countUnit: isListenBrainz ? .listens : .plays,
             savedAt: Date().addingTimeInterval(-2 * 60 * 60),
         )
         let payload = (try? JSONEncoder().encode(snapshot)) ?? Data()

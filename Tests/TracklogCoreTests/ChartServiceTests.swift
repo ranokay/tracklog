@@ -1211,6 +1211,7 @@ struct ChartServiceTests {
         let label = ChartCopy.returnedRangeLabel(
             range,
             period: .week,
+            serviceKind: .listenBrainz,
             now: now,
             calendar: chartCalendar(utc),
         )
@@ -1230,7 +1231,13 @@ struct ChartServiceTests {
         let now = chartDate(2026, 10, 30, 12)
         for zone in ["Pacific/Auckland", "America/Los_Angeles"] {
             let calendar = try chartCalendar(#require(TimeZone(identifier: zone)))
-            let label = ChartCopy.returnedRangeLabel(range, period: .week, now: now, calendar: calendar)
+            let label = ChartCopy.returnedRangeLabel(
+                range,
+                period: .week,
+                serviceKind: .listenBrainz,
+                now: now,
+                calendar: calendar,
+            )
             #expect(label.contains("Oct 12, 2026"), "\(zone): \(label)")
             #expect(label.contains("Oct 18, 2026"), "\(zone): \(label)")
             #expect(!label.contains("Oct 19, 2026"), "\(zone): \(label)")
@@ -1238,6 +1245,7 @@ struct ChartServiceTests {
         let auckland = try ChartCopy.returnedRangeLabel(
             range,
             period: .week,
+            serviceKind: .listenBrainz,
             now: now,
             calendar: chartCalendar(#require(TimeZone(identifier: "Pacific/Auckland"))),
         )
@@ -1245,6 +1253,7 @@ struct ChartServiceTests {
         let losAngeles = try ChartCopy.returnedRangeLabel(
             range,
             period: .week,
+            serviceKind: .listenBrainz,
             now: now,
             calendar: chartCalendar(#require(TimeZone(identifier: "America/Los_Angeles"))),
         )
@@ -1260,6 +1269,7 @@ struct ChartServiceTests {
         let label = ChartCopy.returnedRangeLabel(
             range,
             period: .allTime,
+            serviceKind: .listenBrainz,
             now: chartDate(2026, 11, 4),
             calendar: chartCalendar(utc),
         )

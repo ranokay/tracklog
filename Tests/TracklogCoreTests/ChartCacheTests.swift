@@ -1826,6 +1826,7 @@ struct ChartCacheTests {
         let fresh = ChartCopy.returnedRangeLabel(
             original,
             period: .week,
+            serviceKind: .listenBrainz,
             now: clock.now,
             calendar: chartCalendar(utc),
         )
@@ -1853,6 +1854,7 @@ struct ChartCacheTests {
         let restored = try ChartCopy.returnedRangeLabel(
             #require(offlineState.chartState.snapshot?.returnedRange),
             period: .week,
+            serviceKind: .listenBrainz,
             now: clock.now,
             calendar: chartCalendar(utc),
         )
@@ -1866,6 +1868,7 @@ struct ChartCacheTests {
         let notReady = try ChartCopy.returnedRangeLabel(
             #require(offlineState.chartState.snapshot?.returnedRange),
             period: .week,
+            serviceKind: .listenBrainz,
             now: clock.now,
             calendar: chartCalendar(utc),
         )
@@ -1904,7 +1907,7 @@ struct ChartCacheTests {
         let stats = await transport.recordedRequests.filter {
             chartListenBrainzPath($0).contains("/stats/user/")
         }
-        #expect(stats.count == 2, "the saved refresh made one real adapter request")
+        #expect(stats.count == 2, "the initial read and the saved refresh each made one real adapter request")
         #expect(stats.last?.headers["Authorization"] == "Token token")
         #expect(stats.last?.url.path.contains("/user/listener/artists") == true)
     }
