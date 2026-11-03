@@ -1362,6 +1362,95 @@ struct ChartCacheTests {
         )
     }
 
+    @Test func aNotReadyScheduledRefreshKeepsSavedRowsAndDoesNotPoll() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let original = try #require(state.chartState.snapshot)
+
+        await gate.startHolding()
+        await flags.setNotReady(true)
+        clock.advance(to: now.addingTimeInterval(ChartFreshness.interval))
+        #expect(await gate.waitUntilEntered(1), "the scheduled refresh was attempted")
+        await gate.release()
+        #expect(await chartWaitUntil { state.chartState.refreshFailure == .notReady })
+        #expect(state.chartState.snapshot == original, "a 204 keeps the saved rows and age")
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.phase == .ready, "saved rows stay visible beside the not-ready state")
+        let requestsAfterNotReady = await chartStatsRequestCount(transport)
+        #expect(requestsAfterNotReady == 2)
+
+        clock.advance(to: now.addingTimeInterval(2 * ChartFreshness.interval))
+        await turnMainActor(50)
+        #expect(
+            await chartStatsRequestCount(transport) == requestsAfterNotReady,
+            "a 204 scheduled refresh is not retried by another clock advance",
+        )
+        #expect(state.chartState.snapshot == original)
+
+        await flags.setNotReady(false)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(
+            await chartStatsRequestCount(transport) == requestsAfterNotReady + 1,
+            "the manual retry makes exactly one more stats request",
+        )
+    }
+
+    @Test func aNotReadyChartWithoutSavedRowsDoesNotPoll() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        await flags.setNotReady(true)
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        #expect(state.chartState.phase == .notReady)
+        #expect(state.chartState.snapshot == nil)
+        let requests = await chartStatsRequestCount(transport)
+        #expect(requests == 1)
+
+        clock.advance(to: now.addingTimeInterval(2 * ChartFreshness.interval))
+        await turnMainActor(50)
+        #expect(
+            await chartStatsRequestCount(transport) == requests,
+            "an empty not-ready chart is not retried automatically",
+        )
+        #expect(state.chartState.phase == .notReady)
+        #expect(state.chartState.snapshot == nil)
+    }
+
     @Test func anAutomaticTotalRefreshDoesNotRetryAFailedList() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
