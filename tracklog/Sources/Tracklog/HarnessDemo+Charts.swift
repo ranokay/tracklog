@@ -100,6 +100,7 @@ enum HarnessChartFixtures {
     static func servicePage(
         type: ChartType,
         fixture: HarnessChartFixture,
+        period: ChartPeriod,
         limit: Int,
     ) throws -> ChartServicePage {
         switch fixture {
@@ -110,7 +111,7 @@ enum HarnessChartFixtures {
             let page = page(type: type, fixture: fixture)
             return ChartServicePage(
                 items: Array(page.items.prefix(limit)),
-                returnedRange: listenBrainzReturnedRange(now: Date()),
+                returnedRange: listenBrainzReturnedRange(now: Date(), period: period),
             )
         case .empty, .localEmpty, .localMissingMetadata, .noConnection, .local, .libreFallback:
             return ChartServicePage(items: [], returnedRange: nil)
@@ -127,15 +128,34 @@ enum HarnessChartFixtures {
         }
     }
 
-    /// The deployed ListenBrainz service returns a Monday 00:00 UTC start and
-    /// the next Monday 00:00 UTC as an exclusive end for a completed week.
-    /// The statistics job then updates some days later.
-    static func listenBrainzReturnedRange(now: Date) -> ChartReturnedRange {
+    /// The deployed ListenBrainz service returns an exclusive midnight end for
+    /// the selected completed period, and the latest listen for all time. The
+    /// harness mirrors that shape so a period switch never shows a weekly span.
+    static func listenBrainzReturnedRange(now: Date, period: ChartPeriod) -> ChartReturnedRange {
         let utc = ChartCalendar.utc
-        let weekStart = utc.dateInterval(of: .weekOfYear, for: now)?.start
-            ?? now.addingTimeInterval(-7 * 86_400)
-        let end = weekStart
-        let start = end.addingTimeInterval(-7 * 86_400)
+        let start: Date
+        let end: Date
+        switch period {
+        case .month:
+            let thisMonth = utc.dateInterval(of: .month, for: now)?.start ?? now
+            end = thisMonth
+            start = utc.date(byAdding: .month, value: -1, to: thisMonth)
+                ?? end.addingTimeInterval(-30 * 86_400)
+        case .year:
+            let thisYear = utc.dateInterval(of: .year, for: now)?.start ?? now
+            end = thisYear
+            start = utc.date(byAdding: .year, value: -1, to: thisYear)
+                ?? end.addingTimeInterval(-365 * 86_400)
+        case .allTime:
+            start = ChartDate(2002, 1, 1).startDate(in: utc)
+                ?? now.addingTimeInterval(-365 * 86_400)
+            end = now.addingTimeInterval(-3 * 86_400)
+        case .today, .custom, .week:
+            let weekStart = utc.dateInterval(of: .weekOfYear, for: now)?.start
+                ?? now.addingTimeInterval(-7 * 86_400)
+            end = weekStart
+            start = end.addingTimeInterval(-7 * 86_400)
+        }
         let updated = min(
             end.addingTimeInterval(5 * 86_400),
             max(end.addingTimeInterval(60), now.addingTimeInterval(-3_600)),
@@ -256,7 +276,7 @@ enum HarnessChartFixtures {
 extension HarnessDemoLastFMAdapter: ChartServiceReading {
     func top(
         _ type: ChartType,
-        period _: ChartPeriod,
+        period: ChartPeriod,
         connection _: Connection,
         credential _: String,
         limit: Int,
@@ -265,7 +285,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, period: period, limit: limit)
     }
 
     func allTimeAccountTotal(
@@ -291,7 +311,7 @@ extension HarnessDemoLastFMAdapter: FeedbackAdapter {
 extension HarnessDemoServiceAdapter: ChartServiceReading {
     func top(
         _ type: ChartType,
-        period _: ChartPeriod,
+        period: ChartPeriod,
         connection _: Connection,
         credential _: String,
         limit: Int,
@@ -300,7 +320,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, period: period, limit: limit)
     }
 
     func allTimeAccountTotal(
@@ -376,7 +396,7 @@ extension HarnessDemoStore {
         else { return nil }
         let isListenBrainz = fixture == .rateLimitedSaved
         let returnedRange: ChartReturnedRange? = isListenBrainz
-            ? HarnessChartFixtures.listenBrainzReturnedRange(now: Date())
+            ? HarnessChartFixtures.listenBrainzReturnedRange(now: Date(), period: key.period)
             : nil
         let snapshot = ChartSnapshot(
             scopeKey: key.rawKey,
