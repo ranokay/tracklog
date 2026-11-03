@@ -1367,7 +1367,8 @@ struct ChartCacheTests {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let flags = ChartFlags()
-        let transport = listenBrainzTransport(flags: flags)
+        let totalGate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, totalGate: totalGate)
         let state = TracklogAppState()
         let calendarBox = ChartCalendarBox(chartCalendar(utc))
         let runtime = makeChartRuntime(
@@ -1400,13 +1401,19 @@ struct ChartCacheTests {
         let statsAfterFailure = await chartStatsRequestCount(transport)
         let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
 
+        await totalGate.startHolding()
         clock.advance(to: now.addingTimeInterval(20 * 60))
-        #expect(await chartWaitUntil {
+        #expect(
+            await totalGate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the healthy total reached its own deadline",
+        )
+        await totalGate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
             if case let .account(total) = state.chartState.totals {
                 return total.savedAt == clock.now
             }
             return false
-        }, "the healthy total reached its own deadline")
+        }, "the total's automatic refresh completed")
         #expect(
             await chartStatsRequestCount(transport) == statsAfterFailure,
             "the total's automatic refresh did not retry the failed list",
@@ -1415,13 +1422,19 @@ struct ChartCacheTests {
         #expect(state.chartState.snapshot?.savedAt == original.savedAt)
         #expect(state.chartState.refreshFailure == .offline)
 
+        await totalGate.startHolding()
         clock.advance(to: now.addingTimeInterval(35 * 60))
-        #expect(await chartWaitUntil {
+        #expect(
+            await totalGate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the total's next deadline still refreshes independently",
+        )
+        await totalGate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
             if case let .account(total) = state.chartState.totals {
                 return total.savedAt == clock.now
             }
             return false
-        }, "the total's next deadline still refreshes independently")
+        }, "the second total refresh completed")
         #expect(
             await chartStatsRequestCount(transport) == statsAfterFailure,
             "a second total deadline still does not retry the failed list",
@@ -1448,7 +1461,8 @@ struct ChartCacheTests {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let flags = ChartFlags()
-        let transport = listenBrainzTransport(flags: flags)
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
         let state = TracklogAppState()
         let calendarBox = ChartCalendarBox(chartCalendar(utc))
         let runtime = makeChartRuntime(
@@ -1481,10 +1495,16 @@ struct ChartCacheTests {
         #expect(state.chartState.totalFailure == .offline)
         let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
 
+        await gate.startHolding()
         clock.advance(to: now.addingTimeInterval(20 * 60))
-        #expect(await chartWaitUntil {
+        #expect(
+            await gate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the healthy list reached its own deadline",
+        )
+        await gate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
             state.chartState.snapshot?.savedAt == clock.now
-        }, "the healthy list reached its own deadline")
+        }, "the list's automatic refresh completed")
         #expect(
             await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
             "the list's automatic refresh did not retry the failed total",
@@ -1492,10 +1512,16 @@ struct ChartCacheTests {
         #expect(state.chartState.totals == .account(originalTotal))
         #expect(state.chartState.totalFailure == .offline)
 
+        await gate.startHolding()
         clock.advance(to: now.addingTimeInterval(35 * 60))
-        #expect(await chartWaitUntil {
+        #expect(
+            await gate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the list's next deadline still refreshes independently",
+        )
+        await gate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
             state.chartState.snapshot?.savedAt == clock.now
-        }, "the list's next deadline still refreshes independently")
+        }, "the second list refresh completed")
         #expect(
             await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
             "a second list deadline still does not retry the failed total",

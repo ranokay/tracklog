@@ -502,12 +502,7 @@ public final class ChartReadModel {
         else { return }
 
         if connection.authState != .signedIn {
-            if refreshList {
-                recordListFailure(.needsSignIn, request: request)
-            }
-            if refreshTotal {
-                recordTotalFailure(.needsSignIn, request: request)
-            }
+            recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
             return
         }
 
@@ -517,23 +512,13 @@ public final class ChartReadModel {
                   !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
                 guard isCurrent(request) else { return }
-                if refreshList {
-                    recordListFailure(.needsSignIn, request: request)
-                }
-                if refreshTotal {
-                    recordTotalFailure(.needsSignIn, request: request)
-                }
+                recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
                 return
             }
             credential = stored
         } catch {
             guard isCurrent(request) else { return }
-            if refreshList {
-                recordListFailure(.needsSignIn, request: request)
-            }
-            if refreshTotal {
-                recordTotalFailure(.needsSignIn, request: request)
-            }
+            recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
             return
         }
         guard isCurrent(request) else { return }
@@ -654,6 +639,21 @@ public final class ChartReadModel {
             state.chartState.phase = .notReady
         } else {
             state.chartState.phase = .failed(failure)
+        }
+    }
+
+    /// Records a missing sign-in only for the components this pass attempted,
+    /// so an automatic total-only read cannot overwrite a list failure.
+    private func recordSignInFailure(
+        request: ChartRequest,
+        refreshList: Bool,
+        refreshTotal: Bool,
+    ) {
+        if refreshList {
+            recordListFailure(.needsSignIn, request: request)
+        }
+        if refreshTotal {
+            recordTotalFailure(.needsSignIn, request: request)
         }
     }
 

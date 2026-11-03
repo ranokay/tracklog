@@ -257,6 +257,7 @@ func chartWaitUntil(
 func listenBrainzTransport(
     flags: ChartFlags,
     gate: ChartHoldGate? = nil,
+    totalGate: ChartHoldGate? = nil,
 ) -> ChartHTTPTransport {
     ChartHTTPTransport { request in
         let path = chartListenBrainzPath(request)
@@ -296,6 +297,9 @@ func listenBrainzTransport(
             )
         }
         if path.contains("listen-count") {
+            if let totalGate {
+                await totalGate.enter()
+            }
             if await flags.isFailingTotal() {
                 throw URLError(.notConnectedToInternet)
             }

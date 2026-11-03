@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import Foundation
 import TracklogCore
 
@@ -86,6 +85,28 @@ enum HarnessChartFixtures {
         case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed,
              .allTimeTotalSavedFailed, .localMissingMetadata, .appCredentials, .needsSignIn:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
+        }
+    }
+
+    static func servicePage(
+        type: ChartType,
+        fixture: HarnessChartFixture,
+        limit: Int,
+    ) throws -> ChartServicePage {
+        switch fixture {
+        case .loading, .normal, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
+            let page = page(type: type, fixture: fixture)
+            return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
+        case .empty, .localEmpty, .localMissingMetadata, .noConnection, .local, .libreFallback:
+            return ChartServicePage(items: [], returnedRange: nil)
+        case .notReady:
+            throw ChartServiceError.notReady
+        case .failed, .failedSaved:
+            throw ServiceFailure.retryable
+        case .appCredentials:
+            throw ServiceFailure.appCredentialAuth(.missing)
+        case .needsSignIn:
+            throw ServiceFailure.auth
         }
     }
 
@@ -209,28 +230,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
-            let page = HarnessChartFixtures.page(type: type, fixture: fixture)
-            return ChartServicePage(
-                items: Array(page.items.prefix(limit)),
-                returnedRange: nil,
-            )
-        case .empty, .localEmpty, .localMissingMetadata:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .notReady:
-            throw ChartServiceError.notReady
-        case .failed, .failedSaved:
-            throw ServiceFailure.retryable
-        case .appCredentials:
-            throw ServiceFailure.appCredentialAuth(.missing)
-        case .needsSignIn:
-            throw ServiceFailure.auth
-        case .noConnection, .local, .libreFallback:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .allTime:
-            return HarnessChartFixtures.page(type: type, fixture: .normal)
-        }
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
     }
 
     func allTimeAccountTotal(
@@ -265,25 +265,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
-            let page = HarnessChartFixtures.page(type: type, fixture: fixture)
-            return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
-        case .empty, .localEmpty, .localMissingMetadata:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .notReady:
-            throw ChartServiceError.notReady
-        case .failed, .failedSaved:
-            throw ServiceFailure.retryable
-        case .appCredentials:
-            throw ServiceFailure.appCredentialAuth(.missing)
-        case .needsSignIn:
-            throw ServiceFailure.auth
-        case .noConnection, .local, .libreFallback:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .allTime:
-            return HarnessChartFixtures.page(type: type, fixture: .normal)
-        }
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
     }
 
     func allTimeAccountTotal(
@@ -410,5 +392,3 @@ extension HarnessDemoStore {
         }
     }
 }
-
-// swiftlint:enable file_length
