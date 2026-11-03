@@ -1059,7 +1059,300 @@ struct ChartServiceTests {
         #expect(state.chartState.snapshot?.localTotal == nil)
     }
 
+    @Test func listenBrainzChartMatrixKeepsOrderAndCapsEveryEntityAndPeriod() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let from = chartDate(2026, 10, 20)
+        let periodEnd = chartDate(2026, 10, 27)
+        let updated = chartDate(2026, 10, 28, 6)
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            if path.hasSuffix("listen-count") {
+                return listenBrainzCountResponse(9_876)
+            }
+            let type: ChartType = path.contains("/artists")
+                ? .artists
+                : path.contains("/releases") ? .albums : .tracks
+            let rows: [(String, String, Int, String)] = (0 ..< 51).map { index in
+                (
+                    "Entity \(index + 1)",
+                    type == .artists ? "" : "Artist \(index + 1)",
+                    index == 1 ? 999 : 100 - index,
+                    index == 1 ? "" : "mbid-\(index + 1)",
+                )
+            }
+            return listenBrainzStatsResponse(
+                type: type,
+                rows: rows,
+                from: from,
+                end: periodEnd,
+                lastUpdated: updated,
+            )
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        for period in [ChartPeriod.week, .month, .year, .allTime] {
+            await runtime.charts?.selectPeriod(period)
+            for type in ChartType.allCases {
+                await runtime.charts?.selectType(type)
+                let snapshot = try #require(state.chartState.snapshot)
+                #expect(snapshot.type == type)
+                #expect(snapshot.period == period)
+                #expect(snapshot.items.count == 50, "\(type) \(period) keeps the first 50")
+                #expect(snapshot.items.map(\.rank) == Array(1 ... 50))
+                #expect(snapshot.items.first?.title == "Entity 1")
+                #expect(snapshot.items.first?.count == 100)
+                #expect(snapshot.items.dropFirst().first?.title == "Entity 2")
+                #expect(snapshot.items.dropFirst().first?.count == 999, "provider order is not re-sorted")
+                #expect(snapshot.items.last?.title == "Entity 50")
+                #expect(!snapshot.items.contains { $0.title == "Entity 51" })
+                let missingID = try #require(snapshot.items.dropFirst().first)
+                #expect(missingID.providerID == nil)
+                #expect(missingID.identityKey.hasPrefix("fallback:listenbrainz:\(type.rawValue):"))
+            }
+        }
+
+        let stats = await transport.recordedRequests.filter {
+            chartListenBrainzPath($0).contains("/stats/user/")
+        }
+        #expect(stats.count == 12, "every entity and every accepted period is requested once")
+        #expect(stats.allSatisfy { $0.headers["Authorization"] == "Token token" })
+        #expect(stats.allSatisfy { chartQueryValue("count", in: $0) == "50" })
+        #expect(stats.allSatisfy { chartQueryValue("offset", in: $0) == "0" })
+        #expect(
+            Set(stats.compactMap { chartQueryValue("range", in: $0) })
+                == Set(["week", "month", "year", "all_time"]),
+        )
+        for range in ["week", "month", "year", "all_time"] {
+            #expect(stats.filter { chartQueryValue("range", in: $0) == range }.count == 3)
+        }
+        #expect(stats.filter { chartListenBrainzPath($0).contains("/artists") }.count == 4)
+        #expect(stats.filter { chartListenBrainzPath($0).contains("/releases") }.count == 4)
+        #expect(stats.filter { chartListenBrainzPath($0).contains("/recordings") }.count == 4)
+        #expect(await listenBrainzCountRequestCount(transport) == 1)
+    }
+
+    @Test func listenBrainzFetchesTheAccountTotalOnlyForAllTime() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = listenBrainzTransport(flags: ChartFlags())
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        #expect(state.chartState.totals == .unavailable(.rangeTotals))
+        #expect(await listenBrainzCountRequestCount(transport) == 0)
+
+        for period in [ChartPeriod.month, .year] {
+            await runtime.charts?.selectPeriod(period)
+            #expect(state.chartState.totals == .unavailable(.rangeTotals))
+            #expect(await listenBrainzCountRequestCount(transport) == 0)
+        }
+        #expect(try await store.chartCacheCount() == 3, "three ranked lists and no account total")
+
+        await runtime.charts?.selectPeriod(.allTime)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: now,
+        )))
+        #expect(await listenBrainzCountRequestCount(transport) == 1)
+        #expect(
+            try await store.chartCacheCount() == 5,
+            "four ranked lists and one separately keyed account total",
+        )
+
+        clock.advance(to: now.addingTimeInterval(ChartFreshness.interval))
+        runtime.charts?.hide()
+        await runtime.charts?.show()
+        #expect(await listenBrainzCountRequestCount(transport) == 2)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+    }
+
+    @Test func listenBrainzCopyMeasuresDataAgeFromTheReturnedEnd() {
+        let now = chartDate(2026, 11, 8)
+        let end = chartDate(2026, 10, 19)
+        let range = ChartReturnedRange(
+            start: chartDate(2026, 10, 12),
+            end: end,
+            lastUpdated: end,
+        )
+        let label = ChartCopy.returnedRangeLabel(
+            range,
+            period: .week,
+            now: now,
+            calendar: chartCalendar(utc),
+        )
+        #expect(label.contains("data ends 20 d ago"))
+        #expect(label.contains("statistics updated"))
+        #expect(!label.contains("lag"))
+        #expect(label.contains("Oct 12, 2026"))
+        #expect(label.contains("Oct 18, 2026"), "the exclusive end is shown as the last included day")
+    }
+
+    @Test func listenBrainzSpanIsAUTCWeekInEveryMacZone() throws {
+        let range = ChartReturnedRange(
+            start: chartDate(2026, 10, 12),
+            end: chartDate(2026, 10, 19),
+            lastUpdated: chartDate(2026, 10, 24, 4, 50),
+        )
+        let now = chartDate(2026, 10, 30, 12)
+        for zone in ["Pacific/Auckland", "America/Los_Angeles"] {
+            let calendar = try chartCalendar(#require(TimeZone(identifier: zone)))
+            let label = ChartCopy.returnedRangeLabel(range, period: .week, now: now, calendar: calendar)
+            #expect(label.contains("Oct 12, 2026"), "\(zone): \(label)")
+            #expect(label.contains("Oct 18, 2026"), "\(zone): \(label)")
+            #expect(!label.contains("Oct 19, 2026"), "\(zone): \(label)")
+        }
+        let auckland = try ChartCopy.returnedRangeLabel(
+            range,
+            period: .week,
+            now: now,
+            calendar: chartCalendar(#require(TimeZone(identifier: "Pacific/Auckland"))),
+        )
+        #expect(auckland.contains("Oct 24, 2026"), "the updated instant stays local: \(auckland)")
+        let losAngeles = try ChartCopy.returnedRangeLabel(
+            range,
+            period: .week,
+            now: now,
+            calendar: chartCalendar(#require(TimeZone(identifier: "America/Los_Angeles"))),
+        )
+        #expect(losAngeles.contains("Oct 23, 2026"), "the updated instant stays local: \(losAngeles)")
+    }
+
+    @Test func listenBrainzAllTimeSpanShowsTheReturnedDatesWithoutShiftingThem() {
+        let range = ChartReturnedRange(
+            start: chartDate(2002, 1, 1),
+            end: chartDate(2026, 9, 27, 0, 13),
+            lastUpdated: chartDate(2026, 9, 27, 12, 11),
+        )
+        let label = ChartCopy.returnedRangeLabel(
+            range,
+            period: .allTime,
+            now: chartDate(2026, 11, 4),
+            calendar: chartCalendar(utc),
+        )
+        #expect(label.contains("Jan 1, 2002"))
+        #expect(label.contains("Sep 27, 2026"), "the latest returned listen is not shifted to the previous day")
+        #expect(!label.contains("Sep 26, 2026"))
+        #expect(label.contains("data ends"))
+    }
+
+    @Test func listenBrainzMissingBoundsAreNotInvented() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            return listenBrainzStatsResponse(
+                type: .artists,
+                rows: [("Blondie", "", 42, "artist-mbid")],
+                from: chartDate(2026, 10, 20),
+                end: chartDate(2026, 10, 27),
+                lastUpdated: chartDate(2026, 10, 28, 6),
+                includeBounds: false,
+            )
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(
+            state.chartState.snapshot?.returnedRange == nil,
+            "a response without from_ts/to_ts must not invent a span",
+        )
+    }
+
+    @Test func listenBrainzNotReadyAccountTotalKeepsRankedRows() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        await flags.setNotReadyTotal(true)
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.totals == .unavailable(.accountTotal(.notReady)))
+        #expect(state.chartState.totalFailure == .notReady)
+
+        await flags.setNotReadyTotal(false)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: now,
+        )))
+        #expect(state.chartState.totalFailure == nil)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+    }
+
     // MARK: - Helpers
+
+    private func listenBrainzCountRequestCount(_ transport: ChartHTTPTransport) async -> Int {
+        await transport.recordedRequests.filter {
+            chartListenBrainzPath($0).hasSuffix("listen-count")
+        }.count
+    }
 
     private func lastFMUserInfoRequestCount(_ transport: ChartHTTPTransport) async -> Int {
         await transport.recordedRequests.filter { chartMethod($0) == "user.getInfo" }.count

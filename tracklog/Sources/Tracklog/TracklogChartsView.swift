@@ -236,11 +236,17 @@ struct TracklogChartsView: View {
                 .padding(.top, DroppySpacing.xs)
                 .accessibilityAddTraits(.isHeader)
 
-            if let returned = state.chartState.snapshot?.returnedRange {
-                Text(returnedRangeText(returned))
-                    .font(.caption)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+            if let snapshot = state.chartState.snapshot,
+               let returned = snapshot.returnedRange {
+                Text(ChartCopy.returnedRangeLabel(
+                    returned,
+                    period: snapshot.period,
+                    now: Date(),
+                    calendar: ChartCalendar.current,
+                ))
+                .font(.caption)
+                .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
             }
             if let omission = omissionText {
                 Text(omission)
@@ -540,17 +546,7 @@ struct TracklogChartsView: View {
     }
 
     private func relativeAge(_ date: Date) -> String {
-        let seconds = max(0, Date().timeIntervalSince(date))
-        if seconds < 60 {
-            return "just now"
-        }
-        if seconds < 3600 {
-            return "\(Int(seconds / 60)) min ago"
-        }
-        if seconds < 86_400 {
-            return "\(Int(seconds / 3600)) hr ago"
-        }
-        return "\(Int(seconds / 86_400)) d ago"
+        ChartCopy.relativeAge(date, now: Date())
     }
 
     private var omissionText: String? {
@@ -588,15 +584,6 @@ struct TracklogChartsView: View {
             return "This account has no listens in its history."
         }
         return "Try another period, or browse this Mac's local history."
-    }
-
-    private func returnedRangeText(_ range: ChartReturnedRange) -> String {
-        let start = range.start.formatted(date: .abbreviated, time: .omitted)
-        let end = range.end.formatted(date: .abbreviated, time: .omitted)
-        guard let updated = range.lastUpdated else {
-            return "Returned span \(start) – \(end)"
-        }
-        return "Returned span \(start) – \(end) · statistics updated \(updated.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func failureDescription(_ failure: ChartFailure) -> String {

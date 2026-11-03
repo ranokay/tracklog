@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import TracklogCore
 
@@ -14,6 +15,8 @@ enum HarnessChartFixture: String {
     case noConnection = "no-connection"
     case local
     case libreFallback = "libre-fallback"
+    case listenBrainz = "listenbrainz"
+    case rateLimitedSaved = "rate-limited-saved"
     case allTime = "all-time"
     case allTimeTotalFailed = "all-time-total-failed"
     case allTimeTotalSavedFailed = "all-time-total-saved-failed"
@@ -59,13 +62,18 @@ enum HarnessChartFixture: String {
         case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed,
              .appCredentials, .needsSignIn:
             true
-        case .notReady, .noConnection, .local, .libreFallback, .localEmpty, .localMissingMetadata:
+        case .notReady, .noConnection, .local, .libreFallback, .localEmpty, .localMissingMetadata, .listenBrainz, .rateLimitedSaved:
             false
         }
     }
 
     var linksListenBrainz: Bool {
-        self == .notReady
+        switch self {
+        case .notReady, .listenBrainz, .rateLimitedSaved:
+            true
+        default:
+            false
+        }
     }
 
     var linksLibreFM: Bool {
@@ -83,7 +91,7 @@ enum HarnessChartFixtures {
         case .longNames:
             ChartServicePage(items: rows(type: type, long: true), returnedRange: nil)
         case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed,
-             .allTimeTotalSavedFailed, .localMissingMetadata, .appCredentials, .needsSignIn:
+             .allTimeTotalSavedFailed, .localMissingMetadata, .appCredentials, .needsSignIn, .listenBrainz, .rateLimitedSaved:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
         }
     }
@@ -97,17 +105,44 @@ enum HarnessChartFixtures {
         case .loading, .normal, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             let page = page(type: type, fixture: fixture)
             return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
+        case .listenBrainz:
+            let page = page(type: type, fixture: fixture)
+            return ChartServicePage(
+                items: Array(page.items.prefix(limit)),
+                returnedRange: listenBrainzReturnedRange(now: Date()),
+            )
         case .empty, .localEmpty, .localMissingMetadata, .noConnection, .local, .libreFallback:
             return ChartServicePage(items: [], returnedRange: nil)
         case .notReady:
             throw ChartServiceError.notReady
         case .failed, .failedSaved:
             throw ServiceFailure.retryable
+        case .rateLimitedSaved:
+            throw ServiceFailure.rateLimited(retryAfter: 30)
         case .appCredentials:
             throw ServiceFailure.appCredentialAuth(.missing)
         case .needsSignIn:
             throw ServiceFailure.auth
         }
+    }
+
+    /// The deployed ListenBrainz service returns a Monday 00:00 UTC start and
+    /// the next Monday 00:00 UTC as an exclusive end for a completed week.
+    /// The statistics job then updates some days later.
+    static func listenBrainzReturnedRange(now: Date) -> ChartReturnedRange {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        utc.firstWeekday = 2
+        utc.minimumDaysInFirstWeek = 4
+        let weekStart = utc.dateInterval(of: .weekOfYear, for: now)?.start
+            ?? now.addingTimeInterval(-7 * 86_400)
+        let end = weekStart
+        let start = end.addingTimeInterval(-7 * 86_400)
+        let updated = min(
+            end.addingTimeInterval(5 * 86_400),
+            max(end.addingTimeInterval(60), now.addingTimeInterval(-3_600)),
+        )
+        return ChartReturnedRange(start: start, end: end, lastUpdated: updated)
     }
 
     static func rows(type: ChartType, long: Bool = false) -> [ChartItem] {
@@ -184,6 +219,8 @@ enum HarnessChartFixtures {
             return 12_345
         case .failed, .failedSaved, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             throw ServiceFailure.retryable
+        case .rateLimitedSaved:
+            throw ServiceFailure.rateLimited(retryAfter: 30)
         case .appCredentials:
             throw ServiceFailure.appCredentialAuth(.missing)
         case .needsSignIn:
@@ -192,7 +229,7 @@ enum HarnessChartFixtures {
             throw ChartServiceError.notReady
         case .empty, .localEmpty, .localMissingMetadata:
             return 0
-        case .normal, .longNames, .noConnection, .local, .libreFallback, .allTime:
+        case .normal, .longNames, .noConnection, .local, .libreFallback, .allTime, .listenBrainz:
             return 12_345
         }
     }
@@ -333,11 +370,15 @@ extension HarnessDemoStore {
                 payload: (try? JSONEncoder().encode(total)) ?? Data(),
             )
         }
-        guard HarnessChartFixture.selected == .failedSaved,
+        guard let fixture = HarnessChartFixture.selected,
+              fixture == .failedSaved || fixture == .rateLimitedSaved,
               key.kind == .list,
               key.source == .service,
               let type = key.chartType
         else { return nil }
+        let returnedRange: ChartReturnedRange? = fixture == .rateLimitedSaved
+            ? HarnessChartFixtures.listenBrainzReturnedRange(now: Date())
+            : nil
         let snapshot = ChartSnapshot(
             scopeKey: key.rawKey,
             type: type,
@@ -345,8 +386,8 @@ extension HarnessDemoStore {
             items: HarnessChartFixtures.page(type: type, fixture: .normal).items,
             localTotal: nil,
             omittedCount: 0,
-            returnedRange: nil,
-            countUnit: .plays,
+            returnedRange: returnedRange,
+            countUnit: fixture == .rateLimitedSaved ? .listens : .plays,
             savedAt: Date().addingTimeInterval(-2 * 60 * 60),
         )
         let payload = (try? JSONEncoder().encode(snapshot)) ?? Data()

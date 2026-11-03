@@ -1793,6 +1793,122 @@ struct ChartCacheTests {
         #expect(try await store.chartCacheCount() == 1)
     }
 
+    @Test func aSavedListenBrainzSpanSurvivesRestartFailureAndNotReady() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let credentials = MemoryCredentialStore()
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let selection = chartSelection(
+            source: .service,
+            period: .week,
+            now: now,
+            calendar: chartCalendar(utc),
+        )
+        let state = TracklogAppState()
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: selection,
+            calendarBox: ChartCalendarBox(chartCalendar(utc)),
+            credentials: credentials,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+
+        let original = try #require(state.chartState.snapshot?.returnedRange)
+        #expect(original.start == chartDate(2026, 10, 20))
+        #expect(original.end == chartDate(2026, 10, 27))
+        let fresh = ChartCopy.returnedRangeLabel(
+            original,
+            period: .week,
+            now: clock.now,
+            calendar: chartCalendar(utc),
+        )
+        #expect(fresh.contains("Oct 20, 2026"), "\(fresh)")
+        #expect(fresh.contains("Oct 26, 2026"), "\(fresh)")
+        #expect(fresh.contains("data ends 4 d ago"), "\(fresh)")
+
+        runtime.stop()
+        clock.advance(to: now.addingTimeInterval(20 * 86_400))
+        await flags.setFailing(true)
+        let offlineState = TracklogAppState()
+        let offlineRuntime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: offlineState,
+            selection: selection,
+            calendarBox: ChartCalendarBox(chartCalendar(utc)),
+            credentials: credentials,
+        )
+        await offlineRuntime.start()
+        await offlineRuntime.charts?.show()
+        #expect(offlineState.chartState.snapshot?.returnedRange == original)
+        #expect(offlineState.chartState.refreshFailure == .offline)
+        let restored = try ChartCopy.returnedRangeLabel(
+            #require(offlineState.chartState.snapshot?.returnedRange),
+            period: .week,
+            now: clock.now,
+            calendar: chartCalendar(utc),
+        )
+        #expect(restored.contains("data ends 24 d ago"), "the saved span's age keeps growing: \(restored)")
+
+        await flags.setFailing(false)
+        await flags.setNotReady(true)
+        await offlineRuntime.charts?.refresh()
+        #expect(offlineState.chartState.snapshot?.returnedRange == original)
+        #expect(offlineState.chartState.refreshFailure == .notReady)
+        let notReady = try ChartCopy.returnedRangeLabel(
+            #require(offlineState.chartState.snapshot?.returnedRange),
+            period: .week,
+            now: clock.now,
+            calendar: chartCalendar(utc),
+        )
+        #expect(notReady == restored)
+    }
+
+    @Test func aListenBrainzRateLimitKeepsSavedRowsAndItsRetryAfter() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let original = try #require(state.chartState.snapshot)
+
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        await flags.setRateLimited(true)
+        runtime.charts?.hide()
+        await runtime.charts?.show()
+
+        #expect(state.chartState.snapshot == original)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.refreshFailure == .rateLimited(retryAfter: 30))
+        let stats = await transport.recordedRequests.filter {
+            chartListenBrainzPath($0).contains("/stats/user/")
+        }
+        #expect(stats.count == 2, "the saved refresh made one real adapter request")
+        #expect(stats.last?.headers["Authorization"] == "Token token")
+        #expect(stats.last?.url.path.contains("/user/listener/artists") == true)
+    }
+
     // MARK: - Fixtures
 
     private func chartStatsRequestCount(_ transport: ChartHTTPTransport) async -> Int {
