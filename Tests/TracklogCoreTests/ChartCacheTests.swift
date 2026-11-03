@@ -1,4 +1,4 @@
-// swiftlint:disable file_length function_body_length cyclomatic_complexity large_tuple type_body_length
+// swiftlint:disable file_length function_body_length type_body_length
 import Foundation
 import Testing
 @testable import TracklogCore
@@ -563,6 +563,9 @@ struct ChartCacheTests {
 
         _ = try await runtime.unlinkConnection(id: connection.id ?? -1)
         #expect(try await store.chartCacheCount() == 0, "unlink evicts the remote rows in its transaction")
+        #expect(state.chartState.snapshot == nil, "the unlinked account's rows are not displayed")
+        await turnMainActor()
+        #expect(state.chartState.phase == .noConnection)
 
         await flags.setFailing(true)
         _ = try await runtime.link(kind: .listenBrainz, credential: "token")
@@ -1283,63 +1286,540 @@ struct ChartCacheTests {
         #expect(try await store.chartCacheCount() == 0)
     }
 
-    // MARK: - Fixtures
+    @Test func aVisibleFreshChartRefreshesAtFifteenMinutes() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let savedAt = try #require(state.chartState.snapshot?.savedAt)
+        #expect(await chartStatsRequestCount(transport) == 1)
 
-    private func listenBrainzTransport(
-        flags: ChartFlags,
-        gate: ChartHoldGate? = nil,
-    ) -> ChartHTTPTransport {
-        ChartHTTPTransport { request in
+        await gate.startHolding()
+        clock.advance(to: now.addingTimeInterval(ChartFreshness.interval))
+        #expect(await gate.waitUntilEntered(1), "the freshness wake reached the transport")
+        #expect(state.chartState.isRefreshing)
+        #expect(state.chartState.snapshot?.savedAt == savedAt, "saved rows stay visible while refreshing")
+        await gate.release()
+        #expect(await chartWaitForStatsRequestCount(transport, 2))
+        #expect(await chartWaitUntil { state.chartState.isRefreshing == false })
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+    }
+
+    @Test func aFailedScheduledRefreshKeepsTheOriginalAgeAndDoesNotRetry() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let original = try #require(state.chartState.snapshot)
+
+        await gate.startHolding()
+        await flags.setFailing(true)
+        clock.advance(to: now.addingTimeInterval(ChartFreshness.interval))
+        #expect(await gate.waitUntilEntered(1), "the scheduled refresh was attempted")
+        await gate.release()
+        #expect(await chartWaitUntil { state.chartState.refreshFailure == .offline })
+        #expect(state.chartState.snapshot == original, "the failed refresh kept the saved rows and age")
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.phase == .ready)
+
+        let requestsAfterFailure = await chartStatsRequestCount(transport)
+        clock.advance(to: now.addingTimeInterval(2 * ChartFreshness.interval))
+        await turnMainActor(50)
+        #expect(
+            await chartStatsRequestCount(transport) == requestsAfterFailure,
+            "a failed scheduled refresh is not retried by another clock advance",
+        )
+    }
+
+    @Test func anAutomaticTotalRefreshDoesNotRetryAFailedList() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let totalGate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, totalGate: totalGate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let original = try #require(state.chartState.snapshot)
+        #expect(await chartStatsRequestCount(transport) == 1)
+        #expect(await chartAccountTotalRequestCount(transport) == 1)
+
+        clock.advance(to: now.addingTimeInterval(5 * 60))
+        await flags.setFailing(true)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.snapshot == original, "the failed list keeps its original rows and age")
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+        let statsAfterFailure = await chartStatsRequestCount(transport)
+        let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
+
+        await totalGate.startHolding()
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        #expect(
+            await totalGate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the healthy total reached its own deadline",
+        )
+        await totalGate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
+            if case let .account(total) = state.chartState.totals {
+                return total.savedAt == clock.now
+            }
+            return false
+        }, "the total's automatic refresh completed")
+        #expect(
+            await chartStatsRequestCount(transport) == statsAfterFailure,
+            "the total's automatic refresh did not retry the failed list",
+        )
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 1)
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+
+        await totalGate.startHolding()
+        clock.advance(to: now.addingTimeInterval(35 * 60))
+        #expect(
+            await totalGate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the total's next deadline still refreshes independently",
+        )
+        await totalGate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
+            if case let .account(total) = state.chartState.totals {
+                return total.savedAt == clock.now
+            }
+            return false
+        }, "the second total refresh completed")
+        #expect(
+            await chartStatsRequestCount(transport) == statsAfterFailure,
+            "a second total deadline still does not retry the failed list",
+        )
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 2)
+        #expect(state.chartState.snapshot?.savedAt == original.savedAt)
+        #expect(state.chartState.refreshFailure == .offline)
+
+        await flags.setFailing(false)
+        await runtime.charts?.refresh()
+        #expect(await chartStatsRequestCount(transport) == statsAfterFailure + 1)
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+    }
+
+    @Test func anAutomaticListRefreshDoesNotRetryAFailedTotal() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        let originalTotal: ChartAccountTotal
+        if case let .account(total) = state.chartState.totals {
+            originalTotal = total
+        } else {
+            #expect(Bool(false), "expected an account total")
+            return
+        }
+        #expect(await chartStatsRequestCount(transport) == 1)
+        #expect(await chartAccountTotalRequestCount(transport) == 1)
+
+        clock.advance(to: now.addingTimeInterval(5 * 60))
+        await flags.setFailingTotal(true)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.totals == .account(originalTotal), "the failed total keeps its original saved age")
+        #expect(state.chartState.totalFailure == .offline)
+        let totalsAfterFailure = await chartAccountTotalRequestCount(transport)
+
+        await gate.startHolding()
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        #expect(
+            await gate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the healthy list reached its own deadline",
+        )
+        await gate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
+            state.chartState.snapshot?.savedAt == clock.now
+        }, "the list's automatic refresh completed")
+        #expect(
+            await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
+            "the list's automatic refresh did not retry the failed total",
+        )
+        #expect(state.chartState.totals == .account(originalTotal))
+        #expect(state.chartState.totalFailure == .offline)
+
+        await gate.startHolding()
+        clock.advance(to: now.addingTimeInterval(35 * 60))
+        #expect(
+            await gate.waitUntilEntered(1, timeout: .seconds(10)),
+            "the list's next deadline still refreshes independently",
+        )
+        await gate.release()
+        #expect(await chartWaitUntil(timeout: .seconds(10)) {
+            state.chartState.snapshot?.savedAt == clock.now
+        }, "the second list refresh completed")
+        #expect(
+            await chartAccountTotalRequestCount(transport) == totalsAfterFailure,
+            "a second list deadline still does not retry the failed total",
+        )
+        #expect(state.chartState.totals == .account(originalTotal))
+        #expect(state.chartState.totalFailure == .offline)
+
+        await flags.setFailingTotal(false)
+        await runtime.charts?.refresh()
+        #expect(await chartAccountTotalRequestCount(transport) == totalsAfterFailure + 1)
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
+        #expect(state.chartState.totalFailure == nil)
+    }
+
+    @Test func hidingStopsTheFreshnessWakeAndShowingAgainRefreshes() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        #expect(await chartStatsRequestCount(transport) == 1)
+
+        runtime.charts?.hide()
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        await turnMainActor(50)
+        #expect(await chartStatsRequestCount(transport) == 1, "a hidden chart does not refresh itself")
+
+        await runtime.charts?.show()
+        #expect(await chartStatsRequestCount(transport) == 2, "showing stale saved charts refreshes them")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+    }
+
+    @Test func deactivatingStopsTheFreshnessWakeAndReactivationRefreshes() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = listenBrainzTransport(flags: flags)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+        await runtime.charts?.show()
+        #expect(await chartStatsRequestCount(transport) == 1)
+
+        runtime.stop()
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        await turnMainActor(50)
+        #expect(await chartStatsRequestCount(transport) == 1, "deactivation stops the owned freshness wake")
+
+        await runtime.start()
+        await runtime.charts?.show()
+        #expect(await chartStatsRequestCount(transport) == 2, "reactivation loads the stale saved chart again")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+    }
+
+    @Test func anOlderFreshTotalRefreshesWithoutRefetchingTheFreshList() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let transport = ChartHTTPTransport { request in
             let path = chartListenBrainzPath(request)
             if path.hasSuffix("validate-token") {
                 return listenBrainzValidResponse()
             }
-            if path.contains("submit-listens") {
-                return chartJSONResponse(["status": "ok"])
-            }
             if path.contains("/stats/user/") {
-                if let gate {
-                    await gate.enter()
-                }
-                if await flags.isNotReady() {
-                    return HTTPResponse(statusCode: 204, body: Data())
-                }
-                if await flags.isFailing() {
-                    throw URLError(.notConnectedToInternet)
-                }
-                let type: ChartType = path.contains("/artists")
-                    ? .artists
-                    : path.contains("/releases") ? .albums : .tracks
-                let rows: [(String, String, Int, String)] = switch type {
-                case .artists:
-                    [("Blondie", "", 42, "artist-mbid"), ("Talking Heads", "", 30, "artist-mbid-2")]
-                case .albums:
-                    [("Parallel Lines", "Blondie", 42, "release-mbid")]
-                case .tracks:
-                    [("Heart of Glass", "Blondie", 42, "recording-mbid")]
-                }
                 return listenBrainzStatsResponse(
-                    type: type,
-                    rows: rows,
+                    type: .artists,
+                    rows: [("Should Not Be Fetched", "", 1, "artist-mbid")],
                     from: chartDate(2026, 10, 20),
                     end: chartDate(2026, 10, 27),
                     lastUpdated: chartDate(2026, 10, 28, 6),
                 )
             }
             if path.contains("listen-count") {
-                if await flags.isFailingTotal() {
-                    throw URLError(.notConnectedToInternet)
-                }
                 return listenBrainzCountResponse(500)
             }
             return HTTPResponse(statusCode: 404, body: Data())
         }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        let listKey = ChartCacheKey(
+            kind: .list,
+            source: .service,
+            serviceKind: .listenBrainz,
+            endpoint: connection.endpoint.description,
+            account: connection.identity,
+            chartType: .artists,
+            period: .allTime,
+        )
+        let cachedList = ChartSnapshot(
+            scopeKey: listKey.rawKey,
+            type: .artists,
+            period: .allTime,
+            items: [ChartItem(
+                rank: 1,
+                title: "Cached Artist",
+                count: 5,
+                identityKey: "mbid:cached-artist",
+            )],
+            localTotal: nil,
+            omittedCount: 0,
+            returnedRange: nil,
+            countUnit: .listens,
+            savedAt: now,
+        )
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: now, payload: JSONEncoder().encode(cachedList)),
+            for: listKey,
+        )
+        let totalKey = ChartCacheKey(
+            kind: .total,
+            source: .service,
+            serviceKind: .listenBrainz,
+            endpoint: connection.endpoint.description,
+            account: connection.identity,
+            chartType: nil,
+            period: .allTime,
+        )
+        let oldTotal = ChartAccountTotal(
+            value: 4_321,
+            serviceName: "ListenBrainz",
+            savedAt: now.addingTimeInterval(-10 * 60),
+        )
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: oldTotal.savedAt, payload: JSONEncoder().encode(oldTotal)),
+            for: totalKey,
+        )
+
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.items.first?.title == "Cached Artist")
+        #expect(state.chartState.totals == .account(oldTotal))
+        #expect(await chartStatsRequestCount(transport) == 0)
+        #expect(await chartAccountTotalRequestCount(transport) == 0)
+
+        clock.advance(to: now.addingTimeInterval(5 * 60))
+        #expect(await chartWaitUntil {
+            if case let .account(total) = state.chartState.totals {
+                return total.value == 500
+            }
+            return false
+        }, "the older total's own deadline refreshed it")
+        #expect(await chartStatsRequestCount(transport) == 0, "the fresh list was not refetched")
+        #expect(await chartAccountTotalRequestCount(transport) == 1)
+        #expect(state.chartState.snapshot?.savedAt == now, "the list keeps its own saved age")
+        #expect(state.chartState.totals == .account(ChartAccountTotal(
+            value: 500,
+            serviceName: "ListenBrainz",
+            savedAt: clock.now,
+        )))
     }
+
+    @Test func anOldFallbackKeyStaysReadableUntilASuccessfulRefresh() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let transport = ChartHTTPTransport { request in
+            let path = chartListenBrainzPath(request)
+            if path.hasSuffix("validate-token") {
+                return listenBrainzValidResponse()
+            }
+            if path.contains("/stats/user/") {
+                if await flags.isFailing() {
+                    throw URLError(.notConnectedToInternet)
+                }
+                return listenBrainzStatsResponse(
+                    type: .artists,
+                    rows: [("Same Name", "", 5, "")],
+                    from: chartDate(2026, 10, 20),
+                    end: chartDate(2026, 10, 27),
+                    lastUpdated: chartDate(2026, 10, 28, 6),
+                )
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
+        let listKey = ChartCacheKey(
+            kind: .list,
+            source: .service,
+            serviceKind: .listenBrainz,
+            endpoint: connection.endpoint.description,
+            account: connection.identity,
+            chartType: .artists,
+            period: .week,
+        )
+        let oldSavedAt = now.addingTimeInterval(-20 * 60)
+        let oldSnapshot = ChartSnapshot(
+            scopeKey: listKey.rawKey,
+            type: .artists,
+            period: .week,
+            items: [ChartItem(
+                rank: 1,
+                title: "Same Name",
+                count: 5,
+                identityKey: "fallback:artists:same name\u{1F}",
+            )],
+            localTotal: nil,
+            omittedCount: 0,
+            returnedRange: nil,
+            countUnit: .listens,
+            savedAt: oldSavedAt,
+        )
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: oldSavedAt, payload: JSONEncoder().encode(oldSnapshot)),
+            for: listKey,
+        )
+        await flags.setFailing(true)
+        await runtime.charts?.show()
+        #expect(state.chartState.snapshot?.items.first?.identityKey == "fallback:artists:same name\u{1F}")
+        #expect(state.chartState.refreshFailure == .offline, "offline data is retained rather than discarded")
+
+        await flags.setFailing(false)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(
+            state.chartState.snapshot?.items.first?.identityKey.hasPrefix("fallback:listenbrainz:artists:") == true,
+            "a successful refresh writes the source-scoped key",
+        )
+        #expect(try await store.chartCacheCount() == 1)
+    }
+
+    // MARK: - Fixtures
 
     private func chartStatsRequestCount(_ transport: ChartHTTPTransport) async -> Int {
         await transport.recordedRequests.filter {
             chartListenBrainzPath($0).contains("/stats/user/")
         }.count
+    }
+
+    private func chartAccountTotalRequestCount(_ transport: ChartHTTPTransport) async -> Int {
+        await transport.recordedRequests.filter {
+            chartListenBrainzPath($0).contains("listen-count")
+        }.count
+    }
+
+    private func chartWaitForStatsRequestCount(
+        _ transport: ChartHTTPTransport,
+        _ target: Int,
+        timeout: Duration = .seconds(5),
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while await chartStatsRequestCount(transport) < target {
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return true
     }
 }
 
@@ -1453,4 +1933,4 @@ func chartWaitForDelivery(
     return nil
 }
 
-// swiftlint:enable file_length function_body_length cyclomatic_complexity large_tuple type_body_length
+// swiftlint:enable file_length function_body_length type_body_length

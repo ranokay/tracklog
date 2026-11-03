@@ -19,6 +19,8 @@ enum HarnessChartFixture: String {
     case allTimeTotalSavedFailed = "all-time-total-saved-failed"
     case localEmpty = "local-empty"
     case localMissingMetadata = "local-missing-metadata"
+    case appCredentials = "app-credentials"
+    case needsSignIn = "needs-sign-in"
 
     static var selected: HarnessChartFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CHARTS"] ?? ""
@@ -54,7 +56,8 @@ enum HarnessChartFixture: String {
 
     var linksLastFM: Bool {
         switch self {
-        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
+        case .normal, .loading, .empty, .failed, .failedSaved, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed,
+             .appCredentials, .needsSignIn:
             true
         case .notReady, .noConnection, .local, .libreFallback, .localEmpty, .localMissingMetadata:
             false
@@ -80,8 +83,30 @@ enum HarnessChartFixtures {
         case .longNames:
             ChartServicePage(items: rows(type: type, long: true), returnedRange: nil)
         case .normal, .notReady, .failed, .failedSaved, .noConnection, .local, .libreFallback, .allTime, .allTimeTotalFailed,
-             .allTimeTotalSavedFailed, .localMissingMetadata:
+             .allTimeTotalSavedFailed, .localMissingMetadata, .appCredentials, .needsSignIn:
             ChartServicePage(items: rows(type: type), returnedRange: nil)
+        }
+    }
+
+    static func servicePage(
+        type: ChartType,
+        fixture: HarnessChartFixture,
+        limit: Int,
+    ) throws -> ChartServicePage {
+        switch fixture {
+        case .loading, .normal, .longNames, .allTime, .allTimeTotalFailed, .allTimeTotalSavedFailed:
+            let page = page(type: type, fixture: fixture)
+            return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
+        case .empty, .localEmpty, .localMissingMetadata, .noConnection, .local, .libreFallback:
+            return ChartServicePage(items: [], returnedRange: nil)
+        case .notReady:
+            throw ChartServiceError.notReady
+        case .failed, .failedSaved:
+            throw ServiceFailure.retryable
+        case .appCredentials:
+            throw ServiceFailure.appCredentialAuth(.missing)
+        case .needsSignIn:
+            throw ServiceFailure.auth
         }
     }
 
@@ -159,6 +184,10 @@ enum HarnessChartFixtures {
             return 12_345
         case .failed, .failedSaved, .allTimeTotalFailed, .allTimeTotalSavedFailed:
             throw ServiceFailure.retryable
+        case .appCredentials:
+            throw ServiceFailure.appCredentialAuth(.missing)
+        case .needsSignIn:
+            throw ServiceFailure.auth
         case .notReady:
             throw ChartServiceError.notReady
         case .empty, .localEmpty, .localMissingMetadata:
@@ -201,24 +230,7 @@ extension HarnessDemoLastFMAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
-            let page = HarnessChartFixtures.page(type: type, fixture: fixture)
-            return ChartServicePage(
-                items: Array(page.items.prefix(limit)),
-                returnedRange: nil,
-            )
-        case .empty, .localEmpty, .localMissingMetadata:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .notReady:
-            throw ChartServiceError.notReady
-        case .failed, .failedSaved:
-            throw ServiceFailure.retryable
-        case .noConnection, .local, .libreFallback:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .allTime:
-            return HarnessChartFixtures.page(type: type, fixture: .normal)
-        }
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
     }
 
     func allTimeAccountTotal(
@@ -253,21 +265,7 @@ extension HarnessDemoServiceAdapter: ChartServiceReading {
         if fixture == .loading {
             try? await Task.sleep(for: .seconds(30))
         }
-        switch fixture {
-        case .loading, .normal, .longNames, .allTimeTotalFailed, .allTimeTotalSavedFailed:
-            let page = HarnessChartFixtures.page(type: type, fixture: fixture)
-            return ChartServicePage(items: Array(page.items.prefix(limit)), returnedRange: nil)
-        case .empty, .localEmpty, .localMissingMetadata:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .notReady:
-            throw ChartServiceError.notReady
-        case .failed, .failedSaved:
-            throw ServiceFailure.retryable
-        case .noConnection, .local, .libreFallback:
-            return ChartServicePage(items: [], returnedRange: nil)
-        case .allTime:
-            return HarnessChartFixtures.page(type: type, fixture: .normal)
-        }
+        return try HarnessChartFixtures.servicePage(type: type, fixture: fixture, limit: limit)
     }
 
     func allTimeAccountTotal(

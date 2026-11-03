@@ -72,6 +72,7 @@ public extension LastFMClient {
                 subtitle: subtitle,
                 count: count,
                 identityKey: ChartIdentity.serviceKey(
+                    source: .lastFM,
                     providerID: providerID,
                     type: type,
                     title: title,

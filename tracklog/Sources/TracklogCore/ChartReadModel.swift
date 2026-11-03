@@ -25,6 +25,13 @@ public final class ChartReadModel {
     private var refreshTaskIsForced = false
     private var pendingForcedRefresh: UUID?
     private var artworkTask: Task<Void, Never>?
+    private var freshnessTask: Task<Void, Never>?
+    private var freshnessToken: UUID?
+    /// A component that failed its last read is excluded from automatic
+    /// freshness passes until an explicit show, manual refresh or selection
+    /// change retries it. The other component keeps its own deadlines.
+    private var listAutomaticBlocked = false
+    private var totalAutomaticBlocked = false
     private var activeToken: UUID?
     private var currentScopeKey: String?
     private var lastConnectionKey = "none"
@@ -73,6 +80,7 @@ public final class ChartReadModel {
         guard !isActive else { return }
         isActive = true
         didPruneCache = false
+        clearAutomaticRefreshBlocks()
         lastConnectionKey = Self.connectionKey(state.currentConnection)
         state.chartState = ChartViewState(selection: selection)
         registerObservers()
@@ -89,6 +97,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         removeObservers()
@@ -100,6 +109,7 @@ public final class ChartReadModel {
     public func show() async {
         guard isActive else { return }
         isShowing = true
+        clearAutomaticRefreshBlocks()
         lastConnectionKey = Self.connectionKey(state.currentConnection)
         await load(force: false)
     }
@@ -116,6 +126,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        cancelFreshnessWake()
         activeToken = nil
         currentScopeKey = nil
         state.chartState.isRefreshing = false
@@ -135,6 +146,7 @@ public final class ChartReadModel {
         refreshTask = nil
         refreshTaskIsForced = false
         pendingForcedRefresh = nil
+        clearAutomaticRefreshBlocks()
         activeToken = nil
         currentScopeKey = nil
         state.chartState.snapshot = nil
@@ -207,6 +219,7 @@ public final class ChartReadModel {
     /// request already in flight.
     public func refresh() async {
         guard isActive, isShowing else { return }
+        clearAutomaticRefreshBlocks()
         await load(force: true)
     }
 
@@ -233,6 +246,7 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        clearAutomaticRefreshBlocks()
         activeToken = nil
         currentScopeKey = nil
         state.chartState = ChartViewState(selection: selection)
@@ -256,13 +270,15 @@ public final class ChartReadModel {
         pendingForcedRefresh = nil
         artworkTask?.cancel()
         artworkTask = nil
+        clearAutomaticRefreshBlocks()
         activeToken = nil
         currentScopeKey = nil
         state.chartState = ChartViewState(selection: new)
     }
 
-    private func load(force: Bool) async {
+    private func load(force: Bool, automatic: Bool = false) async {
         guard isActive, isShowing else { return }
+        defer { rescheduleFreshnessWake() }
         normalizeCurrentSelection()
         let request: ChartRequest
         do {
@@ -319,7 +335,7 @@ public final class ChartReadModel {
         refreshTaskIsForced = force
         let task = Task { [weak self] in
             guard let self else { return ChartLoadOutcome() }
-            var outcome = await performLoad(request, force: force)
+            var outcome = await performLoad(request, force: force, automatic: automatic)
             while pendingForcedRefresh == token, isCurrent(request) {
                 pendingForcedRefresh = nil
                 if outcome.satisfies(request) {
@@ -327,7 +343,7 @@ public final class ChartReadModel {
                 }
                 guard activeToken == token else { break }
                 refreshTaskIsForced = true
-                let forcedOutcome = await performLoad(request, force: true)
+                let forcedOutcome = await performLoad(request, force: true, automatic: false)
                 outcome.merge(forcedOutcome)
             }
             if activeToken == token {
@@ -344,7 +360,7 @@ public final class ChartReadModel {
     /// Returns which reads this pass actually attempted, so an explicit
     /// refresh that arrived during a cache-only or total-only pass can force
     /// the missing read without duplicating one already underway.
-    private func performLoad(_ request: ChartRequest, force: Bool) async -> ChartLoadOutcome {
+    private func performLoad(_ request: ChartRequest, force: Bool, automatic: Bool) async -> ChartLoadOutcome {
         if !didPruneCache {
             didPruneCache = true
             do {
@@ -375,9 +391,9 @@ public final class ChartReadModel {
         }
 
         let snapshot = currentSnapshot(for: request)
-        let listNeedsRefresh = force
-            || snapshot == nil
-            || isStale(snapshot?.savedAt)
+        let listBlocked = automatic && listAutomaticBlocked
+        let listNeedsRefresh = !listBlocked
+            && (force || snapshot == nil || isStale(snapshot?.savedAt))
 
         let serviceAllTime = request.selection.period == .allTime && request.serviceKind != nil
         var total: ChartAccountTotal?
@@ -403,7 +419,9 @@ public final class ChartReadModel {
             state.chartState.totals = .local(localTotal)
         }
 
+        let totalBlocked = automatic && totalAutomaticBlocked
         let totalNeedsRefresh = serviceAllTime
+            && !totalBlocked
             && (force || total == nil || isStale(total?.savedAt))
 
         if !listNeedsRefresh, !totalNeedsRefresh {
@@ -412,8 +430,10 @@ public final class ChartReadModel {
         }
 
         state.chartState.isRefreshing = true
-        state.chartState.refreshFailure = nil
-        if serviceAllTime, total == nil {
+        if listNeedsRefresh {
+            state.chartState.refreshFailure = nil
+        }
+        if totalNeedsRefresh, total == nil {
             state.chartState.totals = .loading
         }
 
@@ -422,7 +442,12 @@ public final class ChartReadModel {
             fetchedTotal: totalNeedsRefresh,
         )
         if request.serviceKind != nil {
-            await loadService(request, force: force)
+            await loadService(
+                request,
+                force: force,
+                refreshList: listNeedsRefresh,
+                refreshTotal: totalNeedsRefresh,
+            )
         } else {
             await loadLocal(request)
         }
@@ -452,21 +477,23 @@ public final class ChartReadModel {
                 savedAt: clock.now,
             )
             publish(snapshot: snapshot, request: request)
+            listAutomaticBlocked = false
             state.chartState.refreshFailure = nil
             state.chartState.totals = .local(aggregate.total)
             await save(snapshot: snapshot, for: key, request: request)
             scheduleArtworkLoad(snapshot)
         } catch {
             guard isCurrent(request) else { return }
-            if currentSnapshot(for: request) != nil {
-                state.chartState.refreshFailure = .localRead
-            } else {
-                state.chartState.phase = .failed(.localRead)
-            }
+            recordListFailure(.localRead, request: request)
         }
     }
 
-    private func loadService(_ request: ChartRequest, force: Bool) async {
+    private func loadService(
+        _ request: ChartRequest,
+        force: Bool,
+        refreshList: Bool,
+        refreshTotal: Bool,
+    ) async {
         guard isCurrent(request),
               case let .service(connectionID, kind, _, _, _) = request.effective,
               let connection = request.connection,
@@ -475,8 +502,7 @@ public final class ChartReadModel {
         else { return }
 
         if connection.authState != .signedIn {
-            recordListFailure(.needsSignIn, request: request)
-            recordTotalFailure(.needsSignIn, request: request)
+            recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
             return
         }
 
@@ -486,25 +512,18 @@ public final class ChartReadModel {
                   !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
                 guard isCurrent(request) else { return }
-                recordListFailure(.needsSignIn, request: request)
-                recordTotalFailure(.needsSignIn, request: request)
+                recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
                 return
             }
             credential = stored
         } catch {
             guard isCurrent(request) else { return }
-            recordListFailure(.needsSignIn, request: request)
-            recordTotalFailure(.needsSignIn, request: request)
+            recordSignInFailure(request: request, refreshList: refreshList, refreshTotal: refreshTotal)
             return
         }
         guard isCurrent(request) else { return }
 
-        let snapshot = currentSnapshot(for: request)
-        let listNeedsRefresh = force
-            || snapshot == nil
-            || isStale(snapshot?.savedAt)
-
-        if listNeedsRefresh {
+        if refreshList {
             do {
                 let page = try await client.top(
                     request.selection.type,
@@ -526,6 +545,7 @@ public final class ChartReadModel {
                     savedAt: clock.now,
                 )
                 publish(snapshot: updated, request: request)
+                listAutomaticBlocked = false
                 state.chartState.refreshFailure = nil
                 await save(snapshot: updated, for: listKey, request: request)
             } catch {
@@ -534,7 +554,10 @@ public final class ChartReadModel {
             }
         }
 
-        guard request.selection.period == .allTime, let totalKey = request.totalKey else {
+        guard refreshTotal,
+              request.selection.period == .allTime,
+              let totalKey = request.totalKey
+        else {
             return
         }
 
@@ -570,6 +593,7 @@ public final class ChartReadModel {
                 savedAt: clock.now,
             )
             state.chartState.totals = .account(total)
+            totalAutomaticBlocked = false
             state.chartState.totalFailure = nil
             await save(total: total, for: key, request: request)
         } catch {
@@ -608,6 +632,7 @@ public final class ChartReadModel {
     }
 
     private func recordListFailure(_ failure: ChartFailure, request: ChartRequest) {
+        listAutomaticBlocked = true
         if currentSnapshot(for: request) != nil {
             state.chartState.refreshFailure = failure
         } else if failure == .notReady {
@@ -617,8 +642,24 @@ public final class ChartReadModel {
         }
     }
 
+    /// Records a missing sign-in only for the components this pass attempted,
+    /// so an automatic total-only read cannot overwrite a list failure.
+    private func recordSignInFailure(
+        request: ChartRequest,
+        refreshList: Bool,
+        refreshTotal: Bool,
+    ) {
+        if refreshList {
+            recordListFailure(.needsSignIn, request: request)
+        }
+        if refreshTotal {
+            recordTotalFailure(.needsSignIn, request: request)
+        }
+    }
+
     private func recordTotalFailure(_ failure: ChartFailure, request: ChartRequest) {
         guard request.selection.period == .allTime, request.serviceKind != nil else { return }
+        totalAutomaticBlocked = true
         if case let .account(total) = state.chartState.totals {
             state.chartState.totalFailure = failure
             // The successful account count remains, with its own age.
@@ -874,6 +915,8 @@ public final class ChartReadModel {
         selection = resolved
         persistSelection?(resolved)
         state.chartState.selection = resolved
+        listAutomaticBlocked = false
+        totalAutomaticBlocked = false
     }
 
     private func periodDetail(for request: ChartRequest) -> String? {
@@ -894,6 +937,69 @@ public final class ChartReadModel {
     private func isStale(_ savedAt: Date?) -> Bool {
         guard let savedAt else { return true }
         return clock.now.timeIntervalSince(savedAt) >= ChartFreshness.interval
+    }
+
+    // MARK: - Freshness
+
+    private func cancelFreshnessWake() {
+        freshnessTask?.cancel()
+        freshnessTask = nil
+        freshnessToken = nil
+    }
+
+    /// Explicit display, manual refresh, selection/account change or a local
+    /// environment change retries every component. Automatic freshness passes
+    /// never clear a block; only that component's own success does.
+    private func clearAutomaticRefreshBlocks() {
+        listAutomaticBlocked = false
+        totalAutomaticBlocked = false
+        cancelFreshnessWake()
+    }
+
+    /// Arms exactly one wake for the earliest fresh list or account-total
+    /// deadline. A component that failed its last read is excluded from both
+    /// the deadline and the automatic pass that fires, so the other healthy
+    /// component cannot retry it. An explicit show or manual refresh retries
+    /// it. The token and the load's own generation checks reject a wake that
+    /// became obsolete while asleep.
+    private func rescheduleFreshnessWake() {
+        cancelFreshnessWake()
+        guard isActive, isShowing else { return }
+        let now = clock.now
+        var deadlines: [Date] = []
+        if !listAutomaticBlocked, let snapshot = state.chartState.snapshot {
+            let deadline = snapshot.savedAt.addingTimeInterval(ChartFreshness.interval)
+            if deadline > now {
+                deadlines.append(deadline)
+            }
+        }
+        if !totalAutomaticBlocked,
+           case let .account(total) = state.chartState.totals {
+            let deadline = total.savedAt.addingTimeInterval(ChartFreshness.interval)
+            if deadline > now {
+                deadlines.append(deadline)
+            }
+        }
+        guard let deadline = deadlines.min() else { return }
+        let clock = clock
+        let token = UUID()
+        freshnessToken = token
+        freshnessTask = Task { [weak self] in
+            do {
+                try await clock.sleep(until: deadline)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  isActive,
+                  isShowing,
+                  freshnessToken == token
+            else { return }
+            freshnessTask = nil
+            freshnessToken = nil
+            await load(force: false, automatic: true)
+        }
     }
 
     private func chartFailure(for error: any Error) -> ChartFailure {

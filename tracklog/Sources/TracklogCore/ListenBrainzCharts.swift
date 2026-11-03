@@ -191,6 +191,7 @@ extension ListenBrainzAdapter: ChartServiceReading {
             subtitle: subtitle,
             count: count,
             identityKey: ChartIdentity.serviceKey(
+                source: .listenBrainz,
                 providerID: provider,
                 type: type,
                 title: title,
