@@ -22,7 +22,7 @@ These are the measurements that raised F1:
 | --- | --- | --- |
 | Section picker `History` | needs-sign-in and normal | 85 × 24 |
 | Section picker `Charts` | needs-sign-in and normal | 84 × 24 |
-| `Current connection` popup | normal, failed-saved, needs-sign-in | 208 × 28 |
+| `Current connection` popup | normal, failed-saved, needs-sign-in | 190 × 28 (inside a 208 pt container) |
 | Connection menu item `No connection` | open popup | 220 × 24 |
 | Source `Service` | normal | 186 × 31 |
 | Source `On this Mac` | normal | 186 × 31 |
@@ -57,7 +57,11 @@ no saved-data sign-in fixture exists. It uses the same
 
 - Section picker: `.controlSize(.small)` → `.regular` (21 → 24).
 - Connection switcher: borderless `Menu` → native menu-style `Picker`
-  (`controlSize(.large)`), labelled `Current connection`, 208 × 28.
+  (`controlSize(.large)`) with a visible, accessibility-hidden
+  `chevron.up.chevron.down` overlay; the popup is 190 × 28 inside a 208 pt
+  container. The selection was exercised: `No connection` → `No connection
+  selected` and no rows, then `Last.fm · listener` → rows return. Readout:
+  `docs/reports/issue-80/ax/connection-switch.txt`.
 - Overflow `More` in the playing strip and state bar:
   borderless `Menu` → `.menuStyle(.button)` with
   `DroppyCircleButtonStyle(size: 24)` (20 × 14 → 24 × 24).

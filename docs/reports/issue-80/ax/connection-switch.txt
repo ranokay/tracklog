@@ -1,0 +1,38 @@
+# Connection switcher: real selection in the running harness
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal TRACKLOG_HARNESS_SECTION=charts`.
+Window: `Tracklog — DroppyKit harness`, 1320 × 940 at (240, 87).
+
+Control:
+
+- `AXPopUpButton`, label `Current connection`, value `Last.fm · listener`,
+  frame 190 × 28 (outer layout 208 pt), actions `[AXPress]`.
+- The visible chevron `chevron.up.chevron.down` is an accessibility-hidden
+  overlay inside the 208 pt container; it is not a separate AX element.
+
+Selection sequence:
+
+1. Initial Charts state:
+   - Popup value `Last.fm · listener`.
+   - Source note `Last.fm · listener`.
+   - First ranked row `Rank 1, Blondie, 42 plays`.
+2. Open the control:
+   - `AXMenu` exposes `AXMenuItem "No connection"` and
+     `AXMenuItem "Last.fm · listener"`.
+3. Choose `No connection`:
+   - Popup value `No connection`.
+   - Source note `No connection selected` (three surface copies).
+   - No ranked rows remain; the no-connection panel exposes
+     `Use local history`.
+4. Open the control again and choose `Last.fm · listener`:
+   - Popup value `Last.fm · listener`.
+   - Source note `Last.fm · listener`.
+   - `Rank 1, Blondie, 42 plays` returns.
+
+History header:
+
+- The shared section picker is `AXRadioButton "History"`, selected, 85 × 24;
+  `Charts` is 84 × 24.
+- The connection switcher is Charts-only by design; History renders the
+  shared header without it.
+- Window capture: `docs/reports/issue-80/ax/history-header.png`.

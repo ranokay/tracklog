@@ -1,9 +1,9 @@
 # Issue #80 Core charts — worker report
 
 - Base: `c0bcd20c6bd5778ba648e0207283531ce50dc71d` (`feat: build ListenBrainz charts (#110)`)
-- Gate head: `dc89e13287da35ed283038682e6782d8766cbd80` (`fix: meet chart takeover target sizes`)
+- Gate head: `8fc562c5115845258cd86d19274c245fb312238f` (`fix: signal the chart connection menu`)
 - Branch: `feat/core-charts-80`
-- State: committed locally, not pushed. Review fixes F1–F3 are included; this report commit adds documentation and evidence only.
+- State: committed locally, not pushed. Review fixes F1–F4 are included; this report commit adds documentation and evidence only.
 - Scope: CH-01, the accepted CH-02 subset, supported CH-07 totals and CH-08 refresh. Part of #76; it does not close #76 or #77 and makes no Store or milestone-complete claim.
 
 ## Contract reconciliation
@@ -65,9 +65,9 @@ Command on the gate head:
 ```
 
 - Exit `0`, frozen gate `true`, clean before and after.
-- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T023053Z-0e25911237d5.json`
-- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T023053Z-0e25911237d5.log`
-- Duration: 709.8 seconds.
+- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T025433Z-adf0b9cb298b.json`
+- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T025433Z-adf0b9cb298b.log`
+- Duration: 714.4 seconds.
 
 | Command | Observed |
 | --- | --- |
@@ -123,7 +123,7 @@ viewport, not layout overflow:
 - Window: 1320 × 940 at global origin (240, 87), right edge x 1560.
 - Surface content: 898 × 557.
 - Right-most controls: Refresh and More x 1463..1487; Cancel x 1427..1451;
-  Love x 1399..1423; connection popup x 1279..1487.
+  Love x 1399..1423; connection switcher container x 1279..1487.
 - All right-most controls end at least 73 pt before the window's right edge,
   and the connection popup is inside the 898 pt content.
 
@@ -134,13 +134,14 @@ only), so the raw shot limit is recorded rather than worked around. The
 committed chart images are notch-panel crops of the raw shots and inherit the
 same right-edge clip.
 
-### Round-1 findings
+### Review findings (rounds 1–2)
 
 - **F1 fixed.** The section picker was 21 pt (`controlSize(.small)`), the
   connection menu 15 pt, and the playing/states overflow menu 20 × 14 pt; the
   Love control was disabled in the harness because its Last.fm adapter did not
   declare love support. The picker is now `.regular` (24 pt), the connection
-  switcher is a native menu-style `Picker` (208 × 28), both overflow menus use
+  switcher is a native menu-style `Picker` (190 × 28 inside a 208 pt container)
+  with a visible chevron overlay, both overflow menus use
   `DroppyCircleButtonStyle(size: 24)` (24 × 24), and the harness adapter
   declares love support. Every chart takeover control is listed with its
   measured frame in `ax/frames.txt`; the affected normal, loading, failed,
@@ -155,6 +156,17 @@ same right-edge clip.
   exit 0 and `Container/sub/keep.txt` preserved). The VoiceOver commands use
   the real fixture value `local`, and the `ListeningBrainz` typo is corrected
   to `ListenBrainz`.
+- **F4 fixed.** The connection switcher again visibly signals a menu: the
+  menu-style `Picker` carries a visible, accessibility-hidden
+  `chevron.up.chevron.down` overlay inside its 208 pt container; the popup is
+  190 × 28. A real selection was exercised in the running harness: `No
+  connection` changed the source note to `No connection selected` and removed
+  every ranked row, then `Last.fm · listener` restored `Rank 1, Blondie, 42
+  plays`. The AX control label/value and both states are recorded in
+  `ax/connection-switch.txt`. The shared header was inspected on History as
+  well (`ax/history-header.png`); the section picker is 85 × 24 / 84 × 24 and
+  the connection switcher is Charts-only by design. Affected shots were
+  re-inspected.
 
 ## Interactive harness walk
 
@@ -175,7 +187,7 @@ The checklist used is `docs/accessibility/voiceover-checklist.md`. AX-tree inspe
 | --- | --- | --- |
 | Rank, item, count and source speech | Passed (AX) | Service and local rows: label `Rank 1, … , 42 plays`; value `Last.fm · listener, Rolling 7 days` or `On this Mac, This week`. |
 | Selected controls expose state | Passed (AX) | Type, source and period buttons expose `Selected` / `Not selected`; the section is a radio group; the connection popup exposes label `Current connection` and value `Last.fm · listener`. |
-| 24-point targets | Passed (AX) | Every interactive chart control measured: section `History` 85×24 and `Charts` 84×24; connection popup 208×28 and its `No connection` item 220×24; source/type/period choices 31 high (including `Today` and `Custom`); Refresh 24×24; failure `Try again` 78.5×31, `Open Services settings` 161×31, `Use local history` 122.5×31; notice `Try again` 78.5×31; playing-strip Love 24×24, Cancel 24×24, More 24×24; paused `Resume` 71×31 and More 24×24; off `Turn on` 69×31 and More 24×24. Details in `ax/frames.txt`. |
+| 24-point targets | Passed (AX) | Every interactive chart control measured: section `History` 85×24 and `Charts` 84×24; connection popup 190×28 inside a 208 pt container, with its menu item 220×24; source/type/period choices 31 high (including `Today` and `Custom`); Refresh 24×24; failure `Try again` 78.5×31, `Open Services settings` 161×31, `Use local history` 122.5×31; notice `Try again` 78.5×31; playing-strip Love 24×24, Cancel 24×24, More 24×24; paused `Resume` 71×31 and More 24×24; off `Turn on` 69×31 and More 24×24. Details in `ax/frames.txt`. |
 | Reduce Motion | Passed (configured path) | Gate run with `TRACKLOG_HARNESS_REDUCE_MOTION=1`; log `Tracklog motion: reduced crossfade 0.16s`; `AccessibilityMotionTests` asserts < 0.2 s. No frame timing measured. |
 | Increase Contrast | Passed (rendered) | `charts-contrast` shot shows row separators; production reads the real contrast environment, the harness override only reaches the same path. |
 | Distinct empty/not-ready/failure copy | Passed (rendered) | Separate shots for empty, not-ready, failed, failed-saved, rate-limited-saved, app-credentials, needs-sign-in, no-connection and Libre fallback. |

@@ -1,6 +1,6 @@
 # Interactive harness AX walk — method
 
-- Date: 2026-11-04, 03:40–04:35 local time.
+- Date: 2026-11-04, 03:40–05:00 local time.
 - App: `/Users/ranokay/.t3/worktrees/tracklog/t3-f84360fe/tracklog/.build/TracklogHarness.app`
   (`TracklogHarness`, window `Tracklog — DroppyKit harness`).
 - Fixtures: `TRACKLOG_HARNESS_CHARTS=normal` (playing), `failed-saved` (playing),
@@ -17,5 +17,8 @@
   audible VoiceOver. The harness host refuses `openSettingsPage`, so the
   Custom-to-Settings handoff was observed as a refusal/no-op here; the real
   host handoff is recorded as not passed in the report.
+- F4's connection selection (Last.fm → No connection → Last.fm) and the
+  History shared-header capture are in `connection-switch.txt` and
+  `history-header.png`.
 - Interactive harness mode exposes no `report.json`. The equivalent
   fixture-backed gate reports are in `docs/reports/issue-80/reports/`.
