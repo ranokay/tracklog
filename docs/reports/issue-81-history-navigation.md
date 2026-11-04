@@ -179,13 +179,13 @@ Command:
 ```
 
 - Result and receipt: exit `0`, frozen gate `true`, clean before and after, at
-  head `49677e231d607271d3b0bdc08bcab451e811ad8e`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T060735Z-ce17d61ee992.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T060735Z-ce17d61ee992.log`
-  - Duration: 857.0 seconds.
+  head `4e8f55eb2f88fbc698cde8d23e83358848ff6e96`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T063610Z-989a5d085c8a.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T063610Z-989a5d085c8a.log`
+  - Duration: 867.3 seconds.
   - The commits after this code head are documentation and evidence only; the
     source and test tree the gate checked is unchanged.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 286 files.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 287 files.
 - `swift test --package-path Tests`: 627 tests in 96 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64.
 - `droppykit validate`: `Ready to submit`.
