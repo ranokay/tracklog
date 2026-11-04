@@ -98,6 +98,20 @@ actor LovedPageCounter {
     }
 }
 
+/// A synchronous counter for a transport's hold predicate. The predicate runs
+/// on the actor, so a small lock keeps “hold the second request” exact.
+final class LovedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+}
+
 // MARK: - Fixtures
 
 struct LovedLastFMRow {
@@ -116,14 +130,25 @@ func lovedLastFMResponse(
     _ rows: [LovedLastFMRow],
     page: Int,
     totalPages: Int,
+    omitted: Int = 0,
 ) -> HTTPResponse {
-    let tracks = rows.map { row -> [String: Any] in
+    var tracks = rows.map { row -> [String: Any] in
         [
             "name": row.title,
             "mbid": row.mbid,
             "artist": ["name": row.artist],
             "url": "https://www.last.fm/music/Example+Artist/_/\(row.title)",
         ]
+    }
+    for index in 0 ..< omitted {
+        // No artist name: the reader must count this entry, never invent one.
+        tracks.append(
+            [
+                "name": "Unnamed \(index)",
+                "mbid": "unnamed-\(index)",
+                "artist": [String: Any](),
+            ],
+        )
     }
     let body: [String: Any] = [
         "lovedtracks": [
@@ -311,6 +336,23 @@ func lovedWaitForRequests(
     let deadline = ContinuousClock.now.advanced(by: timeout)
     var requests = await transport.allRequests()
     while requests.count < count {
+        if ContinuousClock.now >= deadline {
+            break
+        }
+        try? await Task.sleep(for: .milliseconds(5))
+        requests = await transport.allRequests()
+    }
+    return requests
+}
+
+func lovedWaitForRequests(
+    _ transport: LovedTransport,
+    timeout: Duration = .seconds(3),
+    _ condition: @Sendable ([HTTPRequest]) -> Bool,
+) async -> [HTTPRequest] {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    var requests = await transport.allRequests()
+    while !condition(requests) {
         if ContinuousClock.now >= deadline {
             break
         }

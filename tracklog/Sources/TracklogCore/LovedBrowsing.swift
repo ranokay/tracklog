@@ -50,6 +50,13 @@ public struct LovedRow: Identifiable, Equatable, Sendable {
     public var trackIdentity: String {
         ListenMetadata(track).identity
     }
+
+    /// A service-read row knows only title and artist. Feedback reconciliation
+    /// matches those normalized fields, never the album-bearing identity.
+    public func matches(title: String, artist: String) -> Bool {
+        FeedbackIdentity.normalize(self.title) == FeedbackIdentity.normalize(title)
+            && FeedbackIdentity.normalize(self.artist) == FeedbackIdentity.normalize(artist)
+    }
 }
 
 public struct LovedServicePage: Equatable, Sendable {
@@ -93,6 +100,9 @@ public enum LovedSignInProblem: Equatable, Sendable {
     case signedOut
     case credentialMissing
     case credentialUnavailable
+    /// The service answered 401/403 to a read. The stored connection stays
+    /// signed in; only the next feedback/delivery may change that.
+    case rejected
 }
 
 public enum LovedFailure: Equatable, Sendable {
@@ -209,6 +219,8 @@ public enum LovedCopy {
                 "The saved \(service) credential is missing. Sign in on Services."
             case .credentialUnavailable:
                 "Tracklog could not read the saved credential. Unlock the login keychain, then try again."
+            case .rejected:
+                "\(service) rejected the saved credential. Sign in on Services."
             }
         case let .appCredentials(problem):
             "\(problem.title). \(problem.detail)"

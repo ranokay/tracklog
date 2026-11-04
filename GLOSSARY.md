@@ -18,7 +18,7 @@ The account identifier a service reports — a Last.fm, Libre.fm or ListenBrainz
 
 ## Current connection
 
-The connection service-backed reads are scoped to: charts, friends, profile, tags, collage top items and service search. A read cursor only; it never decides where a scrobble goes, and local history is not scoped to it.
+The connection service-backed reads are scoped to: charts, loved tracks, friends, profile, tags, collage top items and service search. A read cursor only; it never decides where a scrobble goes, and local history is not scoped to it.
 
 ## Listen
 
@@ -114,4 +114,10 @@ The droplet-owned floating search panel opened from the takeover's section bar, 
 
 ## Loved track
 
-A track the account behind the current Last.fm connection has marked as loved. Loved results are account-scoped and explain when that connection is not Last.fm.
+A track the account behind the current connection has marked as loved. The
+Loved section reads currently-loved tracks from Last.fm, Libre.fm/GNU FM or
+ListenBrainz, and from a custom ListenBrainz-compatible endpoint when it
+provides the standard feedback read. A loved row is current state, not a love
+event: unloving removes it, and the returned loved-at time is not an event log.
+The catalogue palette's Loved group remains the current Last.fm connection's
+loved tracks and explains when that connection is not Last.fm.

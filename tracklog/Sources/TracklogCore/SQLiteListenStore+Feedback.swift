@@ -21,7 +21,37 @@ public extension SQLiteListenStore {
         for (index, identity) in identities.enumerated() {
             try bind(identity, at: Int32(index + 1), in: statement)
         }
+        return try loadedFeedback(statement, handle: handle)
+    }
 
+    /// Every feedback row whose identity starts with the normalized title and
+    /// artist. An identity is `title\artist\album\albumArtist`, so the prefix
+    /// covers every album spelling of the same track.
+    func feedback(
+        matchingTrackTitle title: String,
+        artist: String,
+    ) async throws -> [String: TrackFeedback] {
+        let prefix = FeedbackIdentity.trackPrefix(title: title, artist: artist)
+        guard !prefix.isEmpty else { return [:] }
+        let handle = try database()
+        let statement = try prepare(
+            handle,
+            """
+            SELECT track_identity, score, updated_at
+            FROM feedback
+            WHERE substr(track_identity, 1, length(?)) = ?
+            """,
+        )
+        defer { sqlite3_finalize(statement) }
+        try bind(prefix, at: 1, in: statement)
+        try bind(prefix, at: 2, in: statement)
+        return try loadedFeedback(statement, handle: handle)
+    }
+
+    private func loadedFeedback(
+        _ statement: OpaquePointer,
+        handle: OpaquePointer,
+    ) throws -> [String: TrackFeedback] {
         var loaded: [String: TrackFeedback] = [:]
         while true {
             switch sqlite3_step(statement) {

@@ -12,6 +12,13 @@ enum HarnessLovedFixture: String {
     case appCredentials = "app-credentials"
     case longNames = "long-names"
     case noConnection = "no-connection"
+    case needsSignIn = "needs-sign-in"
+    case credentialRejected = "credential-rejected"
+    case paused
+    case actionFailure = "action-failure"
+    case refreshFailure = "refresh-failure"
+    case rateLimited = "rate-limited"
+    case metadataUnavailable = "metadata-unavailable"
 
     static var selected: HarnessLovedFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_LOVED"] ?? ""
@@ -21,7 +28,7 @@ enum HarnessLovedFixture: String {
 
 enum HarnessLovedDemo {
     @MainActor
-    static func link(on runtime: CaptureRuntime) async {
+    static func link(on runtime: CaptureRuntime, droplet: TracklogDroplet) async {
         guard let fixture = HarnessLovedFixture.selected else {
             _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
             return
@@ -38,15 +45,85 @@ enum HarnessLovedDemo {
                 credential: "demo-token",
                 endpoint: endpoint,
             )
-        case .normal, .loading, .empty, .failed, .appCredentials, .longNames:
+        case .metadataUnavailable:
+            _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+        case .needsSignIn:
+            guard let connection = try? await runtime.linkVerified(
+                kind: .lastFM,
+                credential: "demo-session",
+                identity: ServiceIdentity(name: "listener"),
+            ), let store = droplet.harnessStore
+            else { return }
+            var updated = connection
+            updated.authState = .needsSignIn
+            _ = try? await store.save(updated)
+            await runtime.reloadConnections()
+        case .paused:
+            guard let connection = try? await runtime.linkVerified(
+                kind: .lastFM,
+                credential: "demo-session",
+                identity: ServiceIdentity(name: "listener"),
+            ), let id = connection.id
+            else { return }
+            try? await runtime.setConnectionEnabled(id: id, enabled: false)
+        case .normal, .loading, .empty, .failed, .credentialRejected, .actionFailure,
+             .refreshFailure, .rateLimited, .appCredentials, .longNames:
             _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
         }
+    }
+
+    /// Fixtures whose state needs a second interaction after the first read.
+    @MainActor
+    static func prepare(on droplet: TracklogDroplet) async {
+        guard let fixture = HarnessLovedFixture.selected, let runtime = droplet.runtime else {
+            return
+        }
+        switch fixture {
+        case .actionFailure:
+            await runtime.loved?.show()
+            guard await waitForRows(runtime), let row = runtime.state.lovedState.rows.first else {
+                return
+            }
+            await droplet.unloveLovedRow(row)
+            _ = await waitUntil { runtime.state.lovedState.actionFailure != nil }
+        case .refreshFailure:
+            await runtime.loved?.show()
+            guard await waitForRows(runtime) else { return }
+            await runtime.loved?.refresh()
+            _ = await waitUntil { runtime.state.lovedState.refreshFailure != nil }
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private static func waitForRows(_ runtime: CaptureRuntime) async -> Bool {
+        await waitUntil {
+            runtime.state.lovedState.phase == .ready
+                && !runtime.state.lovedState.rows.isEmpty
+        }
+    }
+
+    @MainActor
+    private static func waitUntil(
+        timeout: TimeInterval = 3,
+        _ condition: @MainActor () -> Bool,
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return true
     }
 }
 
 enum HarnessLovedFixtures {
-    static let serviceName = "Last.fm"
+    private static let refreshFailureReads = HarnessLovedReadCounter()
 
+    // swiftlint:disable:next cyclomatic_complexity
     static func page(
         fixture: HarnessLovedFixture,
         connection: Connection,
@@ -62,14 +139,23 @@ enum HarnessLovedFixtures {
             throw ServiceFailure.retryable
         case .appCredentials:
             throw ServiceFailure.appCredentialAuth(.missing)
+        case .credentialRejected:
+            throw ServiceFailure.auth
+        case .rateLimited:
+            throw ServiceFailure.rateLimited(retryAfter: 30)
+        case .refreshFailure:
+            guard refreshFailureReads.next() == 1 else {
+                throw ServiceFailure.retryable
+            }
+            return normalPage(connection: connection, limit: limit)
         case .unsupported:
             throw LovedServiceError.unsupported(
                 "This ListenBrainz-compatible server does not provide loved tracks.",
             )
-        case .normal, .longNames:
+        case .metadataUnavailable:
+            return LovedServicePage(rows: [], omitted: 2, nextCursor: nil)
+        case .normal, .longNames, .needsSignIn, .paused, .actionFailure, .noConnection:
             return normalPage(fixture: fixture, connection: connection, limit: limit)
-        case .noConnection:
-            return LovedServicePage(rows: [], nextCursor: nil)
         }
     }
 
@@ -119,6 +205,20 @@ enum HarnessLovedFixtures {
     }
 }
 
+/// A thread-safe counter for a fixture that changes its answer after the first
+/// read.
+final class HarnessLovedReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+}
+
 // MARK: - Demo readers
 
 extension HarnessDemoLastFMAdapter: LovedServiceReading {
@@ -152,13 +252,8 @@ extension HarnessDemoServiceAdapter: LovedServiceReading {
         limit: Int,
     ) async throws -> LovedServicePage {
         let fixture = HarnessLovedFixture.selected ?? .normal
-        if fixture == .unsupported {
-            throw LovedServiceError.unsupported(
-                "This ListenBrainz-compatible server does not provide loved tracks.",
-            )
-        }
         return try await HarnessLovedFixtures.page(
-            fixture: fixture == .noConnection ? .empty : fixture,
+            fixture: fixture,
             connection: connection,
             limit: limit,
         )

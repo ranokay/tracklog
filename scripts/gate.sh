@@ -129,8 +129,11 @@ run_loved_shots() {
 
 # The states #87 names: normal rows, loading, a successful empty list, a read
 # failure, a compatible server without the read, unusable app credentials,
-# long names and no current connection.
-for fixture in normal loading empty failed unsupported app-credentials long-names no-connection; do
+# long names, no current connection, needs sign-in, a rejected credential, a
+# paused connection, a refused row action, a failed refresh over rows, a rate
+# limit and loved recordings without metadata.
+for fixture in normal loading empty failed unsupported app-credentials long-names no-connection \
+    needs-sign-in credential-rejected paused action-failure refresh-failure rate-limited metadata-unavailable; do
     run_loved_shots "$fixture"
 done
 

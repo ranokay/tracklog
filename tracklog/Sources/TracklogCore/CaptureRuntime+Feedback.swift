@@ -150,6 +150,7 @@ public extension CaptureRuntime {
                 identity: identity,
                 scope: .serviceRow(connectionID: sourceID, reference: row.reference),
                 generation: generation,
+                reconciledRowID: row.id,
             )
             sourceSucceeded = succeeded.contains { $0.id == sourceID }
         }
@@ -266,26 +267,34 @@ private extension CaptureRuntime {
         identity: String,
         scope: FeedbackScope,
         generation: Int,
+        reconciledRowID: String? = nil,
     ) async -> [Connection] {
         guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let targets = feedbackTargets(for: action)
         guard !targets.isEmpty, let feedbackStore else { return [] }
 
         let now = clock.now
-        let score = action.localScore
+        let written: (identities: [String], clearsTrack: Bool)
         do {
-            try await feedbackStore.setFeedback(score, for: identity, at: now)
+            written = try await storeFeedback(
+                action,
+                track: track,
+                identity: identity,
+                scope: scope,
+                at: now,
+            )
         } catch {
             state.failure = .storage(error: error)
             return []
         }
 
         guard started, startGeneration == generation, !Task.isCancelled else { return [] }
-        feedbackWriteRevisions[identity, default: 0] += 1
-        feedbackLoadedIdentities.insert(identity)
-        var next = state.feedbackByTrack
-        next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
-        state.feedbackByTrack = next
+        publishFeedback(
+            written,
+            identity: identity,
+            score: action.localScore,
+            at: now,
+        )
 
         guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let succeeded = await deliveryOutbox?.sendFeedback(
@@ -299,8 +308,65 @@ private extension CaptureRuntime {
         }
 
         showFeedbackHUD(action, services: succeeded.map(\.hudServiceName))
-        await loved?.feedbackSucceeded(action, track: track, connections: succeeded)
+        // The re-read reconciliation is started, not awaited: a slow Loved
+        // read must not hold the serial feedback chain open.
+        loved?.feedbackSucceeded(
+            action,
+            track: track,
+            connections: succeeded,
+            rowID: reconciledRowID,
+        )
         return succeeded
+    }
+
+    /// Writes the local score. A service-read unlove knows only title and
+    /// artist, so it clears every album-bearing identity for that track.
+    private func storeFeedback(
+        _ action: FeedbackAction,
+        track: Track,
+        identity: String,
+        scope: FeedbackScope,
+        at now: Date,
+    ) async throws -> (identities: [String], clearsTrack: Bool) {
+        guard let feedbackStore else { return ([identity], false) }
+        var clearsTrack = false
+        if case .serviceRow = scope, action == .unlove {
+            clearsTrack = true
+        }
+        guard clearsTrack else {
+            try await feedbackStore.setFeedback(action.localScore, for: identity, at: now)
+            return ([identity], false)
+        }
+        let matching = try await feedbackStore.feedback(
+            matchingTrackTitle: track.title,
+            artist: track.artist,
+        )
+        var identities = Set(matching.keys)
+        identities.insert(identity)
+        for affected in identities {
+            try await feedbackStore.setFeedback(nil, for: affected, at: now)
+        }
+        return (Array(identities), true)
+    }
+
+    private func publishFeedback(
+        _ written: (identities: [String], clearsTrack: Bool),
+        identity: String,
+        score: FeedbackScore?,
+        at now: Date,
+    ) {
+        var next = state.feedbackByTrack
+        for affected in written.identities {
+            feedbackWriteRevisions[affected, default: 0] += 1
+            feedbackLoadedIdentities.insert(affected)
+            if written.clearsTrack {
+                next[affected] = nil
+            }
+        }
+        if !written.clearsTrack {
+            next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
+        }
+        state.feedbackByTrack = next
     }
 
     func showFeedbackHUD(_ action: FeedbackAction, services: [String]) {

@@ -112,6 +112,27 @@ public protocol FeedbackStore: Sendable {
     /// The stored feedback for the requested processed identities.
     func feedback(for identities: [String]) async throws -> [String: TrackFeedback]
 
+    /// Every stored score whose identity starts with this normalized title and
+    /// artist. A service-read row knows only those two fields, so clearing its
+    /// love must clear each album-bearing identity the same track produced.
+    func feedback(matchingTrackTitle title: String, artist: String) async throws -> [String: TrackFeedback]
+
     /// Stores one score, or removes the row when `score` is nil.
     func setFeedback(_ score: FeedbackScore?, for identity: String, at date: Date) async throws
+}
+
+/// The normalized title-and-artist part of a feedback identity. Title and
+/// artist are the only fields a service-read row can know reliably.
+public enum FeedbackIdentity {
+    public static func normalize(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    public static func trackPrefix(title: String, artist: String) -> String {
+        [normalize(title), normalize(artist)].joined(separator: "\u{1F}") + "\u{1F}"
+    }
+
+    public static func matches(_ identity: String, title: String, artist: String) -> Bool {
+        identity.hasPrefix(trackPrefix(title: title, artist: artist))
+    }
 }

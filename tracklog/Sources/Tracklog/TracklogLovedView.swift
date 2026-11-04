@@ -309,8 +309,11 @@ struct TracklogLovedView: View {
         return state.lovedState.refreshFailure ?? state.lovedState.loadMoreFailure
     }
 
-    private var actionRemedyTitle: String {
-        lastFailure?.needsSettings == true ? "Open Settings" : "Open Services"
+    private var actionRemedyTitle: String? {
+        if let lastFailure, case .rateLimited = lastFailure {
+            return nil
+        }
+        return lastFailure?.needsSettings == true ? "Open Settings" : "Open Services"
     }
 
     private func openActionRemedy() {
@@ -327,8 +330,8 @@ struct TracklogLovedView: View {
     }
 
     private func canRetry(_ failure: LovedFailure) -> Bool {
-        if case let .rateLimited(retryAfter) = failure, let retryAfter, retryAfter > 0 {
-            return false
+        if case .rateLimited = failure {
+            return !isRetryBlocked
         }
         return true
     }

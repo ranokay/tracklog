@@ -81,6 +81,13 @@ actor SuspendingFeedbackStore: ListenStore, FeedbackStore, ConnectionStore, Deli
         return loaded
     }
 
+    func feedback(
+        matchingTrackTitle title: String,
+        artist: String,
+    ) async throws -> [String: TrackFeedback] {
+        try await base.feedback(matchingTrackTitle: title, artist: artist)
+    }
+
     func setFeedback(_ score: FeedbackScore?, for identity: String, at date: Date) async throws {
         try await base.setFeedback(score, for: identity, at: date)
     }

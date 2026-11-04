@@ -59,7 +59,7 @@ enum HarnessDemo {
     }
 
     @MainActor
-    static func showNowPlaying(on runtime: CaptureRuntime) async {
+    static func showNowPlaying(on runtime: CaptureRuntime, droplet: TracklogDroplet) async {
         let state = HarnessDemoState.selected
         let chartFixture = HarnessChartFixture.selected
 
@@ -82,7 +82,7 @@ enum HarnessDemo {
             }
         } else if HarnessLovedFixture.selected != nil
             || ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "loved" {
-            await HarnessLovedDemo.link(on: runtime)
+            await HarnessLovedDemo.link(on: runtime, droplet: droplet)
         } else if let chartFixture {
             if chartFixture.linksListenBrainz {
                 _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
@@ -212,6 +212,14 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
                 feedbackRows[identity].map { (identity, $0) }
             },
         )
+    }
+
+    func feedback(
+        matchingTrackTitle title: String,
+        artist: String,
+    ) async throws -> [String: TrackFeedback] {
+        let prefix = FeedbackIdentity.trackPrefix(title: title, artist: artist)
+        return feedbackRows.filter { $0.key.hasPrefix(prefix) }
     }
 
     func setFeedback(_ score: FeedbackScore?, for identity: String, at date: Date) async throws {

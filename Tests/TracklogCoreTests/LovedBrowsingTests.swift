@@ -64,7 +64,8 @@ struct LovedBrowsingTests {
         let identities = state.lovedState.rows.map(\.trackIdentity)
         #expect(try await store.feedback(for: identities).isEmpty)
 
-        // No cache: showing again reads again.
+        // No cache: leaving and reopening reads again.
+        runtime.loved?.hide()
         await runtime.loved?.show()
         #expect(await transport.requestCount() == 2)
         #expect(state.lovedState.rows.count == 2)
@@ -217,7 +218,7 @@ struct LovedBrowsingTests {
         await runtime.loved?.show()
 
         let row = try #require(runtime.state.lovedState.rows.first)
-        await runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
+        runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
         #expect(runtime.state.lovedState.rows.isEmpty)
 
         await runtime.loved?.loadMore()
@@ -287,7 +288,7 @@ struct LovedBrowsingTests {
         #expect(runtime.state.lovedState.rows.count == 4)
 
         let removed = try #require(runtime.state.lovedState.rows.first)
-        await runtime.loved?.feedbackSucceeded(.unlove, track: removed.track, connections: [connection])
+        runtime.loved?.feedbackSucceeded(.unlove, track: removed.track, connections: [connection])
         #expect(runtime.state.lovedState.rows.count == 3)
 
         await runtime.loved?.loadMore()
@@ -456,12 +457,16 @@ struct LovedBrowsingTests {
             identity: ServiceIdentity(name: "listener"),
         )
         await runtime.loved?.show()
-        let identity = ListenMetadata(
-            Track(title: "Example Track One", artist: "Example Artist"),
-        ).identity
+        let track = Track(
+            title: "Example Track One",
+            artist: "Example Artist",
+            album: "Example Album",
+            albumArtist: "Example Album Artist",
+        )
+        let identity = ListenMetadata(track).identity
         try await store.setFeedback(.loved, for: identity, at: base)
         runtime.state.nowPlaying = MediaSample(
-            track: Track(title: "Example Track One", artist: "Example Artist"),
+            track: track,
             elapsed: 10,
             playbackRate: 1,
             isPlaying: true,
@@ -469,15 +474,20 @@ struct LovedBrowsingTests {
 
         await runtime.toggleLoveForCurrentTrack()
         #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.feedbackByTrack[identity] == nil)
+        #expect(try await store.feedback(for: [identity]).isEmpty)
         #expect(await transport.requests { lovedLastFMMethod($0) == "track.unlove" }.count == 1)
         let readsAfterUnlove = await transport.requests { lovedLastFMMethod($0) == "user.getlovedtracks" }
         #expect(readsAfterUnlove.count == 1)
 
         await runtime.toggleLoveForCurrentTrack()
         #expect(await transport.requests { lovedLastFMMethod($0) == "track.love" }.count == 1)
-        let readsAfterLove = await transport.requests { lovedLastFMMethod($0) == "user.getlovedtracks" }
-        #expect(readsAfterLove.count == 2)
-        #expect(runtime.state.lovedState.rows.count == 1)
+        let readsAfterLove = await lovedWaitForRequests(transport) { requests in
+            requests.filter { lovedLastFMMethod($0) == "user.getlovedtracks" }.count == 2
+        }
+        #expect(readsAfterLove.filter { lovedLastFMMethod($0) == "user.getlovedtracks" }.count == 2)
+        #expect(await lovedWaitUntil { runtime.state.lovedState.rows.count == 1 })
+        #expect(runtime.state.feedbackByTrack[identity]?.score == .loved)
     }
 
     // MARK: - Authentication and readiness
@@ -623,7 +633,12 @@ struct LovedBrowsingTests {
         #expect(runtime.state.lovedState.rows.count == 1)
         #expect(
             runtime.state.lovedState.refreshFailure
-                == LovedFailure.needsSignIn(.signedOut),
+                == LovedFailure.needsSignIn(.rejected),
+        )
+        #expect(
+            runtime.state.lovedState.refreshFailure.map {
+                LovedCopy.failureMessage($0, service: "ListenBrainz", retryAt: nil)
+            } == "ListenBrainz rejected the saved credential. Sign in on Services.",
         )
         #expect(runtime.state.currentConnection?.authState == ConnectionAuthState.signedIn)
         #expect(runtime.state.lovedState.canUnlove == false)
@@ -864,6 +879,743 @@ struct LovedBrowsingTests {
         await turnMainActor()
         #expect(runtime.state.lovedState.rows.map(\.title) == ["New Account Row"])
         #expect(runtime.state.lovedState.sourceLabel == "ListenBrainz · listener-two")
+    }
+
+    // MARK: - Identity reconciliation
+
+    @Test func aHistoryUnloveClearsEveryLocalFeedbackIdentityForTheSameTrack() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                return lovedLastFMResponse(
+                    [LovedLastFMRow("Example Track One")],
+                    page: 1,
+                    totalPages: 1,
+                )
+            }
+            if lovedLastFMMethod(request) == "track.love"
+                || lovedLastFMMethod(request) == "track.unlove" {
+                return lastFMEmptyResponse()
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, store) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        #expect(runtime.state.lovedState.rows.count == 1)
+
+        let track = Track(
+            title: "Example Track One",
+            artist: "Example Artist",
+            album: "Example Album",
+            albumArtist: "Example Album Artist",
+        )
+        let identity = ListenMetadata(track).identity
+        try await store.setFeedback(.loved, for: identity, at: base)
+        let listen = try #require(
+            try await store.insert(
+                Listen(
+                    raw: ListenMetadata(track),
+                    processed: ListenMetadata(track),
+                    bundleID: "com.apple.Music",
+                    duration: 200,
+                    playedDuration: 200,
+                    startedAt: base,
+                    capturedAt: base,
+                ),
+                targets: [],
+            ),
+        )
+
+        await runtime.toggleLove(for: listen)
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.feedbackByTrack[identity] == nil)
+        #expect(try await store.feedback(for: [identity]).isEmpty)
+        #expect(await transport.requests { lovedLastFMMethod($0) == "track.unlove" }.count == 1)
+
+        await runtime.toggleLove(for: listen)
+        #expect(await transport.requests { lovedLastFMMethod($0) == "track.love" }.count == 1)
+        #expect(runtime.state.feedbackByTrack[identity]?.score == .loved)
+    }
+
+    @Test func unlovingASecondRowWithTheSameMetadataPostsAndRemovesThatRow() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            if lovedFeedbackQuery(request) != nil {
+                return lovedListenBrainzResponse(
+                    [
+                        LovedListenBrainzItem(
+                            title: "Example Track One",
+                            mbid: "mbid-one",
+                        ),
+                        LovedListenBrainzItem(
+                            title: "Example Track One",
+                            mbid: "mbid-two",
+                        ),
+                    ],
+                    totalCount: 2,
+                )
+            }
+            if lovedIsFeedbackPost(request) {
+                return jsonResponse(["status": "ok"])
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .listenBrainz,
+            credential: "demo-token",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        #expect(runtime.state.lovedState.rows.count == 2)
+        let second = try #require(runtime.state.lovedState.rows.last)
+        #expect(second.reference == .mbid("mbid-two"))
+
+        let confirmed = await runtime.unloveLovedRow(second)
+        #expect(confirmed)
+        #expect(runtime.state.lovedState.rows.map(\.id) == ["listenbrainz:mbid:mbid-one"])
+        let posts = await transport.requests { lovedIsFeedbackPost($0) }
+        #expect(posts.count == 1)
+        #expect(try lovedFeedbackReference(#require(posts.first)) == "mbid-two")
+    }
+
+    @Test func unlovingThroughTheStripRereadsWhenTwoRowsShareTitleAndArtist() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                return lovedLastFMResponse(
+                    [
+                        LovedLastFMRow("Example Track One", mbid: "mbid-one"),
+                        LovedLastFMRow("Example Track One", mbid: "mbid-two"),
+                    ],
+                    page: 1,
+                    totalPages: 1,
+                )
+            }
+            if lovedLastFMMethod(request) == "track.love"
+                || lovedLastFMMethod(request) == "track.unlove" {
+                return lastFMEmptyResponse()
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, store) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let track = Track(
+            title: "Example Track One",
+            artist: "Example Artist",
+            album: "Example Album",
+            albumArtist: "Example Album Artist",
+        )
+        let identity = ListenMetadata(track).identity
+        try await store.setFeedback(.loved, for: identity, at: base)
+        runtime.state.nowPlaying = MediaSample(
+            track: track,
+            elapsed: 10,
+            playbackRate: 1,
+            isPlaying: true,
+        )
+
+        await runtime.toggleLoveForCurrentTrack()
+        let requests = await lovedWaitForRequests(transport) { all in
+            all.filter { lovedLastFMMethod($0) == "user.getlovedtracks" }.count == 2
+        }
+        #expect(requests.filter { lovedLastFMMethod($0) == "user.getlovedtracks" }.count == 2)
+        // No row was removed by guess: the first page was read again.
+        #expect(runtime.state.lovedState.rows.count == 2)
+    }
+
+    // MARK: - In-flight reads
+
+    @Test func aHeldLoadMoreAfterUnloveIsDiscardedAndKeepsTheSteppedOffset() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let firstPage = LovedPageCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedFeedbackQuery(request) != nil else { return false }
+                return counter.next() == 2
+            },
+            handler: { request in
+                guard let query = lovedFeedbackQuery(request) else {
+                    return HTTPResponse(statusCode: 404, body: Data())
+                }
+                if query.offset == 0 {
+                    let read = await firstPage.next(0)
+                    let rows = read == 1
+                        ? [LovedListenBrainzItem(title: "Example Track One", mbid: "mbid-a")]
+                        : [
+                            LovedListenBrainzItem(title: "Example Track Two", mbid: "mbid-b"),
+                            LovedListenBrainzItem(title: "Example Track Three", mbid: "mbid-c"),
+                        ]
+                    return lovedListenBrainzResponse(rows, totalCount: 4)
+                }
+                return lovedListenBrainzResponse(
+                    [
+                        LovedListenBrainzItem(title: "Example Track Two", mbid: "mbid-b"),
+                        LovedListenBrainzItem(title: "Example Track Three", mbid: "mbid-c"),
+                    ],
+                    totalCount: 4,
+                )
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .listenBrainz,
+            credential: "demo-token",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let row = try #require(runtime.state.lovedState.rows.first)
+
+        let load = Task { await runtime.loved?.loadMore() }
+        #expect(await transport.waitUntilEntered())
+        runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        await transport.release()
+        await load.value
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.lovedState.isLoadingMore == false)
+
+        await runtime.loved?.loadMore()
+        let later = await transport.requests { lovedFeedbackQuery($0) != nil }
+        #expect(try lovedFeedbackQuery(#require(later.last))?.offset == 0)
+        #expect(runtime.state.lovedState.rows.map(\.title) == ["Example Track Two", "Example Track Three"])
+    }
+
+    @Test func aHeldPageLoadMoreAfterUnloveKeepsTheLastPageCursor() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedLastFMMethod(request) == "user.getlovedtracks" else { return false }
+                return counter.next() == 3
+            },
+            handler: { request in
+                guard let page = formParameters(request)["page"] else {
+                    return HTTPResponse(statusCode: 404, body: Data())
+                }
+                switch page {
+                case "1":
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track One"), LovedLastFMRow("Example Track Two")],
+                        page: 1,
+                        totalPages: 3,
+                    )
+                case "2":
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track Three"), LovedLastFMRow("Example Track Four")],
+                        page: 2,
+                        totalPages: 3,
+                    )
+                default:
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track Five")],
+                        page: 3,
+                        totalPages: 3,
+                    )
+                }
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.rows.count == 4)
+
+        let load = Task { await runtime.loved?.loadMore() }
+        #expect(await transport.waitUntilEntered())
+        let first = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
+        #expect(runtime.state.lovedState.rows.count == 3)
+        await transport.release()
+        await load.value
+        #expect(runtime.state.lovedState.rows.count == 3)
+        #expect(runtime.state.lovedState.isLoadingMore == false)
+
+        await runtime.loved?.loadMore()
+        let reads = await transport.requests { lovedLastFMMethod($0) == "user.getlovedtracks" }
+        #expect(reads.compactMap { formParameters($0)["page"] }.last == "2")
+        #expect(Set(runtime.state.lovedState.rows.map(\.id)).count == runtime.state.lovedState.rows.count)
+    }
+
+    @Test func aHeldRefreshAfterUnloveDoesNotRestoreTheRow() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedLastFMMethod(request) == "user.getlovedtracks" else { return false }
+                return counter.next() == 2
+            },
+            handler: { request in
+                if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track One"), LovedLastFMRow("Example Track Two")],
+                        page: 1,
+                        totalPages: 1,
+                    )
+                }
+                return HTTPResponse(statusCode: 404, body: Data())
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+
+        let refresh = Task { await runtime.loved?.refresh() }
+        #expect(await transport.waitUntilEntered())
+        let first = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
+        await transport.release()
+        await refresh.value
+        await turnMainActor()
+        #expect(runtime.state.lovedState.rows.map(\.title) == ["Example Track Two"])
+    }
+
+    @Test func loadMoreDuringARefreshSendsNoRequest() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedLastFMMethod(request) == "user.getlovedtracks" else { return false }
+                return counter.next() == 2
+            },
+            handler: { request in
+                if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                    return lovedLastFMResponse([LovedLastFMRow("Example Track One")], page: 1, totalPages: 2)
+                }
+                return HTTPResponse(statusCode: 404, body: Data())
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+
+        let refresh = Task { await runtime.loved?.refresh() }
+        #expect(await transport.waitUntilEntered())
+        let before = await transport.requestCount()
+        await runtime.loved?.loadMore()
+        #expect(await transport.requestCount() == before)
+        #expect(runtime.state.lovedState.isLoadingMore == false)
+        await transport.release()
+        await refresh.value
+    }
+
+    // MARK: - Final page and omissions
+
+    @Test func unlovingTheOnlyRowOnTheFinalPageDoesNotInventAnotherPage() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                return lovedLastFMResponse([LovedLastFMRow("Example Track One")], page: 1, totalPages: 1)
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let row = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
+
+        #expect(runtime.state.lovedState.phase == .empty)
+        #expect(runtime.state.lovedState.hasMore == false)
+        #expect(await transport.requests { lovedLastFMMethod($0) == "user.getlovedtracks" }.count == 1)
+    }
+
+    @Test func unlovingTheLastLoadedRowWithMorePagesNeverPublishesEmpty() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedPageCounter()
+        let transport = LovedTransport { request in
+            guard let page = formParameters(request)["page"] else {
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+            switch page {
+            case "1":
+                let read = await counter.next(1)
+                return lovedLastFMResponse(
+                    [LovedLastFMRow(read == 1 ? "Example Track One" : "Example Track Two")],
+                    page: 1,
+                    totalPages: 2,
+                )
+            default:
+                return lovedLastFMResponse([LovedLastFMRow("Example Track Three")], page: 2, totalPages: 2)
+            }
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let row = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
+
+        #expect(runtime.state.lovedState.phase != .empty)
+        #expect(runtime.state.lovedState.hasMore)
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.rows.contains { $0.title == "Example Track Two" })
+        await runtime.loved?.loadMore()
+        let reads = await transport.requests { lovedLastFMMethod($0) == "user.getlovedtracks" }
+        #expect(reads.compactMap { formParameters($0)["page"] }.last == "2")
+    }
+
+    @Test func reReadingAPageLeavesOmittedUnchanged() async throws {
+        let database = try TemporaryDatabase()
+        let pageTwo = LovedPageCounter()
+        let transport = LovedTransport { request in
+            guard let page = formParameters(request)["page"] else {
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+            switch page {
+            case "1":
+                return lovedLastFMResponse(
+                    [LovedLastFMRow("Example Track One")],
+                    page: 1,
+                    totalPages: 3,
+                    omitted: 1,
+                )
+            default:
+                let read = await pageTwo.next(2)
+                return lovedLastFMResponse(
+                    [LovedLastFMRow(read == 1 ? "Example Track Two" : "Example Track Three")],
+                    page: 2,
+                    totalPages: 3,
+                    omitted: 1,
+                )
+            }
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+        let last = try #require(runtime.state.lovedState.rows.last)
+        runtime.loved?.feedbackSucceeded(.unlove, track: last.track, connections: [connection])
+        #expect(runtime.state.lovedState.omitted == 2)
+
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+        #expect(runtime.state.lovedState.rows.map(\.title) == ["Example Track One", "Example Track Three"])
+    }
+
+    @Test func rowsRunningOutWithOmissionsIsMetadataUnavailable() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            guard let page = formParameters(request)["page"] else {
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+            _ = page
+            return lovedLastFMResponse(
+                [LovedLastFMRow("Example Track One")],
+                page: 1,
+                totalPages: 1,
+                omitted: 1,
+            )
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let row = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
+
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.lovedState.omitted == 1)
+        #expect(runtime.state.lovedState.phase == .metadataUnavailable)
+    }
+
+    // MARK: - Rate-limit deadline
+
+    @Test func aRateLimitEndsAtTheDeadlineAndRestoresRetryAndUnlove() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let mode = LovedReadMode()
+        let transport = LovedTransport { request in
+            if await mode.current() == .rateLimited(seconds: 30) {
+                return HTTPResponse(
+                    statusCode: 429,
+                    headers: ["Retry-After": "30"],
+                    body: Data(),
+                )
+            }
+            if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                return lovedLastFMResponse([LovedLastFMRow("Example Track One")], page: 1, totalPages: 1)
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        #expect(runtime.state.lovedState.canUnlove)
+
+        await mode.set(.rateLimited(seconds: 30))
+        await runtime.loved?.refresh()
+        let deadline = try #require(runtime.state.lovedState.retryNotBefore)
+        #expect(deadline == base.addingTimeInterval(30))
+        #expect(runtime.state.lovedState.canUnlove == false)
+
+        clock.advance(to: deadline)
+        #expect(await lovedWaitUntil { runtime.state.lovedState.retryNotBefore == nil })
+        #expect(runtime.state.lovedState.canUnlove)
+
+        await mode.set(.success)
+        let before = await transport.requestCount()
+        await runtime.loved?.refresh()
+        #expect(await transport.requestCount() == before + 1)
+        #expect(runtime.state.lovedState.rows.count == 1)
+    }
+
+    @Test func aRateLimitedFirstReadOffersRetryAfterTheHint() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let mode = LovedReadMode()
+        let transport = LovedTransport { request in
+            if await mode.current() == .rateLimited(seconds: 30) {
+                return HTTPResponse(
+                    statusCode: 429,
+                    headers: ["Retry-After": "30"],
+                    body: Data(),
+                )
+            }
+            if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                return lovedLastFMResponse([LovedLastFMRow("Example Track One")], page: 1, totalPages: 1)
+            }
+            return HTTPResponse(statusCode: 404, body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await mode.set(.rateLimited(seconds: 30))
+        await runtime.loved?.show()
+        #expect(runtime.state.lovedState.phase == .failed(.rateLimited(retryAfter: 30)))
+        let deadline = try #require(runtime.state.lovedState.retryNotBefore)
+
+        clock.advance(to: deadline)
+        #expect(await lovedWaitUntil { runtime.state.lovedState.retryNotBefore == nil })
+        await mode.set(.success)
+        let before = await transport.requestCount()
+        await runtime.loved?.refresh()
+        #expect(await transport.requestCount() == before + 1)
+        #expect(runtime.state.lovedState.phase == .ready)
+        #expect(runtime.state.lovedState.rows.count == 1)
+    }
+
+    @Test func hidingCancelsTheRateLimitWake() async throws {
+        let database = try TemporaryDatabase()
+        let clock = FakeClock(base)
+        let transport = LovedTransport { _ in
+            HTTPResponse(statusCode: 429, headers: ["Retry-After": "30"], body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let deadline = try #require(runtime.state.lovedState.retryNotBefore)
+        runtime.loved?.hide()
+        clock.advance(to: deadline)
+        await turnMainActor()
+        #expect(runtime.state.lovedState.phase == .idle)
+        #expect(runtime.state.lovedState.retryNotBefore == nil)
+    }
+
+    // MARK: - Rejected credential copy
+
+    @Test func aRejectedFirstReadNamesTheCredential() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { _ in
+            HTTPResponse(statusCode: 401, body: Data())
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .listenBrainz,
+            credential: "demo-token",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        #expect(runtime.state.lovedState.phase == .failed(.needsSignIn(.rejected)))
+        #expect(
+            LovedCopy.failureMessage(.needsSignIn(.rejected), service: "ListenBrainz", retryAt: nil)
+                == "ListenBrainz rejected the saved credential. Sign in on Services.",
+        )
+    }
+
+    // MARK: - Feedback chain
+
+    @Test func aLoveReReadDoesNotHoldTheFeedbackChain() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedLastFMMethod(request) == "user.getlovedtracks" else { return false }
+                return counter.next() == 2
+            },
+            handler: { request in
+                if lovedLastFMMethod(request) == "user.getlovedtracks" {
+                    return lovedLastFMResponse([LovedLastFMRow("Example Track One")], page: 1, totalPages: 1)
+                }
+                if lovedLastFMMethod(request) == "track.love"
+                    || lovedLastFMMethod(request) == "track.unlove" {
+                    return lastFMEmptyResponse()
+                }
+                return HTTPResponse(statusCode: 404, body: Data())
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        let track = Track(
+            title: "Example Track One",
+            artist: "Example Artist",
+            album: "Example Album",
+            albumArtist: "Example Album Artist",
+        )
+        runtime.state.nowPlaying = MediaSample(
+            track: track,
+            elapsed: 10,
+            playbackRate: 1,
+            isPlaying: true,
+        )
+
+        await runtime.toggleLoveForCurrentTrack()
+        #expect(await transport.waitUntilEntered())
+        await runtime.toggleLoveForCurrentTrack()
+        let requests = await lovedWaitForRequests(transport) { all in
+            all.filter { lovedLastFMMethod($0) == "track.unlove" }.count == 1
+        }
+        #expect(requests.filter { lovedLastFMMethod($0) == "track.unlove" }.count == 1)
+        #expect(runtime.state.lovedState.rows.isEmpty)
+
+        await transport.release()
+        await turnMainActor()
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.feedbackByTrack[ListenMetadata(track).identity] == nil)
     }
 }
 

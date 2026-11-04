@@ -21,11 +21,18 @@ public final class LovedReadModel {
     private var generation = 0
     private var readTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
+    private var retryDeadlineTask: Task<Void, Never>?
     private var nextCursor: LovedCursor?
     private var lastLoadedPage: Int?
+    private var countedOmittedPages: Set<Int> = []
     private var scopeKey: String?
     private var displayedConnectionID: Int64?
     private var lastConnectionKey: String
+    /// Bumped by a local row removal and by the start of a first-page read.
+    /// A page that started before the bump is discarded, so a held reply can
+    /// never restore an unloved row or overwrite a stepped-back cursor.
+    private var mutationRevision = 0
+    private var isLoadingFirstPage = false
 
     public init(
         state: TracklogAppState,
@@ -69,6 +76,10 @@ public final class LovedReadModel {
     /// survives from the previous show.
     public func show() async {
         guard isActive else { return }
+        // The takeover can mount more than one preview of the same section.
+        // Only the first mount reads; a later mount does not restart the list
+        // and cannot wipe a notice or a freshly removed row.
+        guard !isShowing else { return }
         isShowing = true
         lastConnectionKey = Self.connectionKey(state.currentConnection)
         await beginFirstPage(preservingRows: false)
@@ -129,16 +140,17 @@ public final class LovedReadModel {
     // MARK: - Paging
 
     public func loadMore() async {
-        guard isActive, isShowing, !state.lovedState.isLoadingMore, !isRetryBlocked,
-              nextCursor != nil
+        guard isActive, isShowing, !isLoadingFirstPage, !state.lovedState.isLoadingMore,
+              !isRetryBlocked, nextCursor != nil
         else { return }
+        let revision = mutationRevision
         var next = state.lovedState
         next.isLoadingMore = true
         next.loadMoreFailure = nil
         state.lovedState = next
         let loadMoreTask = Task { [weak self] in
             guard let self else { return }
-            await performLoadMore()
+            await performLoadMore(revision: revision)
         }
         self.loadMoreTask = loadMoreTask
         await loadMoreTask.value
@@ -147,35 +159,68 @@ public final class LovedReadModel {
     // MARK: - Feedback reconciliation
 
     /// Every successful feedback action on the displayed connection reconciles
-    /// the list at the same seam. Rows are matched by the identity the feedback
-    /// store uses, so a strip heart and a local listen agree.
+    /// the list at the same seam, without holding the feedback chain open. A
+    /// service-read row knows only title and artist, so a non-row action
+    /// matches those fields; when several rows share them the first page is
+    /// re-read rather than guessing which recording was unloved.
     public func feedbackSucceeded(
         _ action: FeedbackAction,
         track: Track,
         connections: [Connection],
-    ) async {
+        rowID: String? = nil,
+    ) {
         guard isActive, isShowing, let displayedConnectionID,
               connections.contains(where: { $0.id == displayedConnectionID })
         else { return }
         switch action {
         case .unlove:
-            let identity = ListenMetadata(track).identity
-            guard let index = state.lovedState.rows.firstIndex(where: {
-                $0.trackIdentity == identity
-            }) else { return }
+            let index: Int?
+            if let rowID {
+                index = state.lovedState.rows.firstIndex { $0.id == rowID }
+            } else {
+                let matches = state.lovedState.rows.indices.filter {
+                    state.lovedState.rows[$0].matches(title: track.title, artist: track.artist)
+                }
+                if matches.count > 1 {
+                    refreshInBackground()
+                    return
+                }
+                index = matches.first
+            }
+            guard let index else { return }
+            noteRemoval()
             var next = state.lovedState
             next.rows.remove(at: index)
             next.actionFailure = nil
+            next.isLoadingMore = false
             next.hasMore = adjustedCursorAfterRemoval() != nil
-            if next.rows.isEmpty {
-                next.phase = .empty
-            }
+            next.phase = settledPhase(rows: next.rows, omitted: next.omitted, hasMore: next.hasMore)
             state.lovedState = next
         case .love:
-            await refresh()
+            refreshInBackground()
         case .hate:
             break
         }
+    }
+
+    private func refreshInBackground() {
+        Task { [weak self] in
+            guard let self else { return }
+            await refresh()
+        }
+    }
+
+    /// A row removal makes every reply already in flight obsolete. The stepped
+    /// cursor is applied now; the held reply is discarded when it returns and
+    /// can never restore the row.
+    private func noteRemoval() {
+        mutationRevision += 1
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+        readTask?.cancel()
+        readTask = nil
+        isLoadingFirstPage = false
+        state.lovedState.isLoadingMore = false
     }
 
     // MARK: - First page
@@ -191,8 +236,16 @@ public final class LovedReadModel {
     }
 
     private func loadFirstPage(preservingRows: Bool) async {
+        mutationRevision += 1
+        let revision = mutationRevision
         generation += 1
         let token = generation
+        isLoadingFirstPage = true
+        defer {
+            if generation == token {
+                isLoadingFirstPage = false
+            }
+        }
         let connection = state.currentConnection
         let connectionKey = connection.map(Self.connectionKey)
         let previous = state.lovedState
@@ -204,6 +257,7 @@ public final class LovedReadModel {
         next.sourceLabel = connection.map(LovedCopy.sourceLabel) ?? previous.sourceLabel
         next.isLoadingMore = false
         next.loadMoreFailure = nil
+        next.actionFailure = previous.actionFailure
         if !preserving {
             next.phase = .loading
             next.rows = []
@@ -218,6 +272,7 @@ public final class LovedReadModel {
         guard isCurrent(
             token: token,
             connectionKey: connectionKey ?? Self.connectionKey(nil),
+            revision: revision,
         ) else { return }
         switch prepared {
         case let .unavailable(message):
@@ -227,11 +282,21 @@ public final class LovedReadModel {
         case let .ready(request):
             scopeKey = request.scopeKey
             displayedConnectionID = request.connection.id
-            await readFirstPage(request, token: token, preserving: preserving)
+            await readFirstPage(
+                request,
+                token: token,
+                preserving: preserving,
+                revision: revision,
+            )
         }
     }
 
-    private func readFirstPage(_ request: LovedRequest, token: Int, preserving: Bool) async {
+    private func readFirstPage(
+        _ request: LovedRequest,
+        token: Int,
+        preserving: Bool,
+        revision: Int,
+    ) async {
         var cursor: LovedCursor? = request.client.firstCursor
         var rows: [LovedRow] = []
         var omitted = 0
@@ -246,16 +311,21 @@ public final class LovedReadModel {
                 credential: request.credential,
                 cursor: pageCursor,
             )
-            guard isCurrent(token: token, connectionKey: request.scopeKey) else { return }
+            guard isCurrent(
+                token: token,
+                connectionKey: request.scopeKey,
+                revision: revision,
+            ) else { return }
             reads += 1
             switch outcome {
             case let .page(page):
                 rows = Self.merged(rows, page.rows)
-                omitted += page.omitted
-                nextCursor = page.nextCursor
                 if case let .page(number) = pageCursor {
+                    countedOmittedPages.insert(number)
                     lastPage = number
                 }
+                omitted += page.omitted
+                nextCursor = page.nextCursor
                 cursor = page.nextCursor
                 if !rows.isEmpty || page.nextCursor == nil {
                     cursor = nil
@@ -275,22 +345,23 @@ public final class LovedReadModel {
 
         self.nextCursor = nextCursor
         lastLoadedPage = lastPage
+        cancelRetryDeadline()
         var next = LovedViewState()
         next.sourceLabel = LovedCopy.sourceLabel(request.connection)
         next.rows = rows
         next.omitted = omitted
         next.hasMore = nextCursor != nil
-        next.phase = rows.isEmpty
-            ? (omitted > 0 ? .metadataUnavailable : .empty)
-            : .ready
+        next.phase = settledPhase(rows: rows, omitted: omitted, hasMore: nextCursor != nil)
+        next.actionFailure = state.lovedState.actionFailure
         applyEligibility(to: &next, connection: request.connection, failure: nil)
         state.lovedState = next
     }
 
     // MARK: - Load more
 
-    private func performLoadMore() async {
-        guard let cursor = nextCursor,
+    private func performLoadMore(revision: Int) async {
+        guard revision == mutationRevision,
+              let cursor = nextCursor,
               let connection = state.currentConnection
         else { return }
         let token = generation
@@ -298,7 +369,11 @@ public final class LovedReadModel {
         guard scopeKey == connectionKey else { return }
 
         let prepared = await prepare(connection: connection)
-        guard isCurrent(token: token, connectionKey: connectionKey) else { return }
+        guard isCurrent(
+            token: token,
+            connectionKey: connectionKey,
+            revision: revision,
+        ) else { return }
         switch prepared {
         case let .unavailable(message):
             finishLoadMore(failure: .service(message), connection: connection)
@@ -311,8 +386,12 @@ public final class LovedReadModel {
                 credential: request.credential,
                 cursor: cursor,
             )
-            guard isCurrent(token: token, connectionKey: request.scopeKey) else { return }
-            applyLoadMore(outcome, request: request, cursor: cursor)
+            guard isCurrent(
+                token: token,
+                connectionKey: request.scopeKey,
+                revision: revision,
+            ) else { return }
+            applyLoadMore(outcome, request: request, cursor: cursor, revision: revision)
         }
     }
 
@@ -320,24 +399,37 @@ public final class LovedReadModel {
         _ outcome: ReadOutcome,
         request: LovedRequest,
         cursor: LovedCursor,
+        revision: Int,
     ) {
+        guard revision == mutationRevision else { return }
         switch outcome {
         case let .page(page):
             var next = state.lovedState
             next.rows = Self.merged(next.rows, page.rows)
-            next.omitted += page.omitted
+            if case let .page(number) = cursor {
+                if !countedOmittedPages.contains(number) {
+                    next.omitted += page.omitted
+                    countedOmittedPages.insert(number)
+                }
+            } else {
+                next.omitted += page.omitted
+            }
             next.isLoadingMore = false
             next.loadMoreFailure = nil
+            next.retryNotBefore = nil
             nextCursor = page.nextCursor
             next.hasMore = page.nextCursor != nil
             if case let .page(number) = cursor {
                 lastLoadedPage = number
             }
-            next.phase = next.rows.isEmpty
-                ? (next.omitted > 0 ? .metadataUnavailable : .empty)
-                : .ready
+            next.phase = settledPhase(
+                rows: next.rows,
+                omitted: next.omitted,
+                hasMore: next.hasMore,
+            )
             applyEligibility(to: &next, connection: request.connection, failure: nil)
             state.lovedState = next
+            cancelRetryDeadline()
         case let .unavailable(message):
             finishLoadMore(failure: .service(message), connection: request.connection)
         case let .failed(failure):
@@ -354,11 +446,13 @@ public final class LovedReadModel {
         }
         applyEligibility(to: &next, connection: connection, failure: failure)
         state.lovedState = next
+        scheduleRetryDeadline()
     }
 
     // MARK: - Publication
 
     private func applyUnavailable(_ message: String, connection: Connection?) {
+        cancelRetryDeadline()
         var next = LovedViewState()
         next.sourceLabel = connection.map(LovedCopy.sourceLabel)
         next.phase = .unavailable(message)
@@ -387,6 +481,27 @@ public final class LovedReadModel {
         }
         applyEligibility(to: &next, connection: connection, failure: failure)
         state.lovedState = next
+        scheduleRetryDeadline()
+    }
+
+    private func settledPhase(
+        rows: [LovedRow],
+        omitted: Int,
+        hasMore: Bool,
+    ) -> LovedPhase {
+        if !rows.isEmpty {
+            return .ready
+        }
+        if omitted > 0 {
+            return .metadataUnavailable
+        }
+        if hasMore {
+            // More pages exist even though this window named nothing (for
+            // example, the first pages were all empty). Never call that an
+            // empty account.
+            return .ready
+        }
+        return .empty
     }
 
     private func applyEligibility(
@@ -519,7 +634,7 @@ public final class LovedReadModel {
         }
         switch failure {
         case .auth:
-            return .failed(.needsSignIn(.signedOut))
+            return .failed(.needsSignIn(.rejected))
         case let .appCredentialAuth(problem):
             return .failed(.appCredentials(problem))
         case let .rateLimited(retryAfter):
@@ -549,9 +664,56 @@ public final class LovedReadModel {
         return clock.now.addingTimeInterval(retryAfter)
     }
 
+    private func scheduleRetryDeadline() {
+        retryDeadlineTask?.cancel()
+        retryDeadlineTask = nil
+        guard let deadline = state.lovedState.retryNotBefore else { return }
+        retryDeadlineTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await clock.sleep(until: deadline)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            retryDeadlineReached(deadline)
+        }
+    }
+
+    private func cancelRetryDeadline() {
+        retryDeadlineTask?.cancel()
+        retryDeadlineTask = nil
+    }
+
+    /// The hint has elapsed. Clear the wall, restore the action and let the
+    /// view offer a retry without reopening the section.
+    private func retryDeadlineReached(_ deadline: Date) {
+        guard isActive, isShowing, state.lovedState.retryNotBefore == deadline else { return }
+        var next = state.lovedState
+        next.retryNotBefore = nil
+        let failure: LovedFailure? = if case let .failed(value) = next.phase {
+            value
+        } else {
+            next.refreshFailure ?? next.loadMoreFailure
+        }
+        var eligibilityFailure = failure
+        if let failure, case .rateLimited = failure {
+            eligibilityFailure = nil
+        }
+        applyEligibility(
+            to: &next,
+            connection: state.currentConnection,
+            failure: eligibilityFailure,
+        )
+        state.lovedState = next
+        retryDeadlineTask = nil
+    }
+
     /// After a removal the row that shifted across the page boundary must not
     /// be skipped. ListenBrainz steps the offset back by the removed row;
-    /// page-based services re-read the last loaded page and deduplicate.
+    /// page-based services re-read the last loaded page and deduplicate. A nil
+    /// cursor means the final page was already read: there is no next page to
+    /// invent.
     @discardableResult
     private func adjustedCursorAfterRemoval() -> LovedCursor? {
         switch nextCursor {
@@ -562,9 +724,7 @@ public final class LovedReadModel {
                 nextCursor = .page(lastLoadedPage)
             }
         case nil:
-            if let lastLoadedPage {
-                nextCursor = .page(lastLoadedPage)
-            }
+            break
         }
         return nextCursor
     }
@@ -572,6 +732,7 @@ public final class LovedReadModel {
     private func clearReadCursor() {
         nextCursor = nil
         lastLoadedPage = nil
+        countedOmittedPages.removeAll()
         scopeKey = nil
     }
 
@@ -580,6 +741,8 @@ public final class LovedReadModel {
         readTask = nil
         loadMoreTask?.cancel()
         loadMoreTask = nil
+        cancelRetryDeadline()
+        isLoadingFirstPage = false
     }
 
     private func isCurrent(token: Int, connectionKey: String) -> Bool {
@@ -587,6 +750,10 @@ public final class LovedReadModel {
             && isActive
             && isShowing
             && Self.connectionKey(state.currentConnection) == connectionKey
+    }
+
+    private func isCurrent(token: Int, connectionKey: String, revision: Int) -> Bool {
+        revision == mutationRevision && isCurrent(token: token, connectionKey: connectionKey)
     }
 
     private nonisolated static func merged(_ existing: [LovedRow], _ new: [LovedRow]) -> [LovedRow] {
