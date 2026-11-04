@@ -2,7 +2,7 @@
 
 - Base: started from `aa6bdeb257b24dd94b33b8a5f8295be5affff908`; rebased onto `335ec6b` (`feat: build local history editing and deletion (#113)`) before the final gate.
 - Branch: `feat/catalogue-search-85`
-- Code head: `2ee24a7bb5849d19efe13c096a75c3a4cdd0d0cf` (the gate receipt below is for this head; later commits are documentation and evidence only).
+- Code head: `2a15e8870822a03ca56ff47e663aa9d7ba1ef1c8` (the gate receipt below is for this head; later commits are documentation and evidence only).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 9 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -72,7 +72,7 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | `lovedStopsWhenTheLastPageIsReached` | Two pages, no limit text. |
 | `lovedExplainsWhenTheCurrentConnectionIsNotLastFM` | ListenBrainz current: unavailable explanation, no loved request. |
 | `aConnectionChangeRestartsTheQueryAndDropsTheOldLovedReply` | Last.fm to ListenBrainz and back; a same-current snapshot sends nothing, the account change refreshes only Loved, and the held old loved reply never replaces the unavailable/account-aware state. |
-| `changingAppCredentialsRefreshesEveryGroup` | A Last.fm application-pair change through the runtime save path validates with `auth.getToken` and re-reads all four groups. |
+| `changingAppCredentialsRefreshesEveryGroup` | A Last.fm application-pair change through the runtime save path validates with `auth.getToken`, re-reads all four groups, and proves the refreshed requests use the newly saved key. |
 | `lastFMRequestsKeepTheirEndpointAndSessionKeyForLibreFMAndListenBrainz` | Endpoint and no `sk` under both other current connections. |
 | `aHeldSearchDoesNotBlockCaptureOrDelivery` | Held search; a listen persists and its delivery reaches delivered before the search is released. |
 | `aSetTemplatePlaysTheEncodedRowQuery`, `withoutATemplateThePaletteRowOpensItsLastFMPage`, `withoutATemplateTheStandalonePlayActionOpensSearchSettings` | Both primary behaviours and the Settings remedy. |
@@ -95,11 +95,11 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `2ee24a7bb5849d19efe13c096a75c3a4cdd0d0cf`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T120652Z-dca35e353f12.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T120652Z-dca35e353f12.log`
-  - Duration: 1089.2 seconds.
-  - `git_before` and `git_after` both report head `2ee24a7…`, empty porcelain status and the same tracked-content hash.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `2a15e8870822a03ca56ff47e663aa9d7ba1ef1c8`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T122717Z-b36102af34c9.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T122717Z-b36102af34c9.log`
+  - Duration: 1023.3 seconds.
+  - `git_before` and `git_after` both report head `2a15e88…`, empty porcelain status and the same tracked-content hash.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 313 files.
 - `swift test --package-path Tests`: 699 tests in 103 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
