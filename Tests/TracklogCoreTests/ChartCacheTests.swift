@@ -1449,6 +1449,17 @@ struct ChartCacheTests {
         )
         #expect(state.chartState.phase == .notReady)
         #expect(state.chartState.snapshot == nil)
+
+        await flags.setNotReady(false)
+        await runtime.charts?.refresh()
+        #expect(state.chartState.refreshFailure == nil)
+        #expect(state.chartState.phase == .ready)
+        #expect(state.chartState.snapshot?.items.first?.title == "Blondie")
+        #expect(state.chartState.snapshot?.savedAt == clock.now)
+        #expect(
+            await chartStatsRequestCount(transport) == requests + 1,
+            "the manual retry loads the rows without a saved snapshot",
+        )
     }
 
     @Test func anAutomaticTotalRefreshDoesNotRetryAFailedList() async throws {
