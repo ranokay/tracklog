@@ -2,7 +2,7 @@
 
 - Base: `6468f3a71f0edc88e0aee214a30fd4b92b33dab3` (`fix: qualify core charts (#111)`)
 - Branch: `feat/history-navigation-81`
-- State: implementation, tests, harness fixtures and documentation. Gate receipt pending in the section below.
+- State: implementation, tests, harness fixtures and documentation. The receipt-backed gate passed; the Gate section records the final receipt and head.
 - Scope: History date jump, the jumped window's newer/older paging, one track's full local history, and the Settings handoff. Part of #76; it does not close #76 and makes no Store or milestone-complete claim.
 
 ## Contract
@@ -34,9 +34,10 @@ one displayed track would split across albums, players and simple edits (and
 would disagree with the Tracks chart). It is also **not** feedback identity
 (`processed.identity`, which includes album and album artist). The opening
 row supplies the header's displayed title, artist and album; every row keeps
-its own captured processed metadata. Count and first-listened date are SQL
-aggregates over the whole local history, independent of the loaded History
-page, the current connection and delivery targets.
+its own captured processed metadata. Count and first-listened date come from a
+Swift-filtered full scan on the dedicated read connection over the whole local
+history, independent of the loaded History page, the current connection and
+delivery targets.
 
 ### Date-jump positioning
 
@@ -208,6 +209,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; readouts are in
 | Row is one element with the #26 label/value | Passed (AX) | `AXButton` `Heart of Glass, Blondie, Parallel Lines, 18:42`, value `delivered to ListenBrainz`. |
 | Row has the button trait and a default action | Passed (AX) | Actions `AXPress`, `AXScrollToVisible`; pressing opened track history. |
 | Actions menu is separate and does not overlap the row press | Passed (AX) | Row 831 × 52 ends at x 1459; menu 28 × 28 starts at x 1459. |
+| Right-click opens the same row menu | Passed (AX) | Feed row and track row both opened Deliveries, Feedback (Unlove/Hate), Block and Copy metadata; the feed row stayed one `AXButton`. |
 | Day headers are headings | Passed (AX) | `AXHeading (Tuesday, 3 November 2026, 2 listens)`. |
 | Empty states are read | Passed (AX) | `Nothing played yet` / `Play something to start your history.` |
 | Track header and rows read | Passed (AX) | Heading, `75 listens`, `First listened …`, dated row labels/values. |
@@ -219,10 +221,10 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; readouts are in
 | Browse-only keyboard takeover | Unpassed (known gap) | Pointer-and-VoiceOver only; no keyboard path claimed. |
 | Audible VoiceOver speech | Unpassed / blocked | No microphone audio and no accessibility-setting change; AX labels only. |
 
-Pointer note: the row-wide right-click `contextMenu` was removed because it
-made SwiftUI expose the row as `AXUnknown` with `AXShowMenu` instead of a
-button with `AXPress`. The visible `Actions for <title>` menu remains the one
-row menu and still holds delivery detail, love/hate, block and copy.
+Pointer note: the row-wide `contextMenu` is attached to the outer row
+container, not the button label. That keeps the row as one `AXButton` with
+`AXPress` while right-click still opens the same `Actions for <title>` menu
+(delivery detail, love/hate, block and copy).
 
 ## Evidence classes and limits
 
@@ -240,5 +242,30 @@ Tracklog branding are unchanged. Tests remain in the sibling `Tests` package.
 
 ## Questions for the owner
 
-None blocking. The real Playground handoff, live-service smoke and audible
-VoiceOver remain the same owner-run checks recorded for issue #80.
+1. **Track identity.** The supervisor set the definition from spec #76's chart
+   grouping rule: `Identity.joined([processed.title, processed.artist])`,
+   shared with `LocalChartAggregator` `.tracks`, not raw `track_identity`
+   (which includes album and album artist and raw spellings) and not feedback
+   identity. This makes one displayed track agree with the local Tracks chart;
+   a blank artist gets a title-only history. Please confirm this remains the
+   intended identity.
+2. **Date-jump and missing-date rules.** #81 left the exact positioning open.
+   This change defines: first start instant at or after the chosen minute;
+   empty day shows the next listen with a notice; after-newest shows the
+   newest feed; before-oldest shows the oldest/next listen; empty history has
+   no jump notice. Please confirm these are the intended product rules.
+3. **Retained pending jump.** This differs from the approved plan's
+   "dismissal clears it": the pending one-shot jump is retained through a
+   refused or interrupted presentation and through dismissal, consumed once
+   when applied, and cleared on restart. Retention was required because the
+   Settings handoff re-creates the takeover view; clearing on the old view's
+   disappearance lost the jump before the new view could apply it.
+4. **Artwork test stability.** `CaptureArtworkTests` now waits up to 10
+   seconds instead of 3 for the off-path artwork write and runs its seven
+   tests serialized instead of in parallel. The assertions are unchanged; the
+   suite flaked under the full parallel suite (the off-path artwork write
+   occasionally took longer than the old wait). This is a test stability
+   change, not a behaviour change.
+
+The real Playground handoff, live-service smoke and audible VoiceOver remain
+the same owner-run checks recorded for issue #80.

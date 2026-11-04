@@ -50,8 +50,22 @@ extension CaptureRuntime {
         else { return }
 
         let request = trackHistoryGeneration
+        let load = nextTrackHistoryLoad()
         track.isLoading = true
         state.trackHistory = track
+        defer {
+            // A page read cancelled by scrolling its footer away never reaches
+            // the success or catch body. Release the loading flag so the next
+            // footer appearance can retry from the same cursor. A newer load
+            // owns the flag and must not be cleared by this one.
+            if load == trackHistoryLoadSequence,
+               trackHistoryGeneration == request,
+               var current = state.trackHistory,
+               current.isLoading {
+                current.isLoading = false
+                state.trackHistory = current
+            }
+        }
         do {
             let page = try await historyStore.trackHistoryPage(
                 matching: track.identityKey,
@@ -144,5 +158,10 @@ extension CaptureRuntime {
     private func nextTrackHistoryRequest() -> Int {
         trackHistoryGeneration += 1
         return trackHistoryGeneration
+    }
+
+    private func nextTrackHistoryLoad() -> Int {
+        trackHistoryLoadSequence += 1
+        return trackHistoryLoadSequence
     }
 }

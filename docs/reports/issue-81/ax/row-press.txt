@@ -7,9 +7,15 @@ expanded). The expanded surface page was opened from the harness sidebar.
 
 - `AXButton` label `Heart of Glass, Blondie, Parallel Lines, 18:42`, value
   `delivered to ListenBrainz`, help `Shows this track's history`, frame
-  831 × 52, actions `AXPress`, `AXScrollToVisible`.
+  831 × 52, actions `AXPress`, `AXShowMenu`, `AXScrollToVisible`.
 - Sibling `AXMenuButton` `Actions for Heart of Glass`, frame 28 × 28,
   actions `AXPress`, `AXShowMenu`, `AXScrollToVisible`.
+- Right-clicking the row opened the same row menu on the outer container:
+  `Deliveries` (`ListenBrainz — Delivered`), `Feedback` (`Unlove`, `Hate`),
+  `Block`, `Copy metadata`. The row still read as one `AXButton`.
+- The track-history row (`AXUnknown`, inert, label/value) has the same
+  context menu; right-clicking it opened the same items. Its Actions menu is
+  the separate 28 × 28 button.
 - Day header: `AXHeading` = `Wednesday, 4 November 2026, 4 listens`.
 - Row and menu are separate elements and their frames meet at x 1459 with no
   overlap.

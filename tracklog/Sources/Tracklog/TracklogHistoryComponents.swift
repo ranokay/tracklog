@@ -108,6 +108,7 @@ struct HistoryRow: View {
             }
         }
         .onHover { isHovering = $0 }
+        .contextMenu { rowMenuItems }
     }
 
     /// The row body is one element with the #26 label and value. When it opens

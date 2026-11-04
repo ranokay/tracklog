@@ -2,6 +2,20 @@ import Foundation
 
 // MARK: - Date jump
 
+/// The instant a minute-resolution picker means. A picker that shows only
+/// hours and minutes must not carry a hidden seconds value into the position.
+public enum HistoryJumpDate {
+    public static func minuteStart(_ date: Date, calendar: Calendar = .current) -> Date {
+        var components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: date,
+        )
+        components.second = 0
+        components.nanosecond = 0
+        return calendar.date(from: components) ?? date
+    }
+}
+
 /// Where a date jump puts the top of History.
 public enum HistoryPosition: Equatable, Sendable {
     /// No listen starts at or after the requested instant, so the newest page.

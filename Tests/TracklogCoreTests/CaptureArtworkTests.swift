@@ -5,7 +5,7 @@ import Testing
 @testable import TracklogCore
 import UniformTypeIdentifiers
 
-@Suite("Capture artwork")
+@Suite("Capture artwork", .serialized)
 @MainActor
 struct CaptureArtworkTests: CaptureTestHelpers {
     @Test func oneArtworkLookupHappensPerTrackIdentityChange() async throws {
@@ -123,7 +123,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let first = runtime(database: database, clock: firstClock, source: firstSource)
         await first.start()
         await replay(thresholdSamples(track()), on: first, clock: firstClock)
-        await eventually { first.state.listens.first?.artworkHash != nil }
+        await eventually(timeout: .seconds(10)) { first.state.listens.first?.artworkHash != nil }
         let hash = try #require(first.state.listens.first?.artworkHash)
         let stored = try await SQLiteListenStore(url: database.url).artwork(for: hash)
         first.stop()

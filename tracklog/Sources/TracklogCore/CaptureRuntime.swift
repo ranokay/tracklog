@@ -48,6 +48,9 @@ public final class CaptureRuntime {
     /// Identifies the newest track-history read, so closing the view or
     /// opening another track cannot be overwritten by an older read.
     var trackHistoryGeneration = 0
+    /// Identifies the newest load-more request, so a cancelled task cannot
+    /// clear the loading flag of a newer one.
+    var trackHistoryLoadSequence = 0
     var artworkIdentity: String?
     var artworkTask: Task<Void, Never>?
     var deliveryRefreshTask: Task<Void, Never>?

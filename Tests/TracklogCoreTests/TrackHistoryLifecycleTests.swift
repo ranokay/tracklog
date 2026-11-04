@@ -133,6 +133,61 @@ struct TrackHistoryLifecycleTests: CaptureTestHelpers {
         #expect(secondState.listens.first?.startedAt == historyBase.addingTimeInterval(4 * 60))
     }
 
+    @Test func aCancelledLoadMoreLeavesTheViewReadyToRetry() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        for index in 0 ..< 250 {
+            _ = try await store.insert(
+                historyListen(
+                    title: "Blue Monday",
+                    artist: "New Order",
+                    start: historyBase.addingTimeInterval(Double(index) * 60),
+                ),
+            )
+        }
+        let state = TracklogAppState()
+        let runtime = historyRuntime(store: store, state: state, pageSize: 100)
+        await runtime.start()
+        let row = try #require(state.listens.first)
+        await runtime.openTrackHistory(row)
+        #expect(state.trackHistory?.listens.count == 100)
+        #expect(state.trackHistory?.hasMore == true)
+
+        let gate = ChartHoldGate()
+        let counter = ChartHoldCounter()
+        await gate.startHolding()
+        await store.chartReader?.setRowObserver { rowIndex in
+            if rowIndex == 64, await counter.takeFirst() {
+                await gate.enter()
+            }
+        }
+
+        let cancelled = Task { await runtime.loadMoreTrackHistory() }
+        #expect(await gate.waitUntilEntered(1), "the load-more scan is held")
+        cancelled.cancel()
+        await gate.release()
+        await cancelled.value
+
+        #expect(state.trackHistory?.isLoading == false,
+                "a cancelled page releases the loading flag")
+        #expect(state.trackHistory?.listens.count == 100)
+        #expect(state.trackHistory?.hasMore == true)
+        await store.chartReader?.setRowObserver(nil)
+
+        await runtime.loadMoreTrackHistory()
+        let track = try #require(state.trackHistory)
+        #expect(track.listens.count == 200)
+        #expect(track.listens[100].id == 150,
+                "the retry starts at the same cursor, with no skipped row")
+        #expect(Set(track.listens.compactMap(\.id)).count == 200)
+        #expect(track.hasMore)
+
+        await runtime.loadMoreTrackHistory()
+        #expect(state.trackHistory?.listens.count == 250)
+        #expect(state.trackHistory?.hasMore == false)
+        #expect(Set(state.trackHistory?.listens.compactMap(\.id) ?? []).count == 250)
+    }
+
     @Test func aHeldTrackHistoryScanDoesNotBlockCapture() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)

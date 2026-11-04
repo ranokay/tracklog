@@ -11,7 +11,7 @@ struct TracklogHistorySettingsPage: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
 
-    @State private var jumpDate = Date()
+    @State private var jumpDate = HistoryJumpDate.minuteStart(Date())
 
     var body: some View {
         DropletSettingsPage {
@@ -41,7 +41,7 @@ struct TracklogHistorySettingsPage: View {
                         HStack(spacing: DroppySpacing.sm) {
                             Button("Show in History") {
                                 droplet.finishHistorySettingsPage()
-                                droplet.showHistory(at: jumpDate)
+                                droplet.showHistory(at: HistoryJumpDate.minuteStart(jumpDate))
                             }
                             .buttonStyle(DroppyAccentButtonStyle(size: .small))
                             .accessibilityHint(Text("Opens History at this date and time."))
