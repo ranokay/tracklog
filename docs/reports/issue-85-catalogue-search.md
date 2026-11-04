@@ -1,8 +1,8 @@
 # Issue #85 Catalogue search and search-and-play — worker report
 
-- Base: `aa6bdeb257b24dd94b33b8a5f8295be5affff908` (`feat: build history navigation (#112)`)
+- Base: started from `aa6bdeb257b24dd94b33b8a5f8295be5affff908`; rebased onto `335ec6b` (`feat: build local history editing and deletion (#113)`) before the final gate.
 - Branch: `feat/catalogue-search-85`
-- Code head: `0555b3466fbaa2eaa0144fb3fe82e1393e41a16e` (the gate receipt below is for this head; later commits are documentation and evidence only).
+- Code head: `b577e9c109f7eca16443537b7d8e68ae54c491f4` (the gate receipt below is for this head; later commits are documentation and evidence only).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 9 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -84,7 +84,7 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | settings export tests | Old export without the template still decodes; a template round-trips; runtime export carries the saved value. |
 | `savingPublishesAndPersistsOnlyAValidTemplate` | Valid save publishes/persists; invalid save changes nothing. |
 
-Full suite: **676 tests in 102 suites**, exit `0`.
+Full suite: **698 tests in 103 suites**, exit `0`.
 
 ## Gate
 
@@ -94,13 +94,13 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `0555b3466fbaa2eaa0144fb3fe82e1393e41a16e`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T102852Z-dac07409cdbf.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T102852Z-dac07409cdbf.log`
-  - Duration: 995.6 seconds.
-  - `git_before` and `git_after` both report head `0555b34…`, empty porcelain status and the same tracked-content hash.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 306 files.
-- `swift test --package-path Tests`: 676 tests in 102 suites; 51 media tests in 7 suites.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `b577e9c109f7eca16443537b7d8e68ae54c491f4`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T111125Z-2bb8e361d087.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T111125Z-2bb8e361d087.log`
+  - Duration: 1158.4 seconds.
+  - `git_before` and `git_after` both report head `b577e9c…`, empty porcelain status and the same tracked-content hash.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 313 files.
+- `swift test --package-path Tests`: 698 tests in 103 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `search-refusal` and `search-settings`; `loved-held` is the interactive early-Return fixture.
@@ -169,7 +169,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Searc
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 676 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
+| Composition tests | Run | 698 tests / 103 suites; controlled transport, real adapter requests, SQLite and opener spies. |
 | Harness output | Run | Gate `search-refusal`, `search-settings`, existing expanded-surface states; interactive palette states and screenshots. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Shortcut in Droppy's Shortcuts page | **Not run** | The shortcut is registered with `defaultShortcut: nil`; the real host page was not opened. |
