@@ -164,8 +164,17 @@ Inline, pinned bar in History:
 - `CaptureRuntime.editListen` and `deleteListen` publish only after the store
   commits. They update the loaded feed, close a track view whose key may have
   moved, reload track history after a delete, reload delivery state, and tell
-  the chart read model to clear its local snapshot. A validation or storage
-  error is thrown to the page or bar with no success state.
+  the chart read model to clear its local snapshot. The mutation refresh does
+  not depend on the capture switch, so History stays current with scrobbling
+  off. A validation or storage error is thrown to the page or bar with no
+  success state and announced through `TracklogAccessibilityAnnouncer`.
+- A remembered rule merges with any stored rule for the same raw match tuple
+  inside the edit transaction: only the fields this edit changed replace, while
+  earlier remembered replacements survive. The Edits page's own save remains a
+  full replace.
+- Delivery reads also retain the rows for the listen on the open edit page and
+  the pending delete confirmation, so a track-history edit that is older than
+  the loaded feed cannot lose its service lines.
 - History rows gain `Edit listen…` and `Delete listen…`. Edit opens the
   `history-edit` Settings page with Track, Artist, Album, Album artist, an
   off-by-default `Remember as rule` switch, the per-service consequences and
@@ -181,7 +190,7 @@ Inline, pinned bar in History:
 
 ### Composition proof
 
-The focused suite is 15 tests in `HistoryMutationTests`, plus the schema-11
+The focused suite is 22 tests in `HistoryMutationTests`, plus the schema-11
 update to `FeedbackStoreTests.migratesFromThePreviousSchemaAndKeepsHistory`.
 The tests use real temporary SQLite files (several reopened after a close),
 `FakeClock`, replayed playback and recording/scripted service adapters.
@@ -201,6 +210,13 @@ The tests use real temporary SQLite files (several reopened after a close),
 | `aCaptureConcurrentWithADeleteKeepsHistoryConsistent` | capture and delete interleave; one row remains, counts agree, one tombstone. |
 | `aStorageFailureLeavesTheRowAndPublishesNoSuccess` | edit and delete throw, `state.failure` is storage, durable and loaded rows remain. |
 | `aRememberedAlbumCorrectionAppliesToFuturePlaysOnThatAlbumOnly` | rule matches all raw fields; replaces only album; existing row untouched; same album corrected; different album not corrected. |
+| `repeatedRememberEditsMergeTheirReplacements` | two remembered edits on one row keep both corrections after reopen and replay. |
+| `aFailedRuleValidationRollsBackTheEdit` | invalid rule rolls the row update back; no rule stored. |
+| `aFailedDeleteRollsBackTheTombstoneAndKeepsRelatedState` | forced SQLite delete trigger leaves listen, delivery and chart cache; no tombstone. |
+| `aMutationAgainstAClosedStorePublishesNoChange` | closed-store edit/delete throw, set storage failure, publish nothing. |
+| `anEditRacingACaptureKeepsBothRowsAndTheirDeliveries` | edit/capture race leaves two rows, correct counts and two delivery rows after reopen. |
+| `mutationsRefreshHistoryWhenCaptureIsOff` | scrobbling off: delete refreshes the day header; edit loads the loved identity's heart. |
+| `openingEditFromTrackHistoryKeepsItsDeliveryRows` | edit opened from a track row outside the feed page keeps its delivery rows after the track view closes. |
 | `aLocalMutationMakesNoServiceWriteBackRequest` | real ListenBrainz adapter and scripted transport: edit and delete add no request. |
 | `theNoticesNameEveryServiceStateAndTheInFlightLimit` | exact waiting, delivered, abandoned, no-target and in-flight copy. |
 
@@ -267,6 +283,17 @@ Cua Driver AX presses:
   `Heart of Glass, Blondie, Parallel Lines (Deluxe), 18:42`; the row kept its
   delivered value and id. The pinned now-playing heart changed from `Loved` to
   `Not loved`, as the accepted feedback consequence predicts.
+- Keyboard: with the delete confirmation open, `Escape` closed the bar and left
+  the row and pending delivery in place. `Return` with the bar open left the
+  listen undeleted. Twelve `Tab` presses did not move focus from the harness
+  sidebar `Search` field: `defaults read NSGlobalDomain AppleKeyboardUIMode`
+  returned `0` (Full Keyboard Access off), so the Cancel-then-Delete Tab order
+  is not run in this harness. The keys themselves reached the app; the focus
+  order did not.
+- Failure announcements: the edit-page save catch and the delete catch now set
+  their visible message and post the same text through
+  `TracklogAccessibilityAnnouncer`; success and confirmation opening already
+  announced.
 - Fixture shots add the same delete confirmation over a retiring ListenBrainz
   delivery and the edit page over a delivered row.
 
@@ -291,11 +318,14 @@ AX-tree inspection is not audible VoiceOver. The checklist is
 | Delete confirmation is read in order | Passed (AX) | Heading, removal sentence, waiting/in-flight line, footer, then separate buttons. |
 | Cancel is explicit and does not mutate | Passed (interactive) | `Cancel` removed the bar; row and pending delivery stayed. |
 | Delete is explicit and destructive | Passed (interactive) | `Delete` removed the row and its delivery; no default Return binding. |
-| Escape closes the confirmation | Implemented, not exercised | `keyboardShortcut(.cancelAction)` on Cancel; no Escape key was sent in the AX walk. |
+| Escape closes the confirmation | Passed (interactive) | Escape closed the bar; row and pending delivery stayed. |
+| Tab order reaches Cancel then Delete | Not run | `AppleKeyboardUIMode=0`; twelve Tab presses left focus on `[2] AXTextField` (Search). |
+| Return leaves the listen undeleted | Passed (interactive, focus caveat) | Return with the bar open kept the row and bar; focus was the sidebar Search field, so this does not prove Return on a focused Delete button. |
 | Edit page fields are labelled and prefilled | Passed (AX) | Track/Artist/Album/Album artist values above. |
 | Remember as rule is off by default and operable | Passed (AX + interactive) | CheckBox value `0`, then toggled on before Save. |
 | Save is disabled until a change | Passed (AX) | Save exposed without an enabled action before the field changed. |
-| Failed save keeps the page | Passed (test) | `aStorageFailureLeavesTheRowAndPublishesNoSuccess`; not forced interactively. |
+| Failed save keeps the page and announces | Implemented (code), test on store | `aStorageFailureLeavesTheRowAndPublishesNoSuccess`; announcement path inspected, not forced interactively. |
+| Failed delete keeps the row and announces | Implemented (code), test on store | Forced SQLite rollback test; announcement path inspected, not forced interactively. |
 | 24-point targets | Passed (style) | `DroppyQuietButtonStyle(size: .small)` and the 28 × 28 menu; no new icon-only target. |
 | Full keyboard walk | Not run | AX presses and Return only; no Tab/Shift-Tab walk. |
 | Audible VoiceOver | Not passed / blocked | No microphone audio and no accessibility-setting change; AX labels only. |

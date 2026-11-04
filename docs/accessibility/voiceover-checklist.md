@@ -102,8 +102,10 @@ Checks:
 
 - Delivery state pairs a glyph with spoken words; colour is never the only
   signal.
-- The takeover is pointer-and-VoiceOver only. The droplet claims no keyboard
-  path until the menu bar extra lands. Record this as a known gap, not a pass.
+- The takeover is pointer-and-VoiceOver for traversal. Escape closes the delete
+  confirmation. Full Tab traversal of the takeover remains a known gap: record
+  `defaults read NSGlobalDomain AppleKeyboardUIMode` and leave the Tab-order
+  check not run when it is `0`.
 - Opening Settings dismisses the takeover.
 - No text field exists anywhere in the takeover.
 

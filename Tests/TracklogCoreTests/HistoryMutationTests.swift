@@ -431,6 +431,299 @@ struct HistoryMutationTests {
         #expect(try await base.count() == 1)
     }
 
+    @Test func repeatedRememberEditsMergeTheirReplacements() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let stored = try #require(try await store.insert(mutationListen()))
+        let runtime = makeMutationRuntime(store: store)
+        await runtime.start()
+
+        let first = try await runtime.editListen(
+            stored,
+            to: ListenMetadata(
+                title: "Corrected",
+                artist: "Artist",
+                album: "Album",
+                albumArtist: "Album Artist",
+            ),
+            rememberAsRule: true,
+        )
+        _ = try await runtime.editListen(
+            first,
+            to: ListenMetadata(
+                title: "Corrected",
+                artist: "Artist",
+                album: "Right",
+                albumArtist: "Album Artist",
+            ),
+            rememberAsRule: true,
+        )
+
+        let rules = try await store.edits()
+        #expect(rules.count == 1)
+        let rule = try #require(rules.first)
+        #expect(rule.replacement.track == "Corrected")
+        #expect(rule.replacement.album == "Right")
+        #expect(rule.replacement.artist == nil)
+        #expect(rule.replacement.albumArtist == nil)
+
+        runtime.stop()
+        await store.close()
+        let reopened = try SQLiteListenStore(url: database.url)
+        let future = Track(
+            title: "Song",
+            artist: "Artist",
+            album: "Album",
+            albumArtist: "Album Artist",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+        let processed = try #require(
+            try await MetadataPipeline.process(future, edits: reopened.edits()),
+        )
+        #expect(processed.title == "Corrected")
+        #expect(processed.album == "Right")
+    }
+
+    @Test func aFailedRuleValidationRollsBackTheEdit() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let stored = try #require(try await store.insert(mutationListen()))
+        let invalidRule = SimpleEditRule(
+            match: .init(track: "Song"),
+            replacement: .init(),
+            savedAt: mutationBase,
+        )
+
+        do {
+            _ = try await store.editListen(
+                id: stored.id ?? -1,
+                to: ListenMetadata(title: "Must not persist", artist: "Artist"),
+                remembering: invalidRule,
+            )
+            Issue.record("an invalid rule must roll the row edit back")
+        } catch {}
+
+        await store.close()
+        let reopened = try SQLiteListenStore(url: database.url)
+        let rows = try await reopened.page(limit: 10, before: nil)
+        #expect(rows.first?.processed.title == "Song")
+        #expect(try await reopened.edits().isEmpty)
+    }
+
+    @Test func aFailedDeleteRollsBackTheTombstoneAndKeepsRelatedState() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let connection = try await store.save(
+            Connection(
+                kind: .listenBrainz,
+                endpoint: .listenBrainz,
+                identity: "listener",
+                isEnabled: true,
+                authState: .signedIn,
+                createdAt: mutationBase,
+            ),
+        )
+        let stored = try #require(
+            try await store.insert(mutationListen(), targets: [connection.id ?? -1]),
+        )
+        let key = ChartCacheKey(
+            kind: .list,
+            source: .local,
+            chartType: .tracks,
+            period: .allTime,
+        )
+        try await store.saveChartCache(
+            ChartCacheEntry(savedAt: mutationBase, payload: Data("cached".utf8)),
+            for: key,
+        )
+        try database.execute(
+            """
+            CREATE TRIGGER fail_listen_delete
+            BEFORE DELETE ON listens
+            BEGIN
+                SELECT RAISE(ABORT, 'simulated delete failure');
+            END;
+            """,
+        )
+
+        do {
+            try await store.deleteListen(id: stored.id ?? -1, at: mutationBase)
+            Issue.record("the forced delete failure must throw")
+        } catch {}
+
+        #expect(try await store.count() == 1)
+        #expect(try await store.deliveries(for: stored.id ?? -1).count == 1)
+        #expect(try await store.chartCacheCount() == 1)
+        #expect(try await store.tombstoneCount() == 0)
+
+        await store.close()
+        let reopened = try SQLiteListenStore(url: database.url)
+        #expect(try await reopened.count() == 1)
+        #expect(try await reopened.deliveries(for: stored.id ?? -1).count == 1)
+        #expect(try await reopened.chartCacheCount() == 1)
+        #expect(try await reopened.tombstoneCount() == 0)
+    }
+
+    @Test func aMutationAgainstAClosedStorePublishesNoChange() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let stored = try #require(try await store.insert(mutationListen()))
+        let runtime = makeMutationRuntime(store: store)
+        await runtime.start()
+        await store.close()
+
+        do {
+            _ = try await runtime.editListen(
+                stored,
+                to: ListenMetadata(title: "Must not publish", artist: "Artist"),
+                rememberAsRule: false,
+            )
+            Issue.record("editing a closed store must throw")
+        } catch {}
+        #expect(runtime.state.failure?.stage == .storage)
+        #expect(runtime.state.listens.first?.processed.title == "Song")
+
+        do {
+            try await runtime.deleteListen(stored)
+            Issue.record("deleting from a closed store must throw")
+        } catch {}
+        #expect(runtime.state.failure?.stage == .storage)
+        #expect(runtime.state.listens.first?.processed.title == "Song")
+
+        runtime.stop()
+        let reopened = try SQLiteListenStore(url: database.url)
+        #expect(try await reopened.count() == 1)
+        #expect(try await reopened.page(limit: 10, before: nil).first?.processed.title == "Song")
+    }
+
+    @Test func anEditRacingACaptureKeepsBothRowsAndTheirDeliveries() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let adapter = RecordingDeliveryAdapter()
+        let runtime = makeMutationRuntime(store: store, adapters: [adapter])
+        await runtime.start()
+        let connection = try await runtime.link(kind: .listenBrainz, credential: "token")
+        let seeded = try #require(
+            try await store.insert(mutationListen(), targets: [connection.id ?? -1]),
+        )
+        let clock = try #require(runtime.clock as? FakeClock)
+        let capturedTrack = Track(
+            title: "Captured",
+            artist: "Artist",
+            album: "Album",
+            albumArtist: "Album Artist",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+
+        let edit = Task { @MainActor in
+            try await runtime.editListen(
+                seeded,
+                to: ListenMetadata(title: "Edited", artist: "Artist", album: "Album"),
+                rememberAsRule: false,
+            )
+        }
+        let capture = Task { @MainActor in
+            await replayThreshold(
+                capturedTrack,
+                at: mutationBase.addingTimeInterval(600),
+                on: runtime,
+                clock: clock,
+            )
+        }
+        try await edit.value
+        await capture.value
+
+        #expect(try await store.count() == 2)
+        #expect(runtime.state.historyCount == 2)
+        #expect(runtime.state.listens.contains { $0.processed.title == "Edited" })
+        let captured = try #require(
+            runtime.state.listens.first { $0.processed.title == "Captured" },
+        )
+        let deliveries = try await store.deliveries(
+            forListenIDs: [seeded.id ?? -1, captured.id ?? -1],
+        )
+        #expect(deliveries.count == 2)
+        #expect(Set(deliveries.map(\.listenID)) == Set([seeded.id ?? -1, captured.id ?? -1]))
+
+        runtime.stop()
+        await store.close()
+        let reopened = try SQLiteListenStore(url: database.url)
+        #expect(try await reopened.count() == 2)
+        #expect(try await reopened.deliveries(
+            forListenIDs: [seeded.id ?? -1, captured.id ?? -1],
+        ).count == 2)
+    }
+
+    @Test func mutationsRefreshHistoryWhenCaptureIsOff() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let first = try #require(try await store.insert(mutationListen(title: "First")))
+        let second = try #require(
+            try await store.insert(mutationListen(title: "Second", start: mutationBase.addingTimeInterval(10))),
+        )
+        let runtime = makeMutationRuntime(store: store, scrobbling: false)
+        await runtime.start()
+        let day = Calendar.current.startOfDay(for: first.startedAt)
+
+        try await runtime.deleteListen(first)
+        #expect(runtime.state.historyDayCounts[day] == 1)
+        #expect(runtime.state.historyCount == 1)
+
+        let loved = ListenMetadata(
+            title: "Loved",
+            artist: "Artist",
+            album: "Album",
+            albumArtist: "Album Artist",
+        )
+        try await store.setFeedback(.loved, for: loved.identity, at: mutationBase)
+        _ = try await runtime.editListen(
+            second,
+            to: loved,
+            rememberAsRule: false,
+        )
+        #expect(runtime.state.feedback(for: loved.identity)?.score == .loved)
+        #expect(runtime.state.listens.first?.processed == loved)
+    }
+
+    @Test func openingEditFromTrackHistoryKeepsItsDeliveryRows() async throws {
+        let database = try TemporaryDatabase()
+        let store = try SQLiteListenStore(url: database.url)
+        let connection = try await store.save(
+            Connection(
+                kind: .listenBrainz,
+                endpoint: .listenBrainz,
+                identity: "listener",
+                isEnabled: true,
+                authState: .signedIn,
+                createdAt: mutationBase,
+            ),
+        )
+        let oldest = try #require(
+            try await store.insert(
+                mutationListen(title: "Oldest"),
+                targets: [connection.id ?? -1],
+            ),
+        )
+        _ = try await store.insert(mutationListen(title: "Middle", start: mutationBase.addingTimeInterval(10)))
+        _ = try await store.insert(mutationListen(title: "Newest", start: mutationBase.addingTimeInterval(20)))
+        let runtime = makeMutationRuntime(store: store, pageSize: 1)
+        await runtime.start()
+        #expect(runtime.state.listens.map(\.processed.title) == ["Newest"])
+
+        await runtime.openTrackHistory(oldest)
+        #expect(runtime.state.trackHistory?.listens.first?.id == oldest.id)
+        #expect(runtime.state.deliveries(for: oldest).count == 1)
+
+        runtime.state.requestListenEdit(oldest)
+        runtime.closeTrackHistory()
+        await runtime.reloadDeliveryState()
+
+        #expect(runtime.state.trackHistory == nil)
+        #expect(runtime.state.deliveries(for: oldest).count == 1)
+    }
+
     @Test func aRememberedAlbumCorrectionAppliesToFuturePlaysOnThatAlbumOnly() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)

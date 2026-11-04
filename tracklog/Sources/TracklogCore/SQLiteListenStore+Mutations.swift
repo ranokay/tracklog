@@ -42,7 +42,12 @@ extension SQLiteListenStore: ListenMutationStore {
                 throw DatabaseError.sqlite(errorMessage(handle))
             }
 
-            let savedRule = try rule.map { try saveEdit($0, handle: handle) }
+            let savedRule = try rule.map {
+                try saveEdit(
+                    rememberedRule($0, mergedWithStoredRuleOn: handle),
+                    handle: handle,
+                )
+            }
             try clearLocalChartCaches(handle: handle)
             try Self.execute(handle, "COMMIT")
             return ListenEditResult(listen: original.withProcessed(trimmed), rule: savedRule)
@@ -50,6 +55,38 @@ extension SQLiteListenStore: ListenMutationStore {
             try? Self.execute(handle, "ROLLBACK")
             throw error
         }
+    }
+
+    /// A remembered rule for the same raw play has the same match tuple on
+    /// every edit. Merge with that stored rule first so a second one-off edit
+    /// wins only the fields it changed and cannot erase an earlier remembered
+    /// correction. The Edits page's own save keeps its full-replace contract.
+    private func rememberedRule(
+        _ rule: SimpleEditRule,
+        mergedWithStoredRuleOn handle: OpaquePointer,
+    ) throws -> SimpleEditRule {
+        guard let existing = try simpleEdit(matchKey: rule.matchKey, handle: handle) else {
+            return rule
+        }
+        var replacement = existing.replacement
+        if let value = rule.replacement.track {
+            replacement.track = value
+        }
+        if let value = rule.replacement.artist {
+            replacement.artist = value
+        }
+        if let value = rule.replacement.album {
+            replacement.album = value
+        }
+        if let value = rule.replacement.albumArtist {
+            replacement.albumArtist = value
+        }
+        return SimpleEditRule(
+            id: existing.id,
+            match: rule.match,
+            replacement: replacement,
+            savedAt: rule.savedAt,
+        )
     }
 
     /// Removes the listen and its delivery rows, records the one-way dedup

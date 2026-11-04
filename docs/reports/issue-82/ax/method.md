@@ -18,3 +18,7 @@
 - This is the harness, not Droppy Playground. AX-tree inspection is not
   audible VoiceOver. The real-host handoff and live-service writes were not
   run and are recorded as not passed in the report.
+- Keyboard checks used foreground `Escape`, `Return` and `Tab` presses on the
+  harness window. `defaults read NSGlobalDomain AppleKeyboardUIMode` returned
+  `0`, so Tab traversal of controls was unavailable; the exact observation is
+  in `delete-confirmation.txt`.

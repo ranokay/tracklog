@@ -190,8 +190,11 @@ struct TracklogHistoryEditPage: View {
             droplet.finishListenEdit()
         } catch let error as ListenMutationError {
             errorMessage = error.message
+            TracklogAccessibilityAnnouncer.announce(error.message)
         } catch {
-            errorMessage = "This listen could not be updated."
+            let message = "This listen could not be updated."
+            errorMessage = message
+            TracklogAccessibilityAnnouncer.announce(message)
         }
     }
 }

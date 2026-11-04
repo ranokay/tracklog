@@ -75,9 +75,12 @@ extension TracklogDroplet {
         } catch let error as ListenMutationError {
             state.setDeleteListenFailure(error.message)
             state.setDeletingListen(false)
+            TracklogAccessibilityAnnouncer.announce(error.message)
         } catch {
-            state.setDeleteListenFailure("This listen could not be deleted.")
+            let message = "This listen could not be deleted."
+            state.setDeleteListenFailure(message)
             state.setDeletingListen(false)
+            TracklogAccessibilityAnnouncer.announce(message)
         }
     }
 }

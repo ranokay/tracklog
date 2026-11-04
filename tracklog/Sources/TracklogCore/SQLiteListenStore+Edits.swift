@@ -132,7 +132,7 @@ extension SQLiteListenStore {
         }
     }
 
-    private func simpleEdit(matchKey: String, handle: OpaquePointer) throws -> SimpleEditRule? {
+    func simpleEdit(matchKey: String, handle: OpaquePointer) throws -> SimpleEditRule? {
         let statement = try prepare(
             handle,
             """

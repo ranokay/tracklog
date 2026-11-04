@@ -12,6 +12,7 @@ func makeMutationRuntime(
     clock: FakeClock = FakeClock(mutationBase),
     state: TracklogAppState = TracklogAppState(),
     scrobbling: Bool = true,
+    pageSize: Int = 100,
 ) -> CaptureRuntime {
     CaptureRuntime(
         state: state,
@@ -24,6 +25,7 @@ func makeMutationRuntime(
         credentials: credentials,
         serviceAdapters: adapters.map { $0 as any ServiceAdapter },
         settings: CaptureSettings(scrobblingEnabled: scrobbling, nowPlayingEnabled: false),
+        historyPageSize: pageSize,
     )
 }
 

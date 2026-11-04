@@ -47,7 +47,7 @@ public extension CaptureRuntime {
         if result.rule != nil {
             await loadSimpleEdits()
         }
-        await reloadVisibleHistory(in: baseStore)
+        await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
         await reloadDeliveryState()
         await charts?.localHistoryChanged()
         return result.listen
@@ -78,7 +78,7 @@ public extension CaptureRuntime {
         if state.trackHistory != nil {
             await reloadTrackHistory()
         }
-        await reloadVisibleHistory(in: baseStore)
+        await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
         await reloadDeliveryState()
         await charts?.localHistoryChanged()
     }
