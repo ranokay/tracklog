@@ -38,8 +38,12 @@ suspended threads, which is why the logged order is the evidence.
 
 The test now waits for the lookup request itself (three requests: read,
 `track.unlove`, lookup), then advances to `base + 2`. Both spacing tests do
-this. The Loved suite has a one-minute `.timeLimit`, so any future stall fails
-the test instead of hanging the gate. The reproduction file was deleted.
+this, and both record a failed expectation and return without advancing if the
+lookup never arrives. Every task await in the suite uses a bounded completion
+wait that returns on its deadline without waiting for a stuck task; the stall
+proof is `f19-stall-proof.txt`. A one-minute `.timeLimit` remains only as a
+secondary guard for unrelated waits; it cannot stop an unstructured task. The
+reproduction file was deleted.
 
 The same ordering is used by `aSourceScopedReferenceNeverLeaksToAnotherListenBrainzConnection`
 (three requests, advance two seconds).

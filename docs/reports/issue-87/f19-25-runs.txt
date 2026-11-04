@@ -1,27 +1,48 @@
-# F19 — 25 consecutive Loved suite runs under load
+# F19(e) — 25 consecutive Loved suite runs
 
-Command, run from the worktree root with the two orphaned
-`t3-15b81b49` helpers still spinning (PIDs 40494 and 47605, about 149% CPU
-each at the time):
+Command, from the worktree root:
 
 ```sh
 for i in $(seq 1 25); do
-  echo "=== iteration $i ==="
   swift test --package-path Tests --filter LovedBrowsingTests
-  echo "exit:$?"
 done
 ```
 
-Result: 25 iterations, each `Test run with 37 tests in 1 suite passed` and
-`exit:0`. The per-iteration pass line is present 25 times; the `exit:0` count is
-25.
+Date: 2026-11-04. The two orphaned `t3-15b81b49` helpers had already been
+stopped before this run, so these are not under that external load; the earlier
+25-run under their ~300% combined CPU is recorded in the round-4 report and was
+accepted.
 
-The full transcript is at `/tmp/f19-25-runs.log` (196 KB, 2,101 lines). The
-orphaned helpers were left untouched, as instructed.
+Per-iteration results:
 
-The gate helper `DeliveryGate.waitUntilEntered` now has a three-second bound and
-returns a Bool; every existing caller asserts it, so a send that never enters
-records a test failure instead of spinning forever. The current run did not
-establish why the orphaned helper's send never entered: that process belongs to
-another worktree and was not inspected beyond the reviewer's sample. The
-bounded wait is the containment; the product delivery path was not changed.
+```text
+iteration 1: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.368 seconds.
+iteration 2: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.368 seconds.
+iteration 3: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.408 seconds.
+iteration 4: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.362 seconds.
+iteration 5: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.334 seconds.
+iteration 6: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.359 seconds.
+iteration 7: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.390 seconds.
+iteration 8: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.335 seconds.
+iteration 9: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.384 seconds.
+iteration 10: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.369 seconds.
+iteration 11: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.344 seconds.
+iteration 12: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.343 seconds.
+iteration 13: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.319 seconds.
+iteration 14: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.313 seconds.
+iteration 15: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.422 seconds.
+iteration 16: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.346 seconds.
+iteration 17: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.393 seconds.
+iteration 18: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.461 seconds.
+iteration 19: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.335 seconds.
+iteration 20: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.455 seconds.
+iteration 21: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.370 seconds.
+iteration 22: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.374 seconds.
+iteration 23: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.312 seconds.
+iteration 24: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.398 seconds.
+iteration 25: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.376 seconds.
+```
+
+25 iterations, 25 `exit:0`. The gate helper
+`DeliveryGate.waitUntilEntered` remains bounded at three seconds and every
+existing caller asserts it. No product code is involved.

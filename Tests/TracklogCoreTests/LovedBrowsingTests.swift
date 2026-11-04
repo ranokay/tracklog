@@ -350,9 +350,13 @@ struct LovedBrowsingTests {
         let action = Task { await runtime.unloveLovedRow(row) }
         // The lookup records its spacing timestamp before the POST. Wait for
         // the lookup itself, then advance past any spacing it recorded.
-        _ = await lovedWaitForRequests(transport, count: 3)
+        let spacing = await lovedWaitForRequests(transport, count: 3)
+        #expect(spacing.count >= 3, "the spacing lookup is recorded")
+        guard spacing.count >= 3 else { return }
         clock.advance(to: base.addingTimeInterval(2))
-        let confirmed = await action.value
+        let confirmed = await lovedAwait(action)
+        #expect(confirmed != nil, "the unlove completes")
+        guard let confirmed else { return }
         #expect(confirmed)
         #expect(runtime.state.lovedState.rows.isEmpty)
 
@@ -418,9 +422,13 @@ struct LovedBrowsingTests {
         let action = Task { await runtime.unloveLovedRow(row) }
         // Wait for the lookup, not merely the Last.fm call: the lookup records
         // the spacing timestamp the ListenBrainz POST will wait on.
-        _ = await lovedWaitForRequests(transport, count: 3)
+        let spacing = await lovedWaitForRequests(transport, count: 3)
+        #expect(spacing.count >= 3, "the spacing lookup is recorded")
+        guard spacing.count >= 3 else { return }
         clock.advance(to: base.addingTimeInterval(2))
-        let confirmed = await action.value
+        let confirmed = await lovedAwait(action)
+        #expect(confirmed != nil, "the unlove completes")
+        guard let confirmed else { return }
         #expect(confirmed == false)
         #expect(runtime.state.lovedState.rows.count == 1)
         runtime.loved?.rowActionFailed(row, service: "Last.fm")
@@ -879,7 +887,9 @@ struct LovedBrowsingTests {
         #expect(runtime.state.lovedState.sourceLabel == "ListenBrainz · listener-two")
 
         await transport.release()
-        await show.value
+        let shown = await lovedAwait(show)
+        #expect(shown != nil, "the show completes")
+        guard shown != nil else { return }
         await turnMainActor()
         #expect(runtime.state.lovedState.rows.map(\.title) == ["New Account Row"])
         #expect(runtime.state.lovedState.sourceLabel == "ListenBrainz · listener-two")
@@ -1106,7 +1116,9 @@ struct LovedBrowsingTests {
         runtime.loved?.feedbackSucceeded(.unlove, track: row.track, connections: [connection])
         #expect(runtime.state.lovedState.rows.isEmpty)
         await transport.release()
-        await load.value
+        let loaded = await lovedAwait(load)
+        #expect(loaded != nil, "the load-more completes")
+        guard loaded != nil else { return }
         #expect(runtime.state.lovedState.rows.isEmpty)
         #expect(runtime.state.lovedState.isLoadingMore == false)
 
@@ -1171,7 +1183,9 @@ struct LovedBrowsingTests {
         runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
         #expect(runtime.state.lovedState.rows.count == 3)
         await transport.release()
-        await load.value
+        let loaded = await lovedAwait(load)
+        #expect(loaded != nil, "the load-more completes")
+        guard loaded != nil else { return }
         #expect(runtime.state.lovedState.rows.count == 3)
         #expect(runtime.state.lovedState.isLoadingMore == false)
 
@@ -1218,7 +1232,9 @@ struct LovedBrowsingTests {
         let first = try #require(runtime.state.lovedState.rows.first)
         runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
         await transport.release()
-        await refresh.value
+        let refreshed = await lovedAwait(refresh)
+        #expect(refreshed != nil, "the refresh completes")
+        guard refreshed != nil else { return }
         await turnMainActor()
         #expect(runtime.state.lovedState.rows.map(\.title) == ["Example Track Two"])
     }
@@ -1258,7 +1274,9 @@ struct LovedBrowsingTests {
         #expect(await transport.requestCount() == before)
         #expect(runtime.state.lovedState.isLoadingMore == false)
         await transport.release()
-        await refresh.value
+        let refreshed = await lovedAwait(refresh)
+        #expect(refreshed != nil, "the refresh completes")
+        guard refreshed != nil else { return }
     }
 
     // MARK: - Final page and omissions
@@ -1433,7 +1451,9 @@ struct LovedBrowsingTests {
         runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
         #expect(runtime.state.lovedState.omitted == 2)
         await transport.release()
-        await refresh.value
+        let refreshed = await lovedAwait(refresh)
+        #expect(refreshed != nil, "the refresh completes")
+        guard refreshed != nil else { return }
         await turnMainActor()
         #expect(runtime.state.lovedState.omitted == 2)
 
