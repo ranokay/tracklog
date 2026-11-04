@@ -511,6 +511,21 @@ struct ChartLocalTests: CaptureTestHelpers {
         #expect(state.chartState.phase != .empty)
     }
 
+    @Test func signInFailureCopyMatchesWhetherSavedChartsExist() {
+        let withoutSaved = ChartCopy.signInFailureMessage(
+            source: "Last.fm · listener",
+            hasSavedCharts: false,
+        )
+        #expect(!withoutSaved.contains("saved charts stay visible"))
+        #expect(withoutSaved.contains("local history"))
+
+        let withSaved = ChartCopy.signInFailureMessage(
+            source: "Last.fm · listener",
+            hasSavedCharts: true,
+        )
+        #expect(withSaved.contains("saved charts stay visible"))
+    }
+
     @Test func defaultTakeoverSectionIsHistoryAndSelectionPersists() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
