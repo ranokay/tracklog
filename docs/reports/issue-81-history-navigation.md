@@ -94,7 +94,8 @@ page, newer page and both track-history page assignments) fills a nil hash
 from that known set before publishing. A stale page can no longer erase a
 cover in the running app. `aStalePageCannotEraseAKnownCover` forces the
 ordering with a real store whose pages strip the hash and fails without this
-merge.
+merge. The deterministic failure and the ten consecutive full-suite passes are
+recorded in `docs/reports/issue-81/cover-race.txt`.
 
 ## Implementation
 
