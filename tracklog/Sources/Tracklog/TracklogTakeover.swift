@@ -94,21 +94,32 @@ struct TakeoverHeader: View {
     }
 
     private var connectionPicker: some View {
-        Picker(selection: connectionBinding) {
-            Text("No connection").tag("none")
-            ForEach(state.connections) { connection in
-                Text(connectionTitle(connection)).tag(connectionTag(connection))
+        ZStack(alignment: .trailing) {
+            Picker(selection: connectionBinding) {
+                Text("No connection").tag("none")
+                ForEach(state.connections) { connection in
+                    Text(connectionTitle(connection)).tag(connectionTag(connection))
+                }
+            } label: {
+                EmptyView()
             }
-        } label: {
-            EmptyView()
+            .pickerStyle(.menu)
+            .controlSize(.large)
+            .menuIndicator(.hidden)
+            .labelsHidden()
+            .padding(.trailing, 18)
+            .frame(width: 208, alignment: .trailing)
+            .accessibilityLabel(Text("Current connection"))
+            .accessibilityValue(Text(currentConnectionAccessibilityValue))
+
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                .padding(.trailing, 10)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
-        .pickerStyle(.menu)
-        .controlSize(.large)
-        .menuIndicator(.hidden)
-        .labelsHidden()
         .frame(width: 208, alignment: .trailing)
-        .accessibilityLabel(Text("Current connection"))
-        .accessibilityValue(Text(currentConnectionAccessibilityValue))
     }
 
     private var connectionBinding: Binding<String> {
