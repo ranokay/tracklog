@@ -84,6 +84,8 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
                     page: 1,
                     totalPages: 1,
                 )
+            case "auth.getToken":
+                lastFMTokenResponse()
             case "track.updateNowPlaying":
                 lastFMEmptyResponse()
             case "track.scrobble":
@@ -276,10 +278,14 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let firstCount = await transport.requestCount()
         #expect(firstCount == 4)
 
-        model.credentialsChanged()
+        try await harness.runtime.saveLastFMAppCredentialOverride(
+            apiKey: "new-key",
+            sharedSecret: "new-secret",
+        )
         #expect(await waitSettled(harness))
 
-        #expect(await transport.requestCount() == firstCount * 2)
+        // One auth.getToken validation plus a full four-group refresh.
+        #expect(await transport.requestCount() == firstCount + 5)
     }
 
     // MARK: - Cancellation
