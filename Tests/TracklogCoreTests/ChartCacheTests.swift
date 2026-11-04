@@ -2012,6 +2012,171 @@ struct ChartCacheTests {
         #expect(stats.last?.url.path.contains("/user/listener/artists") == true)
     }
 
+    @Test func failingChartTransportLeavesCaptureDeliveryAndHistoryCurrent() async throws {
+        let now = chartDate(2026, 10, 31, 12)
+        for kind in [ServiceKind.lastFM, .listenBrainz] {
+            let database = try TemporaryDatabase()
+            let clock = FakeClock(now)
+            let flags = ChartFlags()
+            await flags.setFailing(true)
+            let transport: ChartHTTPTransport = if kind == .lastFM {
+                ChartHTTPTransport { request in
+                    switch chartMethod(request) {
+                    case "user.getTopArtists":
+                        throw URLError(.notConnectedToInternet)
+                    case "user.getInfo":
+                        lastFMUserInfoResponse()
+                    case "track.updateNowPlaying":
+                        chartJSONResponse([:])
+                    case "track.scrobble":
+                        lastFMScrobbleResponse(codes: [0])
+                    default:
+                        HTTPResponse(statusCode: 404, body: Data())
+                    }
+                }
+            } else {
+                listenBrainzTransport(flags: flags)
+            }
+            let state = TracklogAppState()
+            let calendarBox = ChartCalendarBox(chartCalendar(utc))
+            let runtime = makeChartRuntime(
+                database: database,
+                clock: clock,
+                transport: transport,
+                state: state,
+                selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+                calendarBox: calendarBox,
+                scrobblingEnabled: true,
+            )
+            let store = try SQLiteListenStore(url: database.url)
+            await runtime.start()
+            _ = try await runtime.link(
+                kind: kind,
+                credential: kind == .lastFM ? "session-key" : "token",
+            )
+            await runtime.charts?.show()
+            #expect(state.chartState.phase == .failed(.offline), "\(kind) charts failed")
+            #expect(state.chartState.snapshot == nil)
+
+            let track = Track(
+                title: "Failed Chart Continuity",
+                artist: "Blondie",
+                album: "Parallel Lines",
+                duration: 30,
+                bundleID: "com.apple.Music",
+            )
+            for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+                clock.now = now.addingTimeInterval(second)
+                await runtime.ingest(MediaSample(
+                    track: track,
+                    elapsed: second,
+                    playbackRate: 1,
+                    isPlaying: true,
+                    timestamp: clock.now,
+                ))
+            }
+            #expect(
+                state.nowPlaying?.track.title == "Failed Chart Continuity",
+                "\(kind) now playing stayed current beside the failed chart",
+            )
+            let listen = try #require(
+                state.listens.first { $0.processed.title == "Failed Chart Continuity" },
+            )
+            #expect(state.historyCount == 1)
+            clock.advance(to: clock.now.addingTimeInterval(2))
+            let delivered = await chartWaitForDelivery(store, listenID: listen.id ?? -1)
+            #expect(delivered?.state == .delivered, "\(kind) delivery progressed while charts were failed")
+            #expect(state.chartState.phase == .failed(.offline), "\(kind) chart failure remained visible")
+            #expect(state.chartState.refreshFailure == nil)
+            #expect(try await store.count() == 1)
+        }
+    }
+
+    @Test func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let flags = ChartFlags()
+        let gate = ChartHoldGate()
+        let transport = listenBrainzTransport(flags: flags, gate: gate)
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: transport,
+            state: state,
+            selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        let store = try SQLiteListenStore(url: database.url)
+        await runtime.start()
+        _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await gate.startHolding()
+        for cycle in 0 ..< 3 {
+            let show = Task { await runtime.charts?.show() }
+            #expect(
+                await gate.waitUntilEntered(cycle + 1),
+                "cycle \(cycle) reached the held chart request",
+            )
+            runtime.stop()
+            await runtime.start()
+            await gate.release()
+            await show.value
+            #expect(state.chartState.snapshot == nil, "cycle \(cycle) published no obsolete rows")
+            #expect(
+                try await store.chartCacheCount() == 0,
+                "cycle \(cycle) wrote no obsolete cache row",
+            )
+            #expect(runtime.charts?.isActive == true)
+            #expect(runtime.charts?.isShowing == false)
+            await gate.startHolding()
+        }
+
+        let finalShow = Task { await runtime.charts?.show() }
+        #expect(await gate.waitUntilEntered(4), "the final held chart request entered")
+        runtime.stop()
+        await gate.release()
+        await finalShow.value
+        #expect(state.chartState.snapshot == nil)
+        #expect(try await store.chartCacheCount() == 0)
+        #expect(runtime.charts?.isActive == false)
+
+        let requestsAfterStop = await chartStatsRequestCount(transport)
+        clock.advance(to: now.addingTimeInterval(20 * 60))
+        await turnMainActor(50)
+        #expect(
+            await chartStatsRequestCount(transport) == requestsAfterStop,
+            "the stopped runtime owns no freshness wake",
+        )
+
+        let listensBefore = state.listenCount
+        let historyBefore = state.historyCount
+        let track = Track(
+            title: "After Deactivation",
+            artist: "Blondie",
+            album: "Parallel Lines",
+            duration: 30,
+            bundleID: "com.apple.Music",
+        )
+        for second in stride(from: 0.0, through: 30.0, by: 2.0) {
+            clock.now = now.addingTimeInterval(second)
+            await runtime.ingest(MediaSample(
+                track: track,
+                elapsed: second,
+                playbackRate: 1,
+                isPlaying: true,
+                timestamp: clock.now,
+            ))
+        }
+        #expect(state.nowPlaying == nil)
+        #expect(state.listenCount == listensBefore)
+        #expect(state.historyCount == historyBefore)
+        #expect(!state.listens.contains { $0.processed.title == "After Deactivation" })
+        #expect(try await store.count() == 0)
+    }
+
     // MARK: - Fixtures
 
     private func chartStatsRequestCount(_ transport: ChartHTTPTransport) async -> Int {

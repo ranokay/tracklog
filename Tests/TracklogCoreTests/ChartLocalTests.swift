@@ -419,6 +419,98 @@ struct ChartLocalTests: CaptureTestHelpers {
         }
     }
 
+    @Test func equalCountTieBreakUsesNormalizedKeyAndSequentialRanks() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        let spellings = ["Alpha", "  ALPHA  ", "beta", "Beta", "zeta"]
+        for (index, artist) in spellings.enumerated() {
+            try await store.insert(chartListen(
+                title: "Song \(index)",
+                artist: artist,
+                album: "Album",
+                startedAt: now.addingTimeInterval(Double(index)),
+            ))
+        }
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(source: .local, period: .allTime, now: now, calendar: calendarBox.calendar),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        await runtime.charts?.show()
+
+        let snapshot = try #require(state.chartState.snapshot)
+        #expect(snapshot.localTotal == 5)
+        #expect(snapshot.omittedCount == 0)
+        #expect(snapshot.items.map(\.title) == ["Alpha", "beta", "zeta"])
+        #expect(snapshot.items.map(\.count) == [2, 2, 1])
+        #expect(snapshot.items.map(\.rank) == [1, 2, 3])
+        #expect(snapshot.items.map(\.identityKey) == ["alpha", "beta", "zeta"])
+
+        let stored = try await store.page(limit: 10, before: nil)
+        #expect(
+            stored.contains { $0.processed.artist == "  ALPHA  " },
+            "charts never rewrite the stored metadata identity",
+        )
+        #expect(stored.contains { $0.processed.artist == "Alpha" })
+    }
+
+    @Test func albumMissingMetadataIsItsOwnStateWithAnExactTotal() async throws {
+        let database = try TemporaryDatabase()
+        let now = chartDate(2026, 10, 31, 12)
+        let clock = FakeClock(now)
+        let store = try SQLiteListenStore(url: database.url)
+        try await store.insert(chartListen(
+            title: "No Album One",
+            artist: "Artist One",
+            album: "",
+            albumArtist: "",
+            startedAt: chartDate(2026, 10, 31, 9),
+        ))
+        try await store.insert(chartListen(
+            title: "No Album Two",
+            artist: "Artist Two",
+            album: "   ",
+            albumArtist: "  ",
+            startedAt: chartDate(2026, 10, 31, 10),
+        ))
+        let state = TracklogAppState()
+        let calendarBox = ChartCalendarBox(chartCalendar(utc))
+        let runtime = makeChartRuntime(
+            database: database,
+            clock: clock,
+            transport: ChartHTTPTransport { _ in HTTPResponse(statusCode: 500, body: Data()) },
+            state: state,
+            selection: chartSelection(
+                source: .local,
+                period: .custom,
+                type: .albums,
+                now: now,
+                calendar: calendarBox.calendar,
+                customStart: ChartDate(2026, 10, 31),
+                customEnd: ChartDate(2026, 10, 31),
+            ),
+            calendarBox: calendarBox,
+        )
+        await runtime.start()
+        await runtime.charts?.show()
+
+        let snapshot = try #require(state.chartState.snapshot)
+        #expect(snapshot.localTotal == 2, "every listen in the range is counted")
+        #expect(snapshot.omittedCount == 2, "both records lack an album")
+        #expect(snapshot.items.isEmpty)
+        #expect(state.chartState.phase == .noMetadata(omitted: 2))
+        #expect(state.chartState.totals == .local(2))
+        #expect(state.chartState.phase != .empty)
+    }
+
     @Test func defaultTakeoverSectionIsHistoryAndSelectionPersists() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)

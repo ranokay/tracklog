@@ -8,6 +8,7 @@ enum HarnessDemoState: String {
     case playing
     case paused
     case off
+    case idle
     case feedUnavailable = "feed-unavailable"
 
     static var selected: HarnessDemoState {
@@ -35,13 +36,27 @@ enum HarnessDemoState: String {
 /// Deterministic content for the harness's surface shots and runtime checks.
 /// Droppy never sees this: `host.environment.isHarness` is the only gate.
 enum HarnessDemo {
-    static let track = Track(
+    static let regularTrack = Track(
         title: "Heart of Glass",
         artist: "Blondie",
         album: "Parallel Lines",
         duration: 225,
         bundleID: "com.apple.Music",
     )
+
+    /// The long-names chart fixture also gives the pinned strip a long title,
+    /// so one harness run covers both truncation paths.
+    static let longTrack = Track(
+        title: "The Rise and Fall of the City of Mahagonny (Live at the Metropolitan Opera, Remastered Edition)",
+        artist: "The Extremely Long-Named Artist Collective Featuring a Very Long Credit",
+        album: "Songs of the Deep and the Distant",
+        duration: 225,
+        bundleID: "com.apple.Music",
+    )
+
+    static var track: Track {
+        HarnessChartFixture.selected == .longNames ? longTrack : regularTrack
+    }
 
     @MainActor
     static func showNowPlaying(on runtime: CaptureRuntime) async {
