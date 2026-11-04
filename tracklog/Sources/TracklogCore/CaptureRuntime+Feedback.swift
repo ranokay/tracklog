@@ -131,6 +131,32 @@ public extension CaptureRuntime {
         }
     }
 
+    /// Unloves one row from a service-read list. The action runs through the
+    /// same serialized feedback chain and fan-out policy as every other love
+    /// action. The row's recording reference belongs to its source connection
+    /// and is never lent to another one. Returns whether that source
+    /// connection confirmed the change.
+    @discardableResult
+    func unloveLovedRow(_ row: LovedRow) async -> Bool {
+        guard started, let sourceID = row.connectionID else { return false }
+        let track = row.track
+        let identity = ListenMetadata(track).identity
+        var sourceSucceeded = false
+        await enqueueFeedback { [weak self] generation in
+            guard let self else { return }
+            let succeeded = await applyFeedback(
+                .unlove,
+                track: track,
+                identity: identity,
+                scope: .serviceRow(connectionID: sourceID, reference: row.reference),
+                generation: generation,
+                reconciledRowID: row.id,
+            )
+            sourceSucceeded = succeeded.contains { $0.id == sourceID }
+        }
+        return sourceSucceeded
+    }
+
     /// Hates one history listen. Only supporting ListenBrainz connections are
     /// eligible; Last.fm and Libre.fm never receive it.
     func hate(_ listen: Listen) async {
@@ -234,34 +260,43 @@ private extension CaptureRuntime {
         return state.feedback(for: identity)?.score == .loved ? .unlove : .love
     }
 
+    @discardableResult
     func applyFeedback(
         _ action: FeedbackAction,
         track: Track,
         identity: String,
         scope: FeedbackScope,
         generation: Int,
-    ) async {
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
+        reconciledRowID: String? = nil,
+    ) async -> [Connection] {
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let targets = feedbackTargets(for: action)
-        guard !targets.isEmpty, let feedbackStore else { return }
+        guard !targets.isEmpty, let feedbackStore else { return [] }
 
         let now = clock.now
-        let score = action.localScore
+        let written: (identities: [String], clearsTrack: Bool)
         do {
-            try await feedbackStore.setFeedback(score, for: identity, at: now)
+            written = try await storeFeedback(
+                action,
+                track: track,
+                identity: identity,
+                scope: scope,
+                at: now,
+            )
         } catch {
             state.failure = .storage(error: error)
-            return
+            return []
         }
 
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
-        feedbackWriteRevisions[identity, default: 0] += 1
-        feedbackLoadedIdentities.insert(identity)
-        var next = state.feedbackByTrack
-        next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
-        state.feedbackByTrack = next
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
+        publishFeedback(
+            written,
+            identity: identity,
+            score: action.localScore,
+            at: now,
+        )
 
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let succeeded = await deliveryOutbox?.sendFeedback(
             action,
             track: track,
@@ -269,10 +304,69 @@ private extension CaptureRuntime {
             connectionIDs: targets.compactMap(\.id),
         ) ?? []
         guard started, startGeneration == generation, !Task.isCancelled, !succeeded.isEmpty else {
-            return
+            return succeeded
         }
 
         showFeedbackHUD(action, services: succeeded.map(\.hudServiceName))
+        // The re-read reconciliation is started, not awaited: a slow Loved
+        // read must not hold the serial feedback chain open.
+        loved?.feedbackSucceeded(
+            action,
+            track: track,
+            connections: succeeded,
+            rowID: reconciledRowID,
+        )
+        return succeeded
+    }
+
+    /// Writes the local score. A service-read unlove knows only title and
+    /// artist, so it clears every album-bearing identity for that track.
+    private func storeFeedback(
+        _ action: FeedbackAction,
+        track: Track,
+        identity: String,
+        scope: FeedbackScope,
+        at now: Date,
+    ) async throws -> (identities: [String], clearsTrack: Bool) {
+        guard let feedbackStore else { return ([identity], false) }
+        var clearsTrack = false
+        if case .serviceRow = scope, action == .unlove {
+            clearsTrack = true
+        }
+        guard clearsTrack else {
+            try await feedbackStore.setFeedback(action.localScore, for: identity, at: now)
+            return ([identity], false)
+        }
+        let matching = try await feedbackStore.feedback(
+            matchingTrackTitle: track.title,
+            artist: track.artist,
+        )
+        var identities = Set(matching.keys)
+        identities.insert(identity)
+        for affected in identities {
+            try await feedbackStore.setFeedback(nil, for: affected, at: now)
+        }
+        return (Array(identities), true)
+    }
+
+    private func publishFeedback(
+        _ written: (identities: [String], clearsTrack: Bool),
+        identity: String,
+        score: FeedbackScore?,
+        at now: Date,
+    ) {
+        var next = state.feedbackByTrack
+        for affected in written.identities {
+            feedbackWriteRevisions[affected, default: 0] += 1
+            feedbackLoadedIdentities.insert(affected)
+            if written.clearsTrack {
+                next[affected] = nil
+            }
+        }
+        if !written.clearsTrack {
+            next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
+        }
+        state.feedbackByTrack = next
     }
 
     func showFeedbackHUD(_ action: FeedbackAction, services: [String]) {

@@ -1,0 +1,44 @@
+# F19(c) stall proof
+
+Temporary test (removed after this transcript):
+
+```swift
+@Test func aStuckTaskFailsWithinTheBound() async {
+    let stuck = Task<Bool, Never> {
+        await withCheckedContinuation { (_: CheckedContinuation<Bool, Never>) in }
+    }
+    let start = ContinuousClock.now
+    let result = await lovedAwait(stuck, timeout: .seconds(2))
+    let elapsed = ContinuousClock.now - start
+    #expect(result != nil, "the stuck task must complete")
+    #expect(elapsed < .seconds(3), "the wait returned within its bound")
+}
+```
+
+Command:
+
+```sh
+/usr/bin/time -p swift test --package-path Tests --skip-build --filter LovedStallProofTests
+```
+
+Transcript:
+
+```text
+◇ Test aStuckTaskFailsWithinTheBound() started.
+SWIFT TASK CONTINUATION MISUSE: aStuckTaskFailsWithinTheBound() leaked its continuation without resuming it. This may cause tasks waiting on it to remain suspended forever.
+✘ Test aStuckTaskFailsWithinTheBound() recorded an issue at LovedStallProof.swift:15:9: Expectation failed: result != nil
+↳ the stuck task must complete
+↳ result != nil → false
+↳   result → nil
+✘ Test aStuckTaskFailsWithinTheBound() failed after 2.130 seconds with 1 issue.
+✘ Suite "Loved stall proof" failed after 2.130 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 2.130 seconds with 1 issue.
+real 6.13
+user 1.19
+sys 0.95
+EXIT:1
+```
+
+The bounded completion wait returned on its 2-second deadline, the test recorded
+the failure, and the process exited non-zero after the 2.130-second test. It did
+not wait for the never-resumed task. `.timeLimit` was not involved.

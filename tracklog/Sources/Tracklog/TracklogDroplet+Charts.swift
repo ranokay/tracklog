@@ -33,7 +33,7 @@ public extension TracklogDroplet {
         await runtime?.charts?.selectType(type)
     }
 
-    func setChartCurrentConnection(_ id: Int64?) async throws {
+    func setCurrentConnection(_ id: Int64?) async throws {
         guard let runtime else { throw ConnectionError.unavailable }
         try await runtime.setCurrentConnection(id)
     }
@@ -68,6 +68,7 @@ public extension TracklogDroplet {
 
     func takeoverDidDisappear() {
         runtime?.charts?.hide()
+        runtime?.loved?.hide()
         runtime?.resetHistoryNavigation()
         state.setPendingListExpanded(false)
         state.setSearchRefusal(nil)

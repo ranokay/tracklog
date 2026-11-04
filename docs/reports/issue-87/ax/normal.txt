@@ -1,0 +1,23 @@
+# AX readout — Loved, normal rows
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_LOVED=normal TRACKLOG_HARNESS_SECTION=loved`.
+Window: `Tracklog — DroppyKit harness`, 1320 × 940.
+
+- `AXRadioGroup` `Sections`: `AXRadioButton` `History`, `Charts`, `Loved`
+  (`Loved` selected).
+- `AXButton` `Search and play`.
+- `AXPopUpButton` label `Current connection`, value `Last.fm · listener`.
+- `AXHeading` `Loved`.
+- `AXStaticText` `Last.fm · listener`.
+- `AXButton` `Refresh loved tracks`, help `Refresh loved tracks`.
+- `AXUnknown` `Example Track One, Example Artist, Example Album`
+- `AXButton` `Unlove Example Track One`, help
+  `Removes the love on Last.fm and every connected service that supports love.`
+- `AXUnknown` `Example Track Two, Example Artist, Example Album`
+- `AXButton` `Unlove Example Track Two`, same help.
+- … the same pair through `Example Track Eight`.
+- `AXUnknown` `Heart of Glass` (pinned strip), then the strip's `Loved` heart,
+  `Cancel this listen` and `More`.
+
+The row text and the heart are separate elements. The row is one spoken
+`<title>, <artist>, <album>`; the heart names the action and its fan-out.

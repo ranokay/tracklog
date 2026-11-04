@@ -47,10 +47,13 @@ public enum RecordingReference: Equatable, Sendable {
 }
 
 /// Which track a feedback action targets, so a history row can never borrow
-/// the current track's recording reference.
+/// the current track's recording reference. A service-read row names its
+/// source connection: that connection's recording reference is valid only
+/// there, and another connection resolves its own.
 public enum FeedbackScope: Equatable, Sendable {
     case listen(Int64)
     case currentTrack
+    case serviceRow(connectionID: Int64, reference: RecordingReference?)
 }
 
 /// Which feedback actions the current connection set can perform.
@@ -109,6 +112,29 @@ public protocol FeedbackStore: Sendable {
     /// The stored feedback for the requested processed identities.
     func feedback(for identities: [String]) async throws -> [String: TrackFeedback]
 
+    /// Every stored score whose identity starts with this normalized title and
+    /// artist. A service-read row knows only those two fields, so clearing its
+    /// love must clear each album-bearing identity the same track produced.
+    func feedback(matchingTrackTitle title: String, artist: String) async throws -> [String: TrackFeedback]
+
     /// Stores one score, or removes the row when `score` is nil.
     func setFeedback(_ score: FeedbackScore?, for identity: String, at date: Date) async throws
+}
+
+/// The normalized title-and-artist part of a feedback identity. Title and
+/// artist are the only fields a service-read row can know reliably. The
+/// normalization is the one `Identity` implementation, so a future identity
+/// change cannot silently stop a row unlove from clearing local feedback.
+public enum FeedbackIdentity {
+    public static func normalize(_ value: String) -> String {
+        Identity.normalized(value)
+    }
+
+    public static func trackPrefix(title: String, artist: String) -> String {
+        Identity.joined([title, artist]) + "\u{1F}"
+    }
+
+    public static func matches(_ identity: String, title: String, artist: String) -> Bool {
+        identity.hasPrefix(trackPrefix(title: title, artist: artist))
+    }
 }

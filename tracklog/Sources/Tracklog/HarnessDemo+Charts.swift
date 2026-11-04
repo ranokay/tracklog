@@ -304,7 +304,11 @@ extension HarnessDemoLastFMAdapter: FeedbackAdapter {
         connection _: Connection,
         credential _: String,
     ) async throws {
-        // The harness has no network; the action still proves the composition.
+        // The harness has no network. The action-failure fixture makes the
+        // source service refuse so the per-row notice can be inspected.
+        if HarnessLovedFixture.selected == .actionFailure {
+            throw ServiceFailure.retryable
+        }
     }
 }
 

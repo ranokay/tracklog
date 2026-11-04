@@ -130,6 +130,50 @@ Checks:
 - Icon-only controls meet the 24 pt target.
 - The takeover remains pointer-and-VoiceOver only. Record the lack of a keyboard path as a known gap, not a pass.
 
+## Loved takeover
+
+Expected structure:
+
+- The section control names `History`, `Charts` and `Loved`; the current
+  connection switcher sits at the trailing end of the header.
+- The `Loved` heading is followed by the source label `<service> · <account>`.
+- Each row is one element: `<title>, <artist>, <album>` with the value
+  `Loved on <service>`. No row press: the list has no detail page in this
+  milestone.
+- Each row's heart is a separate button, `Unlove <title>`, with a 24 pt target
+  and the hint that it removes the love on the service and every connected
+  service that supports love.
+- Loading, empty, all-omitted-metadata, unsupported, no-connection, failed and
+  refresh-failure states are separate spoken states with their own actions.
+  `Loved tracks unavailable` is not an empty listen; `No loved tracks` is only
+  a successful empty read.
+- A rate limit says when to try again and does not offer an ignored retry;
+  once the wait ends the refresh and the action become available again.
+- A first read rejected with 401/403 reads `<service> rejected the saved
+  credential. Sign in on Services.` while Services still shows the connection
+  signed in.
+- A row action the source connection did not confirm stays in the list and is
+  explained by `Could not unlove “<title>” on <service>. The service did not
+  confirm the change.` with a separate Dismiss button; Dismiss removes only the
+  notice.
+- A refresh failure over existing rows keeps them and reads `Could not refresh
+  loved tracks. Showing the last loaded list.` with the failure and Try again.
+- A successful read whose entries all lack metadata reads `Loved tracks need
+  metadata` with the omitted count; it never claims the account has no loved
+  tracks.
+- Unlove is offered only when the current connection is enabled, signed in and
+  supports love. A paused, signed-out or unsupported connection says why in a
+  separate notice.
+
+Checks:
+
+- The list never claims a range-love total or a historical love event.
+- Rows are scoped to the current connection; switching the switcher clears the
+  old rows before the new read.
+- The now-playing strip stays pinned; its heart removes a matching Loved row
+  and a love re-reads the first page.
+- The takeover remains pointer-and-VoiceOver only.
+
 ## Settings
 
 Settings is the only typed surface and must be fully keyboard-operable.
@@ -229,6 +273,7 @@ Fill in for each smoke:
 | History | | | | | |
 | History navigation | | | | | |
 | Charts | | | | | |
+| Loved | | | | | |
 | Search palette | | | | | |
 | Settings | | | | | |
 | HUD | | | | | |

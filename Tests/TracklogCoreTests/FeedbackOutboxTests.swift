@@ -203,7 +203,7 @@ struct FeedbackOutboxTests {
                 connectionIDs: [connectionID],
             )
         }
-        await lookupGate.waitUntilEntered()
+        #expect(await lookupGate.waitUntilEntered(), "the lookupGate is entered")
         task.cancel()
         await turnMainActor()
         await lookupGate.release()
@@ -264,7 +264,7 @@ struct FeedbackOutboxTests {
                 connectionIDs: [connectionID],
             )
         }
-        await feedbackGate.waitUntilEntered()
+        #expect(await feedbackGate.waitUntilEntered(), "the feedbackGate is entered")
         harness.outbox.suspend(connectionID: connectionID)
         await feedbackGate.release()
 
@@ -291,7 +291,7 @@ struct FeedbackOutboxTests {
                 connectionIDs: [connectionID],
             )
         }
-        await feedbackGate.waitUntilEntered()
+        #expect(await feedbackGate.waitUntilEntered(), "the feedbackGate is entered")
         let unlove = Task {
             await harness.outbox.sendFeedback(
                 .unlove,

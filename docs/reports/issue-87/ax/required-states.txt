@@ -1,0 +1,57 @@
+# AX readout — Required Loved states
+
+Each state was a fresh harness launch with
+`TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SECTION=loved` and the named
+`TRACKLOG_HARNESS_LOVED` fixture. Excerpts are the first (notch) takeover; the
+harness repeats it at the Dynamic Island and camera geometries.
+
+## `needs-sign-in`
+
+- `AXPopUpButton` value `Last.fm · listener`.
+- `AXStaticText` `Last.fm needs sign-in. Sign in on Services to browse its loved tracks.`
+- `AXButton` `Try again`.
+- `AXButton` `Open Services`.
+- No rows.
+
+## `credential-rejected`
+
+- `AXStaticText` `Last.fm rejected the saved credential. Sign in on Services.`
+- `AXButton` `Try again`, `AXButton` `Open Services`.
+- No rows. The stored connection still reports signed in on Services; only the
+  next feedback/delivery may transition it.
+
+## `paused`
+
+- `AXStaticText` `Last.fm is paused. Turn it on in Services to unlove tracks.`
+- `AXButton` `Open Services`.
+- Each row: `AXUnknown` `Example Track One, Example Artist, Example Album`
+  with the help text `Last.fm is paused. Turn it on in Services to unlove
+  tracks.`; no `Unlove` button is present.
+
+## `action-failure`
+
+- `AXStaticText` `Could not unlove “Example Track One” on Last.fm. The service did not confirm the change.`
+- `AXButton` `Dismiss`.
+- The row `Example Track One` and its `Unlove Example Track One` button remain.
+- Pressed `Dismiss`: the static text and button disappear; the row and its
+  button remain. Screenshot: `loved-action-dismissed.png`.
+
+## `refresh-failure`
+
+- `AXStaticText` `Could not refresh loved tracks. Showing the last loaded list. Last.fm could not be reached. Check your connection and try again.`
+- `AXButton` `Try again`.
+- Rows `Example Track One` … remain, with their `Unlove` buttons.
+
+## `rate-limited`
+
+- `AXStaticText` `Last.fm is rate limiting requests. Try again after 16:42.`
+- `AXButton` `Refresh loved tracks` is present but disabled.
+- No `Try again` button and no rows. The wait is shown instead of an ignored
+  immediate retry.
+
+## `metadata-unavailable`
+
+- `AXPopUpButton` value `ListenBrainz · listener`.
+- `AXStaticText` `Loved tracks need metadata`.
+- `AXStaticText` `ListenBrainz has loved recordings for this account, but none of the first 2 could be matched to track metadata.`
+- No rows. The state never says the account has no loved tracks.

@@ -1,0 +1,48 @@
+# F19(e) — 25 consecutive Loved suite runs
+
+Command, from the worktree root:
+
+```sh
+for i in $(seq 1 25); do
+  swift test --package-path Tests --filter LovedBrowsingTests
+done
+```
+
+Date: 2026-11-04. The two orphaned `t3-15b81b49` helpers had already been
+stopped before this run, so these are not under that external load; the earlier
+25-run under their ~300% combined CPU is recorded in the round-4 report and was
+accepted.
+
+Per-iteration results:
+
+```text
+iteration 1: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.368 seconds.
+iteration 2: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.368 seconds.
+iteration 3: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.408 seconds.
+iteration 4: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.362 seconds.
+iteration 5: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.334 seconds.
+iteration 6: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.359 seconds.
+iteration 7: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.390 seconds.
+iteration 8: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.335 seconds.
+iteration 9: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.384 seconds.
+iteration 10: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.369 seconds.
+iteration 11: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.344 seconds.
+iteration 12: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.343 seconds.
+iteration 13: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.319 seconds.
+iteration 14: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.313 seconds.
+iteration 15: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.422 seconds.
+iteration 16: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.346 seconds.
+iteration 17: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.393 seconds.
+iteration 18: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.461 seconds.
+iteration 19: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.335 seconds.
+iteration 20: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.455 seconds.
+iteration 21: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.370 seconds.
+iteration 22: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.374 seconds.
+iteration 23: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.312 seconds.
+iteration 24: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.398 seconds.
+iteration 25: exit 0; ✔ Test run with 37 tests in 1 suite passed after 0.376 seconds.
+```
+
+25 iterations, 25 `exit:0`. The gate helper
+`DeliveryGate.waitUntilEntered` remains bounded at three seconds and every
+existing caller asserts it. No product code is involved.

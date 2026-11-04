@@ -27,6 +27,9 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     /// The one observable state every surface reads.
     public let state = TracklogAppState()
+    /// The harness-only store, so a fixture can adjust a connection's auth
+    /// state without production hooks.
+    var harnessStore: HarnessDemoStore?
 
     var host: DropletHost?
     var runtime: CaptureRuntime?
@@ -146,12 +149,10 @@ public final class TracklogDroplet: NSObject, Droplet {
         activationTask = Task {
             await runtime.start()
             if isHarness {
-                await HarnessDemo.showNowPlaying(on: runtime)
-                if ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "charts"
-                    || HarnessChartFixture.selected != nil {
-                    state.setTakeoverSection(.charts)
-                } else {
-                    await HarnessHistoryDemo.show(on: runtime)
+                await HarnessDemo.showNowPlaying(on: runtime, droplet: self)
+                await showHarnessSection()
+                if state.takeoverSection == .loved {
+                    await HarnessLovedDemo.prepare(on: self)
                 }
                 if let paletteFixture = HarnessPaletteFixture.selected {
                     await HarnessPaletteDemo.show(paletteFixture, on: self)
@@ -165,6 +166,20 @@ public final class TracklogDroplet: NSObject, Droplet {
             }
         }
         host.log.info("Tracklog activated")
+    }
+
+    /// Harness-only: pick the section the shots open at. The normal run keeps
+    /// History; a fixture or the explicit environment selects another built
+    /// section.
+    private func showHarnessSection() async {
+        let section = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"]
+        if section == "loved" || (section == nil && HarnessLovedFixture.selected != nil) {
+            state.setTakeoverSection(.loved)
+        } else if section == "charts" || HarnessChartFixture.selected != nil {
+            state.setTakeoverSection(.charts)
+        } else if let runtime {
+            await HarnessHistoryDemo.show(on: runtime)
+        }
     }
 
     // MARK: - Scrobbling

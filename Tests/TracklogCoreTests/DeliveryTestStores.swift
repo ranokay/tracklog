@@ -20,10 +20,18 @@ actor DeliveryGate {
         active -= 1
     }
 
-    func waitUntilEntered() async {
+    /// A bounded wait. A send that never enters fails its test instead of
+    /// spinning the test process forever.
+    @discardableResult
+    func waitUntilEntered(timeout: Duration = .seconds(3)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while active == 0 {
-            await Task.yield()
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(5))
         }
+        return true
     }
 
     func release() {

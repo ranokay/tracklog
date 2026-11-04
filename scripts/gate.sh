@@ -37,6 +37,7 @@ rm -rf tracklog/shots/playing tracklog/shots/paused tracklog/shots/off tracklog/
 rm -rf tracklog/shots/charts-*
 rm -rf tracklog/shots/history-*
 rm -rf tracklog/shots/search-*
+rm -rf tracklog/shots/loved-*
 rm -f tracklog/shots/report.json tracklog/shots/*.png
 
 # The main report keeps the documented path and the playing state. Each extra
@@ -117,6 +118,24 @@ python3 scripts/check_shot_report.py tracklog/shots/search-refusal/report.json t
 echo "==> surface shots: search-settings"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=search droppykit run -- --shots ./shots/search-settings --report ./shots/search-settings/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/search-settings/report.json tracklog/shots/search-settings
+
+echo "==> surface shots: loved"
+run_loved_shots() {
+    local fixture="$1"
+    echo "==> surface shots: loved-$fixture"
+    (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_LOVED="$fixture" TRACKLOG_HARNESS_SECTION=loved droppykit run -- --shots "./shots/loved-$fixture" --report "./shots/loved-$fixture/report.json" --shot-height 1900)
+    python3 scripts/check_shot_report.py "tracklog/shots/loved-$fixture/report.json" "tracklog/shots/loved-$fixture"
+}
+
+# The states #87 names: normal rows, loading, a successful empty list, a read
+# failure, a compatible server without the read, unusable app credentials,
+# long names, no current connection, needs sign-in, a rejected credential, a
+# paused connection, a refused row action, a failed refresh over rows, a rate
+# limit and loved recordings without metadata.
+for fixture in normal loading empty failed unsupported app-credentials long-names no-connection \
+    needs-sign-in credential-rejected paused action-failure refresh-failure rate-limited metadata-unavailable; do
+    run_loved_shots "$fixture"
+done
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

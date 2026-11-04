@@ -168,3 +168,42 @@ public struct LibreFMAdapter: DeliveryAdapter, FeedbackAdapter {
         return (error as? LastFMError)?.serviceFailure ?? .retryable
     }
 }
+
+// MARK: - Loved reads
+
+extension LibreFMAdapter: LovedServiceReading {
+    public var firstCursor: LovedCursor {
+        .page(1)
+    }
+
+    /// GNU FM implements `user.getlovedtracks` at the connection's own root.
+    /// The compiled client key is public and unsigned; no session is needed.
+    public func loved(
+        connection: Connection,
+        credential _: String,
+        cursor: LovedCursor,
+        limit: Int,
+    ) async throws -> LovedServicePage {
+        do {
+            return try await client(for: connection.endpoint).lovedPage(
+                connection: connection,
+                cursor: cursor,
+                limit: limit,
+            )
+        } catch {
+            throw Self.lovedReadFailure(for: error)
+        }
+    }
+
+    /// A refused compiled key names the key rather than sending the listener
+    /// to a sign-in that cannot replace it.
+    private static func lovedReadFailure(for error: any Error) -> ServiceFailure {
+        if isClientKeyRejection(error) {
+            return .rejected(clientKeyRejectionMessage)
+        }
+        if let failure = error as? ServiceFailure {
+            return failure
+        }
+        return (error as? LastFMError)?.serviceFailure ?? .retryable
+    }
+}

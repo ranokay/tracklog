@@ -438,6 +438,7 @@ public struct ChartViewState: Equatable, Sendable {
 public enum TakeoverSection: String, Equatable, Sendable {
     case history
     case charts
+    case loved
 }
 
 public enum ChartLimits {

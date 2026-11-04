@@ -1,0 +1,49 @@
+# F19 reproduction — the partial-unlove spacing race
+
+A temporary reproduction test (removed after this transcript) copied
+`aPartialUnloveLeavesTheRowAndNamesTheFailure` and added a 300 ms delay before
+the Last.fm `track.unlove` answer returned. The test waited for two transport
+requests (the read and `track.unlove`), advanced the fake clock once, and then
+awaited the action, as the old test did.
+
+Command:
+
+```sh
+swift test --package-path Tests --skip-build --filter LovedRaceReproTests
+```
+
+Transcript (stderr, line-buffered through `script`):
+
+```text
+◇ Test reproducePartialUnloveSpacingRace() started.
+REPRO track.unlove start at 1000000.0
+REPRO test advances clock to 1000001.0
+REPRO lookup recorded at 1000001.0
+```
+
+The test then hung; no `feedback post` line ever appeared.
+
+## Cause
+
+`waitForSpacing` records `lastRequestAt` when a request is made and sleeps until
+that timestamp plus the adapter's minimum interval. The old wait returned as
+soon as the `track.unlove` request was *recorded*, before its answer; the test
+advanced to `base + 1`; the ListenBrainz lookup then recorded
+`lastRequestAt = base + 1`; the POST's due time became `base + 2`, which the
+single advance never reached. `FakeClock.sleep` waited on a continuation that
+was never woken, so `await action.value` never returned. The sample showed only
+suspended threads, which is why the logged order is the evidence.
+
+## Fix
+
+The test now waits for the lookup request itself (three requests: read,
+`track.unlove`, lookup), then advances to `base + 2`. Both spacing tests do
+this, and both record a failed expectation and return without advancing if the
+lookup never arrives. Every task await in the suite uses a bounded completion
+wait that returns on its deadline without waiting for a stuck task; the stall
+proof is `f19-stall-proof.txt`. A one-minute `.timeLimit` remains only as a
+secondary guard for unrelated waits; it cannot stop an unstructured task. The
+reproduction file was deleted.
+
+The same ordering is used by `aSourceScopedReferenceNeverLeaksToAnotherListenBrainzConnection`
+(three requests, advance two seconds).
