@@ -81,7 +81,7 @@ struct TracklogEntityDetailView: View {
                     }
                     listenRange
                 }
-                Spacer(minLength: DroppySpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 imageActions
             }
         }
@@ -275,13 +275,16 @@ struct TracklogEntityDetailView: View {
                     .font(.body.weight(.medium))
                     .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 if !item.subtitle.isEmpty {
                     Text(item.subtitle)
                         .font(.caption)
                         .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: DroppySpacing.sm)
             Text(EntityDetailCopy.localCount(item.count))
                 .font(.caption)

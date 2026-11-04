@@ -7,6 +7,7 @@ import TracklogCore
 enum HarnessDetailFixture: String {
     case artist
     case album
+    case albumServiceImage = "album-service-image"
     case track
     case artistNoConnection = "artist-no-connection"
     case albumListenBrainz = "album-listenbrainz"
@@ -24,7 +25,7 @@ enum HarnessDetailFixture: String {
     var linksLastFM: Bool {
         switch self {
         case .artist, .album, .track, .artistApproximate, .artistAmbiguous,
-             .override, .corruptOverride, .longNames:
+             .override, .corruptOverride, .longNames, .albumServiceImage:
             true
         case .artistNoConnection, .albumListenBrainz:
             false
@@ -47,6 +48,9 @@ enum HarnessDetailDemo {
 
         if fixture == .longNames {
             await insertLongListen(on: droplet)
+        }
+        if fixture == .albumServiceImage {
+            await insertAlbumWithoutArtwork(on: droplet)
         }
         if fixture == .override || fixture == .corruptOverride {
             await insertOverride(on: droplet, corrupt: fixture == .corruptOverride)
@@ -79,6 +83,8 @@ enum HarnessDetailDemo {
             EntityRequest.artist(name: fixture == .corruptOverride ? "Talking Heads" : "Blondie")
         case .album:
             EntityRequest.album(album: "Parallel Lines", artist: "Blondie")
+        case .albumServiceImage:
+            EntityRequest.album(album: "Eat to the Beat", artist: "Blondie")
         case .track:
             EntityRequest.track(
                 title: "Heart of Glass",
@@ -113,6 +119,26 @@ enum HarnessDetailDemo {
                 playedDuration: 225,
                 startedAt: Date().addingTimeInterval(-7_200),
                 capturedAt: Date().addingTimeInterval(-6_975),
+            ),
+        )
+    }
+
+    private static func insertAlbumWithoutArtwork(on droplet: TracklogDroplet) async {
+        guard let store = droplet.harnessStore else { return }
+        let metadata = ListenMetadata(
+            title: "Dreaming",
+            artist: "Blondie",
+            album: "Eat to the Beat",
+        )
+        _ = try? await store.insert(
+            Listen(
+                raw: metadata,
+                processed: metadata,
+                bundleID: "com.apple.Music",
+                duration: 190,
+                playedDuration: 190,
+                startedAt: Date().addingTimeInterval(-14_400),
+                capturedAt: Date().addingTimeInterval(-14_210),
             ),
         )
     }

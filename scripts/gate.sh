@@ -151,8 +151,8 @@ run_detail_shots() {
 # Artist, album and track pages, Last.fm facts, the no-connection reason, the
 # ListenBrainz MBID link, the approximate artist image, an explicit override,
 # an unreadable stored copy and long metadata.
-for fixture in artist artist-approximate artist-no-connection album track album-listenbrainz \
-    override corrupt-override long-names; do
+for fixture in artist artist-approximate artist-no-connection album album-service-image track \
+    album-listenbrainz override corrupt-override long-names; do
     run_detail_shots "$fixture"
 done
 
