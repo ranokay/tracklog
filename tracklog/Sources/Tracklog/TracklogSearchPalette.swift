@@ -16,6 +16,7 @@ final class SearchPaletteModel: ObservableObject {
 
     var onMove: ((Int) -> Void)?
     var onActivate: (() -> Void)?
+    var onOptionActivate: (() -> Void)?
     var onCommandActivate: (() -> Void)?
     var onEscape: (() -> Void)?
 }
@@ -449,6 +450,14 @@ struct TracklogSearchPalette: View {
             activate(.row(row))
         } label: {
             HStack(spacing: DroppySpacing.sm) {
+                if let artwork = state.imageOverrideData(for: row) {
+                    ArtworkSleeve(
+                        size: 28,
+                        artwork: artwork,
+                        identity: "\(row.group.rawValue)\u{1F}\(row.title)",
+                        isCircular: row.group == .artists,
+                    )
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.title)
                         .font(.body.weight(.medium))
@@ -479,6 +488,19 @@ struct TracklogSearchPalette: View {
         .accessibilityLabel(Text(rowAccessibilityLabel(row)))
         .accessibilityValue(Text("Last.fm catalogue"))
         .accessibilityHint(Text(primaryHint(for: row)))
+        .accessibilityAction(named: Text("Play")) {
+            droplet.playPaletteRow(row)
+        }
+        .contextMenu {
+            Button("Play") {
+                droplet.playPaletteRow(row)
+            }
+            if row.pageURL != nil {
+                Button("Open on Last.fm") {
+                    openLastFM(row)
+                }
+            }
+        }
     }
 
     private func showMoreRow(_ kind: CatalogueGroupKind, count: Int) -> some View {
@@ -542,19 +564,29 @@ struct TracklogSearchPalette: View {
     private var footer: some View {
         HStack(spacing: DroppySpacing.sm) {
             if state.playbackTemplate == nil {
-                Text("No playback URL is set. Return opens the Last.fm page.")
+                Text("Return opens details · ⌥Return sets up play · ⌘Return opens Last.fm")
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                    .accessibilityLabel(
+                        Text(
+                            "Return opens details. Option-Return opens Search settings because "
+                                + "no playback URL is set. Command-Return opens Last.fm.",
+                        ),
+                    )
                 Spacer(minLength: DroppySpacing.sm)
                 Button("Set up in Settings") {
                     droplet.openSearchSettingsFromPalette()
                 }
                 .buttonStyle(DroppyQuietButtonStyle(size: .small))
             } else {
-                Text("Return plays · ⌘Return opens Last.fm · Esc clears, then closes")
+                Text("Return opens details · ⌥Return plays · ⌘Return opens Last.fm · Esc clears, then closes")
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-                    .accessibilityLabel(Text("Return plays. Command-Return opens Last.fm. Escape clears the text, then closes."))
+                    .accessibilityLabel(
+                        Text(
+                            "Return opens details. Option-Return plays. Command-Return opens Last.fm. Escape clears the text, then closes.",
+                        ),
+                    )
                 Spacer(minLength: 0)
             }
         }
@@ -585,6 +617,7 @@ struct TracklogSearchPalette: View {
     private func installKeyHandlers() {
         model.onMove = { [self] delta in move(delta) }
         model.onActivate = { [self] in activateSelected() }
+        model.onOptionActivate = { [self] in optionActivateSelected() }
         model.onCommandActivate = { [self] in commandActivateSelected() }
         model.onEscape = { [self] in escape() }
     }
@@ -603,6 +636,13 @@ struct TracklogSearchPalette: View {
     private func activateSelected() {
         guard let item = visibleItems.first(where: { $0.id == model.selectedID }) else { return }
         activate(item)
+    }
+
+    private func optionActivateSelected() {
+        guard case let .row(row)? = visibleItems.first(where: { $0.id == model.selectedID }) else {
+            return
+        }
+        droplet.playPaletteRow(row)
     }
 
     private func commandActivateSelected() {
@@ -624,7 +664,7 @@ struct TracklogSearchPalette: View {
             expand(kind)
             fieldFocused = true
         case let .row(row):
-            droplet.playPaletteRow(row)
+            droplet.openPaletteRowDetails(row)
         }
     }
 
@@ -726,11 +766,8 @@ struct TracklogSearchPalette: View {
         return parts.joined(separator: ". ")
     }
 
-    private func rowIcon(_ row: CatalogueRow) -> String {
-        if row.pageURL == nil {
-            return "minus.circle"
-        }
-        return state.playbackTemplate == nil ? "arrow.up.right.square" : "play.fill"
+    private func rowIcon(_: CatalogueRow) -> String {
+        "info.circle"
     }
 
     private func rowAccessibilityLabel(_ row: CatalogueRow) -> String {
@@ -738,14 +775,10 @@ struct TracklogSearchPalette: View {
     }
 
     private func primaryHint(for row: CatalogueRow) -> String {
-        if state.playbackTemplate == nil {
-            return row.pageURL == nil
-                ? "Return reports that no Last.fm page is available for this result."
-                : "Return opens the Last.fm page. Command-Return does the same."
+        if row.pageURL == nil {
+            return "Return opens details. Option-Return plays. No Last.fm page is available."
         }
-        return row.pageURL == nil
-            ? "Return searches and plays. No Last.fm page is available."
-            : "Return searches and plays. Command-Return opens the Last.fm page."
+        return "Return opens details. Option-Return plays. Command-Return opens the Last.fm page."
     }
 }
 

@@ -112,8 +112,20 @@ public final class TracklogAppState: ObservableObject {
     /// Set when the host refused to open the History settings page, so the
     /// takeover can say so instead of appearing to do nothing.
     @Published public internal(set) var historySettingsUnavailable = false
-    /// One track's paged local history, or nil when History shows the feed.
-    @Published public internal(set) var trackHistory: TrackHistory?
+    /// One entity's detail page and its bounded page stack's current entry.
+    /// Nil when no detail is open.
+    @Published public internal(set) var entityDetail: EntityDetail?
+    /// Every user-chosen artist and album image, in most-recently-changed
+    /// order. Keyed by entity kind and local chart grouping key.
+    @Published public internal(set) var imageOverrides: [ImageOverride] = []
+    /// The Settings switch. Off means no Apple request and no approximate
+    /// image; overrides and neutral sleeves still work.
+    @Published public internal(set) var artistImageLookupsEnabled = true
+    /// The entity the Images Settings page is choosing an image for.
+    @Published public internal(set) var imageOverrideDraft: ImageOverrideDraft?
+    /// Why a chosen file or a stored copy could not be used. The detail page
+    /// falls back to its next image source and Settings offers replace/remove.
+    @Published public internal(set) var imageOverrideError: String?
     /// The listen the Settings edit page is correcting, or nil.
     @Published public internal(set) var listenEdit: Listen?
     /// The listen whose delete confirmation is open, or nil.
@@ -229,6 +241,60 @@ public final class TracklogAppState: ObservableObject {
 
     public func setSearchRefusal(_ message: String?) {
         searchRefusal = message
+    }
+
+    public func setImageOverrideDraft(_ draft: ImageOverrideDraft?) {
+        imageOverrideDraft = draft
+    }
+
+    public func setImageOverrideError(_ message: String?) {
+        imageOverrideError = message
+    }
+
+    /// The override that applies to one entity, shared across connections
+    /// because its key is the local chart grouping key.
+    public func imageOverride(kind: EntityKind, key: String) -> ImageOverride? {
+        imageOverrides.first { $0.kind == kind && $0.key == key }
+    }
+
+    /// The stored bytes for an override, already loaded into the shared cover
+    /// cache. Chart and palette rows use this without doing I/O.
+    public func imageOverrideData(kind: EntityKind, key: String) -> Data? {
+        guard let override = imageOverride(kind: kind, key: key) else { return nil }
+        return artworkByHash[override.artworkHash]
+    }
+
+    /// The override key for a chart row. Artists and albums only; a track row
+    /// has no override.
+    public func imageOverrideData(for item: ChartItem, type: ChartType) -> Data? {
+        switch type {
+        case .artists:
+            guard let key = LocalArtistIdentity.key(name: item.title) else { return nil }
+            return imageOverrideData(kind: .artist, key: key)
+        case .albums:
+            guard let key = LocalAlbumIdentity.key(album: item.title, artist: item.subtitle) else {
+                return nil
+            }
+            return imageOverrideData(kind: .album, key: key)
+        case .tracks:
+            return nil
+        }
+    }
+
+    /// The override key for a palette result. The Loved group is tracks.
+    public func imageOverrideData(for row: CatalogueRow) -> Data? {
+        switch row.group {
+        case .artists:
+            guard let key = LocalArtistIdentity.key(name: row.title) else { return nil }
+            return imageOverrideData(kind: .artist, key: key)
+        case .albums:
+            guard let key = LocalAlbumIdentity.key(album: row.title, artist: row.subtitle) else {
+                return nil
+            }
+            return imageOverrideData(kind: .album, key: key)
+        case .tracks, .loved:
+            return nil
+        }
     }
 
     public func togglePendingList() {

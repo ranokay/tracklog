@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import SQLite3
 @testable import TracklogCore
@@ -362,6 +363,14 @@ extension CaptureTestHelpers {
             capturedAt: base.addingTimeInterval(start),
         )
     }
+}
+
+/// Opens a track detail page through the same entity surface every list uses,
+/// so the track-history tests keep exercising the real entry point.
+@MainActor
+func openTrackDetail(_ runtime: CaptureRuntime, _ listen: Listen) async {
+    guard let request = EntityRequest.track(listen) else { return }
+    await runtime.openEntityDetail(request)
 }
 
 /// A simple-edit fixture shared by the metadata, store and capture suites.

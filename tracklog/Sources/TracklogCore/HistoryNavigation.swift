@@ -80,10 +80,12 @@ public protocol HistoryNavigationStore: Sendable {
 public struct TrackHistorySummary: Equatable, Sendable {
     public let count: Int
     public let firstListenedAt: Date?
+    public let lastListenedAt: Date?
 
-    public init(count: Int, firstListenedAt: Date?) {
+    public init(count: Int, firstListenedAt: Date?, lastListenedAt: Date? = nil) {
         self.count = count
         self.firstListenedAt = firstListenedAt
+        self.lastListenedAt = lastListenedAt
     }
 }
 
@@ -111,6 +113,7 @@ public struct TrackHistory: Equatable, Sendable {
     public internal(set) var listens: [Listen]
     public internal(set) var totalCount: Int
     public internal(set) var firstListenedAt: Date?
+    public internal(set) var lastListenedAt: Date?
     public internal(set) var hasMore: Bool
     public internal(set) var isLoading: Bool
     public internal(set) var failure: CaptureFailure?
@@ -123,6 +126,7 @@ public struct TrackHistory: Equatable, Sendable {
         listens: [Listen] = [],
         totalCount: Int = 0,
         firstListenedAt: Date? = nil,
+        lastListenedAt: Date? = nil,
         hasMore: Bool = false,
         isLoading: Bool = true,
         failure: CaptureFailure? = nil,
@@ -134,6 +138,7 @@ public struct TrackHistory: Equatable, Sendable {
         self.listens = listens
         self.totalCount = totalCount
         self.firstListenedAt = firstListenedAt
+        self.lastListenedAt = lastListenedAt
         self.hasMore = hasMore
         self.isLoading = isLoading
         self.failure = failure

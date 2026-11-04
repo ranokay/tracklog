@@ -8,7 +8,7 @@ import SQLite3
 /// after its own defer closes it.
 actor ChartReadConnection {
     private let url: URL
-    private var isClosed = false
+    var isClosed = false
     /// Installed only by the focused occupancy test; the production
     /// composition leaves it nil.
     private var rowObserver: (@Sendable (Int) async -> Void)?
@@ -94,7 +94,7 @@ actor ChartReadConnection {
         }
     }
 
-    private func checkOwnership() throws {
+    func checkOwnership() throws {
         if Task.isCancelled || isClosed {
             throw CancellationError()
         }
@@ -112,7 +112,11 @@ actor ChartReadConnection {
             pageLimit: 0,
             needsSummary: true,
         )
-        return TrackHistorySummary(count: scan.count, firstListenedAt: scan.firstListenedAt)
+        return TrackHistorySummary(
+            count: scan.count,
+            firstListenedAt: scan.firstListenedAt,
+            lastListenedAt: scan.lastListenedAt,
+        )
     }
 
     /// One page of that track, newest first. The scan stops once the page is
@@ -136,6 +140,7 @@ actor ChartReadConnection {
         var page: [Listen] = []
         var count = 0
         var firstListenedAt: Date?
+        var lastListenedAt: Date?
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -187,6 +192,9 @@ actor ChartReadConnection {
                     if rowKey == key {
                         if needsSummary {
                             scan.count += 1
+                            if scan.lastListenedAt == nil {
+                                scan.lastListenedAt = startedAt
+                            }
                             scan.firstListenedAt = startedAt
                         }
                         if pageLimit > 0, scan.page.count < pageLimit,
@@ -231,7 +239,7 @@ actor ChartReadConnection {
         return ListenCursor(startedAt: startedAt, id: id).isOlder(than: cursor)
     }
 
-    private func openReadOnly() throws -> OpaquePointer {
+    func openReadOnly() throws -> OpaquePointer {
         var handle: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
@@ -245,7 +253,7 @@ actor ChartReadConnection {
         return handle
     }
 
-    private func execute(_ handle: OpaquePointer, _ sql: String) throws {
+    func execute(_ handle: OpaquePointer, _ sql: String) throws {
         var message: UnsafeMutablePointer<CChar>?
         guard sqlite3_exec(handle, sql, nil, nil, &message) == SQLITE_OK else {
             let error = message.map { String(cString: $0) } ?? "unknown error"
@@ -254,7 +262,7 @@ actor ChartReadConnection {
         }
     }
 
-    private func prepare(_ handle: OpaquePointer, _ sql: String) throws -> OpaquePointer {
+    func prepare(_ handle: OpaquePointer, _ sql: String) throws -> OpaquePointer {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             throw DatabaseError.sqlite(errorMessage(handle))
@@ -262,11 +270,11 @@ actor ChartReadConnection {
         return statement
     }
 
-    private func text(_ statement: OpaquePointer, _ index: Int32) -> String {
+    func text(_ statement: OpaquePointer, _ index: Int32) -> String {
         sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
     }
 
-    private func errorMessage(_ handle: OpaquePointer) -> String {
+    func errorMessage(_ handle: OpaquePointer) -> String {
         String(cString: sqlite3_errmsg(handle))
     }
 }

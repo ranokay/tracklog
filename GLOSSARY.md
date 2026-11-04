@@ -98,7 +98,15 @@ The in-flight listen the user suppressed before it scrobbled. Cancel keeps the s
 
 ## Artwork
 
-The cover shown with the current track and with each listen in History. It comes from the bytes the media helper embeds in its now-playing answer; Tracklog never searches a network for it. One lookup happens when the track identity changes, the image is downscaled on its long edge, and the result is named by a content hash so the same cover is stored once and reused by later listens and launches. Artwork is best effort: a lookup, decode or write failure never delays a scrobble.
+The cover shown with the current track and with each listen in History. It comes from the bytes the media helper embeds in its now-playing answer; Tracklog never searches a network for it. One lookup happens when the track identity changes, the image is downscaled on its long edge, and the result is named by a content hash so the same cover is stored once and reused by later listens and launches. Artwork is best effort: a lookup, decode or write failure never delays a scrobble. Artwork is not the artist image: an artist page may additionally show an approximate image from Apple.
+
+## Artist image
+
+An approximate image for an artist, shown only on that artist's detail page and captioned as approximate. Tracklog asks the iTunes Search API for album results, restricted to the artist-name attribute, with a limit of ten, and uses the first result whose artist name matches exactly after trimming and lowercasing. If two artist IDs carry that name in the top results, it uses the neutral sleeve. Artist images are looked up only when an artist page opens, with a 15-second deadline. A hit is reused for 30 days; a definite miss, including ambiguity or a result without artwork, is retried after a day; a timeout or transport failure writes nothing and retries on the next open. A Settings switch, on by default, stops the Apple request and any approximate image. This image is not captured artwork and is never used for a listen row or now playing.
+
+## Image override
+
+A user-chosen artist or album image, stored as a downscaled, re-encoded copy in the droplet's container. An artist override is keyed by the local artist chart grouping key; an album override by the local album and album artist grouping key. The key carries no connection, so one override answers local and service rows alike. Overrides survive restart, unlink and listen deletion, and only the user removes one. They are excluded from the settings export. Removal or replacement deletes the stored bytes unless a listen still references the same content hash. When the stored copy is unreadable, the page falls back to the next image source or the neutral sleeve, and Settings still offers replace or remove.
 
 ## Neutral sleeve
 

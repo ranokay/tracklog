@@ -32,8 +32,12 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
     public func makeExpandedSurfaceView(_ id: ExpandedSurfaceID, context: ExpandedSurfaceContext) -> AnyView {
         guard id == tracklogHistorySurfaceID else { return AnyView(EmptyView()) }
         return AnyView(
-            TracklogTakeover(droplet: self, state: state)
-                .id(context.presentation.id),
+            TracklogTakeover(
+                droplet: self,
+                state: state,
+                presentationID: context.presentation.id,
+            )
+            .id(context.presentation.id),
         )
     }
 
@@ -50,9 +54,16 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
 
     public func expandedSurfaceDidDismiss(
         _: ExpandedSurfaceID,
-        presentation _: ExpandedSurfacePresentation,
+        presentation: ExpandedSurfacePresentation,
         reason _: ExpandedSurfaceDismissalReason,
     ) {
+        // A dismissal from the presentation the palette closed cannot reset a
+        // detail opened by a newer presentation.
+        if let current = host?.notchSurface.expandedState.current,
+           current.id != presentation.id {
+            return
+        }
+        runtime?.closeEntityDetail()
         hideCharts()
         // A host dismissal returns the next presentation to History. New
         // explicit Charts requests set the section again after this callback.
@@ -65,7 +76,6 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
 
 // MARK: - The History section
 
-// swiftlint:disable:next type_body_length
 struct TracklogHistoryContent: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -78,37 +88,32 @@ struct TracklogHistoryContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let track = state.trackHistory {
-                deleteConfirmation
-                TracklogTrackHistoryContent(droplet: droplet, state: state, track: track)
-            } else {
-                header
-                if state.historySettingsUnavailable {
-                    HistorySettingsUnavailableBar(state: state)
-                }
-                deleteConfirmation
-                if let notice = state.historyJumpNotice {
-                    HistoryJumpBar(
-                        notice: notice,
-                        topDate: state.listens.first?.startedAt,
-                        hasNewer: state.historyHasNewer,
-                        onLoadNewer: {
-                            newerPrependAnchor = topAnchor ?? feedItems.first?.id
-                            Task { await droplet.loadNewerHistory() }
-                        },
-                        onNewest: {
-                            Task { await droplet.reloadHistory() }
-                        },
-                    )
-                }
-                if let banner = state.pendingBanner {
-                    HistoryBannerView(banner: banner, droplet: droplet, state: state)
-                }
-                if state.pendingListExpanded, !state.pendingQueue.isEmpty {
-                    PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
-                }
-                content
+            header
+            if state.historySettingsUnavailable {
+                HistorySettingsUnavailableBar(state: state)
             }
+            deleteConfirmation
+            if let notice = state.historyJumpNotice {
+                HistoryJumpBar(
+                    notice: notice,
+                    topDate: state.listens.first?.startedAt,
+                    hasNewer: state.historyHasNewer,
+                    onLoadNewer: {
+                        newerPrependAnchor = topAnchor ?? feedItems.first?.id
+                        Task { await droplet.loadNewerHistory() }
+                    },
+                    onNewest: {
+                        Task { await droplet.reloadHistory() }
+                    },
+                )
+            }
+            if let banner = state.pendingBanner {
+                HistoryBannerView(banner: banner, droplet: droplet, state: state)
+            }
+            if state.pendingListExpanded, !state.pendingQueue.isEmpty {
+                PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
+            }
+            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { await droplet.openHistory() }
@@ -275,7 +280,7 @@ struct TracklogHistoryContent: View {
                 connections: state.connections,
                 feedback: state.feedback(for: listen.processed.identity),
                 feedbackSupport: state.feedbackSupport,
-                onOpen: { droplet.openTrackHistory(listen) },
+                onOpen: { droplet.openEntityDetailFromHistory(listen, kind: .track) },
             )
         }
     }

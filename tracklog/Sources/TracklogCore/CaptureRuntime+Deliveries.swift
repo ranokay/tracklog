@@ -28,7 +28,7 @@ extension CaptureRuntime {
 
         let listenIDs = (
             state.listens
-                + (state.trackHistory?.listens ?? [])
+                + (state.entityDetail?.track?.listens ?? [])
                 + [state.listenEdit, state.pendingListenDelete].compactMap(\.self),
         )
         .compactMap(\.id)

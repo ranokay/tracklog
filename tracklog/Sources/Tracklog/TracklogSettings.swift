@@ -9,6 +9,7 @@ let tracklogAppsPageID = "apps"
 let tracklogDataPageID = "data"
 let tracklogAboutPageID = "about"
 let tracklogSearchPageID = "search"
+let tracklogImagesPageID = "images"
 
 /// The droplet's root Settings page. Droppy draws the page header, so this
 /// starts with the first setting and never repeats the droplet's name.
@@ -112,6 +113,13 @@ struct TracklogSettings: View {
                         SettingsLinkTile(systemImage: "magnifyingglass")
                     }
                     .id(tracklogSearchPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
+                                             "Images",
+                                             subtitle: "Choose artist and album images, and the Apple lookup.",
+                                             page: tracklogImagesPageID) {
+                        SettingsLinkTile(systemImage: "photo")
+                    }
+                    .id(tracklogImagesPageID)
                     TracklogSettingsPageLink(droplet: droplet,
                                              "Data",
                                              subtitle: "Media diagnostics and your portable settings export.",

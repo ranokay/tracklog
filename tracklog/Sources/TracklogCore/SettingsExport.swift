@@ -70,34 +70,57 @@ public struct SettingsExport: Codable, Equatable, Sendable {
 }
 
 /// The three durable capture switches plus the optional search-and-play
-/// template. The pause is excluded: it references this session, not a portable
-/// preference. The template is additive: an export without the key still
-/// decodes, and a nil template is omitted from a new document.
+/// template and the artist-image lookup switch. The pause is excluded: it
+/// references this session, not a portable preference. The template and the
+/// lookup switch are additive: an older export without either key still
+/// decodes, and the lookup switch defaults to on when absent.
 public struct SettingsExportSettings: Codable, Equatable, Sendable {
     public let scrobblingEnabled: Bool
     public let nowPlayingEnabled: Bool
     public let minimumDuration: TimeInterval
     public let searchTemplate: String?
+    public let artistImageLookupsEnabled: Bool
 
     public init(
         scrobblingEnabled: Bool,
         nowPlayingEnabled: Bool,
         minimumDuration: TimeInterval,
         searchTemplate: String? = nil,
+        artistImageLookupsEnabled: Bool = true,
     ) {
         self.scrobblingEnabled = scrobblingEnabled
         self.nowPlayingEnabled = nowPlayingEnabled
         self.minimumDuration = minimumDuration
         self.searchTemplate = searchTemplate
+        self.artistImageLookupsEnabled = artistImageLookupsEnabled
     }
 
-    init(_ settings: CaptureSettings, searchTemplate: String? = nil) {
+    init(
+        _ settings: CaptureSettings,
+        searchTemplate: String? = nil,
+        artistImageLookupsEnabled: Bool? = nil,
+    ) {
         self.init(
             scrobblingEnabled: settings.scrobblingEnabled,
             nowPlayingEnabled: settings.nowPlayingEnabled,
             minimumDuration: settings.minimumDuration,
             searchTemplate: searchTemplate,
+            artistImageLookupsEnabled: artistImageLookupsEnabled
+                ?? settings.artistImageLookupsEnabled,
         )
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        scrobblingEnabled = try container.decode(Bool.self, forKey: .scrobblingEnabled)
+        nowPlayingEnabled = try container.decode(Bool.self, forKey: .nowPlayingEnabled)
+        minimumDuration = try container.decode(TimeInterval.self, forKey: .minimumDuration)
+        searchTemplate = try container.decodeIfPresent(String.self, forKey: .searchTemplate)
+        // An export written before the switch existed means the default: on.
+        artistImageLookupsEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .artistImageLookupsEnabled,
+        ) ?? true
     }
 
     enum CodingKeys: String, CodingKey {
@@ -105,6 +128,7 @@ public struct SettingsExportSettings: Codable, Equatable, Sendable {
         case nowPlayingEnabled = "now_playing_enabled"
         case minimumDuration = "minimum_duration"
         case searchTemplate = "search_template"
+        case artistImageLookupsEnabled = "artist_image_lookups"
     }
 }
 

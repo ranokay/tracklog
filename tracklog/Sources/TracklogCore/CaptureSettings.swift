@@ -16,12 +16,16 @@ public struct CaptureSettings: Equatable, Sendable {
     /// End of the current pause, or `nil` when capture is not paused.
     public var pausedUntil: Date?
     public var minimumDuration: TimeInterval
+    /// Whether an artist page may ask Apple for an approximate image. On by
+    /// default; off sends no request and shows no approximate image.
+    public var artistImageLookupsEnabled: Bool
 
     public init(
         scrobblingEnabled: Bool = false,
         nowPlayingEnabled: Bool = true,
         pausedUntil: Date? = nil,
         minimumDuration: TimeInterval = CaptureSettings.defaultMinimumDuration,
+        artistImageLookupsEnabled: Bool = true,
     ) {
         self.scrobblingEnabled = scrobblingEnabled
         self.nowPlayingEnabled = nowPlayingEnabled
@@ -30,5 +34,6 @@ public struct CaptureSettings: Equatable, Sendable {
             max(minimumDuration, Self.minimumDurationRange.lowerBound),
             Self.minimumDurationRange.upperBound,
         )
+        self.artistImageLookupsEnabled = artistImageLookupsEnabled
     }
 }

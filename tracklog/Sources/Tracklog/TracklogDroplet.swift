@@ -74,8 +74,11 @@ public final class TracklogDroplet: NSObject, Droplet {
     var exportOperationID: UUID?
     var exportPanel: NSSavePanel?
     var exportAlert: NSAlert?
+    /// The image picker the Images page opened. Deactivation cancels it like
+    /// the export panel.
+    var imageOverridePanel: NSOpenPanel?
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     public func activate(host: DropletHost) throws {
         self.host = host
 
@@ -151,6 +154,9 @@ public final class TracklogDroplet: NSObject, Droplet {
             if isHarness {
                 await HarnessDemo.showNowPlaying(on: runtime, droplet: self)
                 await showHarnessSection()
+                if HarnessDetailFixture.selected != nil {
+                    await HarnessDetailDemo.show(on: self)
+                }
                 if state.takeoverSection == .loved {
                     await HarnessLovedDemo.prepare(on: self)
                 }
@@ -329,6 +335,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     }
 
     public func presentHistory(expandingPending: Bool = false) {
+        closeEntityDetail()
         state.setTakeoverSection(.history)
         guard let host else { return }
         if expandingPending {

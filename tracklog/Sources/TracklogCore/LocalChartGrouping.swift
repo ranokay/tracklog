@@ -23,6 +23,27 @@ public enum LocalTrackIdentity {
     }
 }
 
+/// The local chart's artist key. Artist detail and image overrides use it so a
+/// service chart row and a local row name the same page.
+public enum LocalArtistIdentity {
+    public static func key(name: String) -> String? {
+        let key = Identity.normalized(name)
+        return key.isEmpty ? nil : key
+    }
+}
+
+/// The local chart's album key: the album and the album artist, or the artist
+/// when the row has no album artist. This is exactly the Albums chart grouping
+/// key, so one album has one detail page and one image override.
+public enum LocalAlbumIdentity {
+    public static func key(album: String, artist: String) -> String? {
+        guard !Identity.normalized(album).isEmpty,
+              !Identity.normalized(artist).isEmpty
+        else { return nil }
+        return Identity.joined([album, artist])
+    }
+}
+
 /// The one local grouping rule. SQLite streams rows into it; the harness
 /// feeds its in-memory listens through the same accumulator so the demo cannot
 /// disagree with production.

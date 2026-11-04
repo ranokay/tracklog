@@ -39,7 +39,7 @@ extension SQLiteListenStore: ArtworkStore {
         return text(statement, 0)
     }
 
-    private func insertArtwork(_ artwork: StoredArtwork, handle: OpaquePointer) throws {
+    func insertArtwork(_ artwork: StoredArtwork, handle: OpaquePointer) throws {
         let statement = try prepare(
             handle,
             """

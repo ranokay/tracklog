@@ -31,6 +31,16 @@ public enum ArtworkNormalizer {
     /// with room for the History row's 52-point sleeve.
     public static let maximumLongEdge = 512
 
+    /// Whether stored bytes can still be decoded as one image. An override
+    /// whose SQLite blob is missing or corrupt shows the neutral sleeve without
+    /// throwing away the user's row: Settings still offers replace or remove.
+    public static func isReadable(_ data: Data) -> Bool {
+        guard !data.isEmpty,
+              let source = CGImageSourceCreateWithData(data as CFData, nil)
+        else { return false }
+        return CGImageSourceGetCount(source) > 0
+    }
+
     public static func normalize(_ data: Data) -> StoredArtwork? {
         guard !data.isEmpty,
               let source = CGImageSourceCreateWithData(data as CFData, nil),

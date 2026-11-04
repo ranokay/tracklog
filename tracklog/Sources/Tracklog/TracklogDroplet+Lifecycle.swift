@@ -26,6 +26,8 @@ public extension TracklogDroplet {
         exportTask = nil
         exportPanel?.cancel(nil)
         exportPanel = nil
+        imageOverridePanel?.cancel(nil)
+        imageOverridePanel = nil
         if let alert = exportAlert {
             exportAlert = nil
             let ownsCurrentModal = NSApp.modalWindow === alert.window

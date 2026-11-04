@@ -4,7 +4,11 @@ import Foundation
 public enum PaletteKeyAction: Equatable, Sendable {
     case moveUp
     case moveDown
+    /// Return: open the selected entity's detail page.
     case activate
+    /// Option-Return: play the selected row.
+    case optionActivate
+    /// Command-Return: open the row's Last.fm page.
     case commandActivate
     case escape
     case passThrough
@@ -26,6 +30,7 @@ public enum PaletteKeyRouter {
     public static func route(
         keyCode: UInt16,
         command: Bool,
+        option: Bool = false,
         hasMarkedText: Bool,
     ) -> PaletteKeyAction {
         guard !hasMarkedText else { return .passThrough }
@@ -35,7 +40,13 @@ public enum PaletteKeyRouter {
         case KeyCode.downArrow:
             return command ? .passThrough : .moveDown
         case KeyCode.return, KeyCode.keypadEnter:
-            return command ? .commandActivate : .activate
+            if command {
+                return .commandActivate
+            }
+            if option {
+                return .optionActivate
+            }
+            return .activate
         case KeyCode.escape:
             return .escape
         default:

@@ -247,6 +247,15 @@ struct TracklogLovedView: View {
                         serviceName: serviceName,
                         canUnlove: state.lovedState.canUnlove,
                         unavailableReason: state.lovedState.unloveUnavailableReason,
+                        onOpen: {
+                            droplet.openEntityDetailFromLoved(row, kind: .track)
+                        },
+                        onOpenArtist: {
+                            droplet.openEntityDetailFromLoved(row, kind: .artist)
+                        },
+                        onOpenAlbum: {
+                            droplet.openEntityDetailFromLoved(row, kind: .album)
+                        },
                         onUnlove: {
                             Task { await droplet.unloveLovedRow(row) }
                         },
@@ -352,11 +361,36 @@ private struct LovedRowView: View {
     let serviceName: String
     let canUnlove: Bool
     let unavailableReason: String?
+    let onOpen: () -> Void
+    let onOpenArtist: () -> Void
+    let onOpenAlbum: () -> Void
     let onUnlove: () -> Void
 
     var body: some View {
         HStack(spacing: DroppySpacing.md) {
-            info
+            Button(action: onOpen) {
+                info
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel(Text(rowLabel))
+            .accessibilityValue(Text("Loved on \(serviceName)"))
+            .accessibilityHint(Text(canUnlove ? "Opens this track's page" : (unavailableReason ?? "")))
+            .accessibilityAction(named: Text("Open artist")) {
+                onOpenArtist()
+            }
+            .accessibilityAction(named: Text("Open album")) {
+                onOpenAlbum()
+            }
+            .contextMenu {
+                Button("Open track", action: onOpen)
+                if !row.artist.isEmpty {
+                    Button("Open artist", action: onOpenArtist)
+                }
+                if !row.album.isEmpty {
+                    Button("Open album", action: onOpenAlbum)
+                }
+            }
             Spacer(minLength: DroppySpacing.sm)
             if canUnlove {
                 Button(action: onUnlove) {
@@ -399,10 +433,6 @@ private struct LovedRowView: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(rowLabel))
-        .accessibilityValue(Text("Loved on \(serviceName)"))
-        .accessibilityHint(Text(canUnlove ? "" : (unavailableReason ?? "")))
     }
 
     private var rowLabel: String {

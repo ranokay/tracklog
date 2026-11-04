@@ -43,7 +43,7 @@ public extension CaptureRuntime {
         // the old values back on screen. A track view is closed because the
         // edited key may no longer match it.
         state.listens = state.listens.map { $0.id == id ? result.listen : $0 }
-        closeTrackHistory()
+        closeEntityDetail()
         if result.rule != nil {
             await loadSimpleEdits()
         }
@@ -75,8 +75,8 @@ public extension CaptureRuntime {
 
         state.listens.removeAll { $0.id == id }
         state.historyCount = max(0, state.historyCount - 1)
-        if state.trackHistory != nil {
-            await reloadTrackHistory()
+        if state.entityDetail?.request.kind == .track {
+            await reloadEntityDetail()
         }
         await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
         await reloadDeliveryState()

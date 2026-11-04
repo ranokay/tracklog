@@ -122,12 +122,12 @@ extension CaptureRuntime {
             guard listen.raw.identity == identity, listen.artworkHash == nil else { return listen }
             return listen.withArtworkHash(hash)
         }
-        if var track = state.trackHistory {
+        if var track = state.entityDetail?.track {
             track.listens = track.listens.map { listen in
                 guard listen.raw.identity == identity, listen.artworkHash == nil else { return listen }
                 return listen.withArtworkHash(hash)
             }
-            state.trackHistory = track
+            state.entityDetail?.track = track
         }
     }
 
@@ -138,7 +138,7 @@ extension CaptureRuntime {
     /// any loaded row fills a nil hash in the incoming page for that track.
     func fillingKnownArtwork(_ listens: [Listen]) -> [Listen] {
         var known = knownArtworkHashes
-        for listen in state.listens + (state.trackHistory?.listens ?? []) {
+        for listen in state.listens + (state.entityDetail?.track?.listens ?? []) {
             guard let hash = listen.artworkHash else { continue }
             if known[listen.raw.identity] == nil {
                 known[listen.raw.identity] = hash

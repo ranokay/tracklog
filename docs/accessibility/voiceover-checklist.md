@@ -67,9 +67,10 @@ Expected structure:
 - Each row is one element: `<title>, <artist>, <album>, <time>` with a delivery
   value that names each service for a mixed state.
 - A separate `Actions for <title>` menu holds the row actions.
-- Pressing the row itself opens that track's local history. The row must expose
+- Pressing the row itself opens that track's entity page. The row must expose
   the button trait and a default press action; its press area must stop before
-  the separate Actions menu.
+  the separate Actions menu. The Actions menu adds `Open artist` and
+  `Open album` when those fields exist.
 - The pending banner is one element plus its action button.
 - The paused bar reads `Scrobbling paused until <time>` with a separate Resume
   button.
@@ -93,10 +94,51 @@ Expected structure:
   listens` and `Newest` buttons. It keeps the requested window rather than
   resetting to the newest feed.
 - Track history reads the track title as a heading, the full `<n> listens`
-  count, `First listened <date>`, and each row as `<title>, <artist>, <album>,
-  <date and time>` with its delivery value. Back to History is a separate
-  button. A track read failure reads `Track history unavailable` with Try again
-  and Back to History; it never replaces the feed.
+  count, `First listened <date>`, `Last listened <date>`, and each row as
+  `<title>, <artist>, <album>, <date and time>` with its delivery value. Back
+  to History is a separate button. A track read failure reads `Track history
+  unavailable` with Try again and Back to History; it never replaces the feed.
+
+## Entity details
+
+Artist, album and track pages replace the current section inside the takeover.
+They are reached from a History row body and its menu, a chart row body, a
+Loved row body and its actions, and a palette row's Return.
+
+Expected structure:
+
+- A separate `Back` button. From the first page it returns to the originating
+  list; from a top-track page it returns to the artist or album page and
+  reloads it.
+- The title as a heading, with its subtitle and the full local count.
+- `First listened <date>` and `Last listened <date>`.
+- A local `On this Mac` section that never changes with the connection.
+- Top tracks on artist and album pages. Each top-track row is a button reading
+  `<rank>, <title>, <artist>, <n> listens` and opens that track's page.
+- A track page keeps the paged local listen rows, each reading the same as a
+  History row.
+- A service section named `<service> · <account>` below the local section.
+  With a Last.fm connection it shows the `getInfo` facts and `Your plays`.
+  With another connection or none it shows the one-line reason. A
+  ListenBrainz link appears only when the row has an MBID.
+- A service failure reads its reason and offers Try again. Missing app
+  credentials add a Settings button. An entity Last.fm does not know reads as
+  missing, not as a failure, and offers no retry.
+- `Change image…` opens the Images Settings page. The detail header offers
+  `Remove` when an override exists. An approximate artist image is captioned
+  `Approximate artist image`.
+- An unreadable stored override reads `The saved image could not be read.
+  Choose another or remove it.` and shows the neutral sleeve.
+
+Checks:
+
+- The connection switcher is present on a detail page in every section.
+- Changing the current connection keeps the local section and clears/reloads
+  only the service section.
+- Long titles, artists and album names truncate visually; their accessibility
+  labels keep the full text.
+- The takeover remains pointer-and-VoiceOver for traversal; record the lack of
+  a full keyboard path as a known gap.
 
 Checks:
 
@@ -138,8 +180,9 @@ Expected structure:
   connection switcher sits at the trailing end of the header.
 - The `Loved` heading is followed by the source label `<service> · <account>`.
 - Each row is one element: `<title>, <artist>, <album>` with the value
-  `Loved on <service>`. No row press: the list has no detail page in this
-  milestone.
+  `Loved on <service>`. Pressing the row body opens that track's entity page;
+  its context menu and accessibility actions add `Open artist` and
+  `Open album`.
 - Each row's heart is a separate button, `Unlove <title>`, with a 24 pt target
   and the hint that it removes the love on the service and every connected
   service that supports love.
@@ -180,10 +223,11 @@ Settings is the only typed surface and must be fully keyboard-operable.
 
 Checks:
 
-- Root `scrobbling` and the pages `services`, `edits`, `blocks`, `data`,
+- Root `scrobbling` and the pages `services`, `edits`, `blocks`, `images`, `data`,
   `about`, plus `apps`, `charts`, `history`, `history-edit`,
   `lastfm-credentials`, `add-service` and per-connection pages are reachable.
   `history-edit` is contextual: it is opened by a History row's Edit action.
+  `images` is also contextual when opened by a detail page's Change image….
 - Every control is reachable with Tab/Shift-Tab and operable with Space,
   Return or the arrow keys.
 - History holds one `Date and time` picker and `Show in History`. The picker is
@@ -233,11 +277,12 @@ Expected structure, in order:
 2. The `Last.fm catalogue` source label and the search status.
 3. Group headers for Artists, Albums, Tracks and Loved. Each header is a button
    with an expanded/collapsed value.
-4. Up to 5 result rows per group and a `Show more <group>` row; Return toggles
-   a header or expands the group.
+4. Up to 5 result rows per group and a `Show more <group>` row; Return opens
+   the selected entity's details, Option-Return plays, Command-Return opens
+   Last.fm, and Return on a header or Show more toggles or expands it.
 5. A credentials banner when the app pair is missing or rejected, with an
    `Open Settings` button.
-6. A footer that says whether Play is configured.
+6. A footer that names Return, Option-Return and Command-Return.
 
 Checks:
 
@@ -248,6 +293,9 @@ Checks:
   failed or unavailable state.
 - A group header and a `Show more` row are reachable with Up/Down; Return
   toggles or expands them.
+- Return on a result closes the palette and opens that entity in the takeover;
+  Option-Return plays and Command-Return opens the Last.fm page.
+- A result with an image override shows that image beside its title.
 - Esc clears the text first and closes only when the field is empty.
 - While an input method has marked text, Return, arrows and Esc stay in the
   field editor and run no palette action.
@@ -272,6 +320,8 @@ Fill in for each smoke:
 | Shelf widget | | | | | |
 | History | | | | | |
 | History navigation | | | | | |
+| Entity details | | | | | |
+| Images settings | | | | | |
 | Charts | | | | | |
 | Loved | | | | | |
 | Search palette | | | | | |

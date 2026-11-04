@@ -99,6 +99,7 @@ final class TracklogSearchPaletteController {
         panel = nil
         model.onMove = nil
         model.onActivate = nil
+        model.onOptionActivate = nil
         model.onCommandActivate = nil
         model.onEscape = nil
     }
@@ -164,6 +165,7 @@ final class TracklogSearchPaletteController {
         let action = PaletteKeyRouter.route(
             keyCode: event.keyCode,
             command: event.modifierFlags.contains(.command),
+            option: event.modifierFlags.contains(.option),
             hasMarkedText: marked,
         )
         switch action {
@@ -177,6 +179,9 @@ final class TracklogSearchPaletteController {
             return nil
         case .activate:
             model.onActivate?()
+            return nil
+        case .optionActivate:
+            model.onOptionActivate?()
             return nil
         case .commandActivate:
             model.onCommandActivate?()

@@ -59,6 +59,7 @@ public extension TracklogDroplet {
     }
 
     func presentCharts() {
+        closeEntityDetail()
         state.setTakeoverSection(.charts)
         guard let host else { return }
         host.notchSurface.presentExpandedSurface(
@@ -66,7 +67,14 @@ public extension TracklogDroplet {
         )
     }
 
-    func takeoverDidDisappear() {
+    func takeoverDidDisappear(_ presentationID: UUID) {
+        // A late disappearance from the presentation the palette closed must
+        // not reset a detail opened by the takeover that replaced it.
+        if let current = host?.notchSurface.expandedState.current,
+           current.id != presentationID {
+            return
+        }
+        runtime?.closeEntityDetail()
         runtime?.charts?.hide()
         runtime?.loved?.hide()
         runtime?.resetHistoryNavigation()

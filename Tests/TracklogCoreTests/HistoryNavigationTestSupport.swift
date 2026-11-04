@@ -87,7 +87,7 @@ func replayThreshold(
 /// A real store whose track-history reads fail a fixed number of times. Every
 /// other read and every write still reaches SQLite, so a test can prove a
 /// track failure does not touch capture.
-actor FailingTrackHistoryStore: ListenStore, TrackHistoryStore {
+actor FailingTrackHistoryStore: ListenStore, TrackHistoryStore, EntityDetailStore {
     private let base: SQLiteListenStore
     private var failuresRemaining: Int
 
@@ -110,6 +110,53 @@ actor FailingTrackHistoryStore: ListenStore, TrackHistoryStore {
 
     func count(in range: Range<Date>) async throws -> Int {
         try await base.count(in: range)
+    }
+
+    func entityLocalDetail(
+        kind: EntityKind,
+        key: String,
+        topTrackLimit: Int,
+    ) async throws -> EntityLocalDetail {
+        guard failuresRemaining == 0 else {
+            failuresRemaining -= 1
+            throw DatabaseError.sqlite("simulated track history read failure")
+        }
+        return try await base.entityLocalDetail(
+            kind: kind,
+            key: key,
+            topTrackLimit: topTrackLimit,
+        )
+    }
+
+    func imageOverrides() async throws -> [ImageOverride] {
+        try await base.imageOverrides()
+    }
+
+    func imageOverride(kind: EntityKind, key: String) async throws -> ImageOverride? {
+        try await base.imageOverride(kind: kind, key: key)
+    }
+
+    func saveImageOverride(_ override: ImageOverride, artwork: StoredArtwork) async throws {
+        try await base.saveImageOverride(override, artwork: artwork)
+    }
+
+    func removeImageOverride(kind: EntityKind, key: String) async throws {
+        try await base.removeImageOverride(kind: kind, key: key)
+    }
+
+    func artistImageCache(forArtist key: String) async throws -> ArtistImageCacheEntry? {
+        try await base.artistImageCache(forArtist: key)
+    }
+
+    func saveArtistImageCache(
+        _ entry: ArtistImageCacheEntry,
+        artwork: StoredArtwork?,
+    ) async throws {
+        try await base.saveArtistImageCache(entry, artwork: artwork)
+    }
+
+    func pruneExpiredArtistImageCache(now: Date) async throws {
+        try await base.pruneExpiredArtistImageCache(now: now)
     }
 
     func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
