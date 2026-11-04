@@ -61,7 +61,7 @@ struct TakeoverHeader: View {
                 Text("Charts").tag(TakeoverSection.charts)
             }
             .pickerStyle(.segmented)
-            .controlSize(.small)
+            .controlSize(.regular)
             .labelsHidden()
             .frame(width: 164)
             .accessibilityLabel(Text("Sections"))
@@ -89,36 +89,47 @@ struct TakeoverHeader: View {
                 .frame(width: 208, alignment: .trailing)
                 .accessibilityLabel(Text("Current connection, none"))
         } else {
-            Menu {
-                Button("No connection") {
-                    Task { try? await droplet.setChartCurrentConnection(nil) }
-                }
-                ForEach(state.connections) { connection in
-                    Button("\(connection.kind.displayName) · \(connection.displayName)") {
-                        Task { try? await droplet.setChartCurrentConnection(connection.id) }
-                    }
-                }
-            } label: {
-                HStack(spacing: DroppySpacing.xs) {
-                    Text(currentConnectionTitle)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                .frame(width: 208, alignment: .trailing)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .accessibilityLabel(Text("Current connection"))
-            .accessibilityValue(Text(currentConnectionAccessibilityValue))
+            connectionPicker
         }
     }
 
-    private var currentConnectionTitle: String {
-        guard let connection = state.currentConnection else { return "No connection" }
-        return "\(connection.kind.displayName) · \(connection.displayName)"
+    private var connectionPicker: some View {
+        Picker(selection: connectionBinding) {
+            Text("No connection").tag("none")
+            ForEach(state.connections) { connection in
+                Text(connectionTitle(connection)).tag(connectionTag(connection))
+            }
+        } label: {
+            EmptyView()
+        }
+        .pickerStyle(.menu)
+        .controlSize(.large)
+        .menuIndicator(.hidden)
+        .labelsHidden()
+        .frame(width: 208, alignment: .trailing)
+        .accessibilityLabel(Text("Current connection"))
+        .accessibilityValue(Text(currentConnectionAccessibilityValue))
+    }
+
+    private var connectionBinding: Binding<String> {
+        Binding(
+            get: { state.currentConnection?.id.map(String.init) ?? "none" },
+            set: { value in
+                Task {
+                    try? await droplet.setChartCurrentConnection(
+                        value == "none" ? nil : Int64(value),
+                    )
+                }
+            },
+        )
+    }
+
+    private func connectionTitle(_ connection: Connection) -> String {
+        "\(connection.kind.displayName) · \(connection.displayName)"
+    }
+
+    private func connectionTag(_ connection: Connection) -> String {
+        connection.id.map(String.init) ?? "none"
     }
 
     private var currentConnectionAccessibilityValue: String {
