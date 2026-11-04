@@ -268,11 +268,21 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     /// Opens one of the droplet's own Settings pages. Any History takeover is
     /// dismissed first: Settings is the only typed surface, and it must not
-    /// sit underneath the takeover.
+    /// sit underneath the takeover. A page that must explain a host refusal
+    /// keeps the takeover up until the host has accepted the page.
     @discardableResult
-    func openSettingsPage(_ id: String, title: String) -> Bool {
-        dismissTakeoverForSettings()
+    func openSettingsPage(
+        _ id: String,
+        title: String,
+        dismissOnRefusal: Bool = true,
+    ) -> Bool {
         guard let host else { return false }
+        if !dismissOnRefusal {
+            guard host.workspace.openSettingsPage(id, title: title) else { return false }
+            dismissTakeoverForSettings()
+            return true
+        }
+        dismissTakeoverForSettings()
         return host.workspace.openSettingsPage(id, title: title)
     }
 

@@ -173,16 +173,16 @@ struct HistoryDateJumpTests: CaptureTestHelpers {
     @Test func aCaptureDoesNotMoveAJumpedWindow() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
-        let base = base
+        let fixtureBase = base
         for index in 0 ..< 10 {
             _ = try await store.insert(
                 historyListen(
                     title: "Seeded \(index)",
-                    start: base.addingTimeInterval(-600 + Double(index) * 60),
+                    start: fixtureBase.addingTimeInterval(-600 + Double(index) * 60),
                 ),
             )
         }
-        let clock = FakeClock(base)
+        let clock = FakeClock(fixtureBase)
         let state = TracklogAppState()
         let runtime = historyRuntime(
             store: store,
@@ -191,7 +191,7 @@ struct HistoryDateJumpTests: CaptureTestHelpers {
             scrobbling: true,
         )
         await runtime.start()
-        await runtime.jumpHistory(to: base.addingTimeInterval(-300))
+        await runtime.jumpHistory(to: fixtureBase.addingTimeInterval(-300))
         let anchorID = try #require(state.listens.first?.id)
 
         await replay(
@@ -235,14 +235,19 @@ struct HistoryDateJumpTests: CaptureTestHelpers {
         let runtime = historyRuntime(store: store, state: state)
         await runtime.start()
         let loaded = state.listens
+        state.requestHistoryJump(historyBase)
         await store.close()
 
-        await runtime.jumpHistory(to: historyBase)
+        await runtime.applyPendingHistoryJump()
 
         #expect(state.listens == loaded)
         #expect(state.historyFailure != nil)
         #expect(state.failure?.stage == .history)
         #expect(state.historyJumpNotice == nil)
+        #expect(state.pendingHistoryJump == historyBase,
+                "a failed read keeps the one-shot request for the next open")
+        runtime.stop()
+        #expect(state.pendingHistoryJump == nil)
     }
 
     @Test func aPendingJumpSurvivesARefusedPresentationAndConsumesOnce() async throws {

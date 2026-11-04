@@ -155,11 +155,24 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: _pending_.
-- `hk check --all`, `swift test --package-path Tests`, `droppykit build`, `droppykit validate` and every shot report are recorded by the receipt.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at
+  head `cc51fa1b301d36f7aa19d3ac0e3ee3deb3c1ca60`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T045718Z-e77862c43e95.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T045718Z-e77862c43e95.log`
+  - Duration: 890.7 seconds.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 284 files.
+- `swift test --package-path Tests`: 624 tests in 95 suites; 51 media tests in 7 suites.
+- `droppykit build`: universal droplet, x86_64 + arm64.
+- `droppykit validate`: `Ready to submit`.
+- Every harness report `verdict: ok`, `problems: []`, active activation, every declared surface provided.
 - New shot states: `history-empty`, `history-large`, `history-track`,
   `history-track-missing-artwork`, `history-jump`, `history-track-error`,
   `history-feed-error`, `history-settings-refused`, `history-settings`.
+
+Selected images are in `docs/reports/issue-81/`; each History image is the
+notch panel cropped from that state's `expanded-surface.png` (the same
+right-edge shot-viewport limit recorded for issue #80). The checked reports
+are in `docs/reports/issue-81/reports/`.
 
 ## Native observations
 
@@ -204,6 +217,11 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; readouts are in
 | Real host handoff | Not passed (host) | The harness refuses `openSettingsPage`; the real Droppy Playground flow was not run (installing outside the repository is outside this run's permission). |
 | Browse-only keyboard takeover | Unpassed (known gap) | Pointer-and-VoiceOver only; no keyboard path claimed. |
 | Audible VoiceOver speech | Unpassed / blocked | No microphone audio and no accessibility-setting change; AX labels only. |
+
+Pointer note: the row-wide right-click `contextMenu` was removed because it
+made SwiftUI expose the row as `AXUnknown` with `AXShowMenu` instead of a
+button with `AXPress`. The visible `Actions for <title>` menu remains the one
+row menu and still holds delivery detail, love/hate, block and copy.
 
 ## Evidence classes and limits
 

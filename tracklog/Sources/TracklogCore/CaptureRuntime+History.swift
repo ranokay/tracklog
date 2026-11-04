@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import Foundation
 
 // MARK: - History
@@ -132,7 +131,6 @@ extension CaptureRuntime {
         guard started, let store else { return }
         state.historyJumpInFlight = true
         defer { state.historyJumpInFlight = false }
-        state.consumeHistoryJump(date)
         closeTrackHistory()
         guard let navigation = store as? any HistoryNavigationStore else {
             recordHistoryFailure(DatabaseError.unavailable("Date jumps are unavailable"))
@@ -161,6 +159,10 @@ extension CaptureRuntime {
                 generation: startGeneration,
                 hasMore: hasOlder,
             ) else { return }
+            // Consume only after the jump has been applied. A failed read or a
+            // presentation that loses its generation keeps the request for the
+            // next open.
+            state.consumeHistoryJump(date)
             state.historyHasNewer = hasNewer
             state.historyJumpNotice = jumpNotice(
                 requestedAt: date,
@@ -341,29 +343,6 @@ extension CaptureRuntime {
               let exists = try? await navigation.hasNewerListen(than: cursor)
         else { return false }
         return exists
-    }
-
-    private func count(on date: Date, store: any ListenStore) async -> Int? {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: date)
-        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
-        return try? await store.count(in: start ..< end)
-    }
-
-    private func jumpNotice(
-        requestedAt: Date,
-        position: HistoryPosition,
-        total: Int,
-        dayCount: Int?,
-    ) -> HistoryJumpNotice? {
-        guard total > 0 else { return nil }
-        if case .newest = position {
-            return HistoryJumpNotice(requestedAt: requestedAt, kind: .afterNewest)
-        }
-        if dayCount == 0 {
-            return HistoryJumpNotice(requestedAt: requestedAt, kind: .emptyDay)
-        }
-        return HistoryJumpNotice(requestedAt: requestedAt, kind: .positioned)
     }
 
     /// A history request is stale once its owner stops, a newer start takes

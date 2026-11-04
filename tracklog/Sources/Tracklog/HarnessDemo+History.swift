@@ -165,6 +165,12 @@ enum HarnessHistoryDemo {
     }
 }
 
+private extension Listen {
+    var listenCursor: ListenCursor {
+        ListenCursor(startedAt: startedAt, id: id ?? 0)
+    }
+}
+
 extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
     func historyPosition(at date: Date) async throws -> HistoryPosition {
         try checkFeedReads()
@@ -187,10 +193,7 @@ extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
         guard limit > 0 else { return [] }
         return Array(
             listens
-                .filter {
-                    $0.startedAt < cursor.startedAt
-                        || ($0.startedAt == cursor.startedAt && ($0.id ?? 0) <= cursor.id)
-                }
+                .filter { !$0.listenCursor.isNewer(than: cursor) }
                 .prefix(limit),
         )
     }
@@ -199,10 +202,7 @@ extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
         try checkFeedReads()
         guard limit > 0 else { return [] }
         let newer = listens
-            .filter {
-                $0.startedAt > cursor.startedAt
-                    || ($0.startedAt == cursor.startedAt && ($0.id ?? 0) > cursor.id)
-            }
+            .filter { $0.listenCursor.isNewer(than: cursor) }
             .sorted { lhs, rhs in
                 if lhs.startedAt != rhs.startedAt {
                     return lhs.startedAt < rhs.startedAt
@@ -215,28 +215,17 @@ extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
 
     func hasOlderListen(than cursor: ListenCursor) async throws -> Bool {
         try checkFeedReads()
-        return listens.contains {
-            $0.startedAt < cursor.startedAt
-                || ($0.startedAt == cursor.startedAt && ($0.id ?? 0) < cursor.id)
-        }
+        return listens.contains { $0.listenCursor.isOlder(than: cursor) }
     }
 
     func hasNewerListen(than cursor: ListenCursor) async throws -> Bool {
         try checkFeedReads()
-        return listens.contains {
-            $0.startedAt > cursor.startedAt
-                || ($0.startedAt == cursor.startedAt && ($0.id ?? 0) > cursor.id)
-        }
+        return listens.contains { $0.listenCursor.isNewer(than: cursor) }
     }
 
     func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
         try checkTrackReads()
-        let matches = listens.filter {
-            LocalTrackIdentity.key(
-                title: $0.processed.title,
-                artist: $0.processed.artist,
-            ) == key
-        }
+        let matches = matching(key)
         return TrackHistorySummary(
             count: matches.count,
             firstListenedAt: matches.map(\.startedAt).min(),
@@ -250,19 +239,11 @@ extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
     ) async throws -> [Listen] {
         try checkTrackReads()
         guard limit > 0 else { return [] }
-        let matching = listens.filter {
-            LocalTrackIdentity.key(
-                title: $0.processed.title,
-                artist: $0.processed.artist,
-            ) == key
-        }
+        let matches = matching(key)
         let older = if let cursor {
-            matching.filter {
-                $0.startedAt < cursor.startedAt
-                    || ($0.startedAt == cursor.startedAt && ($0.id ?? 0) < cursor.id)
-            }
+            matches.filter { $0.listenCursor.isOlder(than: cursor) }
         } else {
-            matching
+            matches
         }
         return Array(older.prefix(limit))
     }
@@ -270,6 +251,15 @@ extension HarnessDemoStore: HistoryNavigationStore, TrackHistoryStore {
     func checkFeedReads() throws {
         guard historyFixture?.failsFeedReads != true else {
             throw DatabaseError.sqlite("simulated history read failure")
+        }
+    }
+
+    private func matching(_ key: String) -> [Listen] {
+        listens.filter {
+            LocalTrackIdentity.key(
+                title: $0.processed.title,
+                artist: $0.processed.artist,
+            ) == key
         }
     }
 

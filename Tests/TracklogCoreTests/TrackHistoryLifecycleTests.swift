@@ -2,12 +2,6 @@ import Foundation
 import Testing
 @testable import TracklogCore
 
-private struct TrackVariant {
-    let raw: String
-    let album: String
-    let player: String
-}
-
 // MARK: - Track history
 
 @Suite("Track history lifecycle")

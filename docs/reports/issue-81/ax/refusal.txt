@@ -9,7 +9,9 @@ Fixture: `TRACKLOG_DEMO_STATE=playing` (normal History), Expanded surface page.
   - `AXStaticText = "Settings could not be opened here. Open Tracklog's
     History settings to choose a date."`.
   - `AXButton (Dismiss)`.
-- The pending jump is retained for the next open. The refusal is not a silent
-  no-op and the feed remains usable.
+- The takeover stays up. The Settings date path, not this button, carries
+  the one-shot jump; the handoff readout shows that request retained through
+  the harness page rebuild and applied once.
+- The refusal is not a silent no-op and the feed remains usable.
 - In the real host, `openSettingsPage` is expected to succeed and dismiss the
   takeover; that host result was not observed and is recorded as not passed.

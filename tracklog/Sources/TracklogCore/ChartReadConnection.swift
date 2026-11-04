@@ -153,17 +153,25 @@ actor ChartReadConnection {
 
         try execute(handle, "BEGIN DEFERRED")
         do {
+            let filter = cursor == nil
+                ? ""
+                : "WHERE started_at < ? OR (started_at = ? AND id < ?)"
             let statement = try prepare(
                 handle,
                 """
-                SELECT id, raw_title, raw_artist, raw_album, raw_album_artist,
-                       title, artist, album, album_artist, bundle_id,
-                       duration, played_duration, started_at, captured_at, artwork_hash
+                SELECT \(SQLiteListenStore.listenColumns)
                 FROM listens
+                \(filter)
                 ORDER BY started_at DESC, id DESC
                 """,
             )
             defer { sqlite3_finalize(statement) }
+            if let cursor {
+                let start = cursor.startedAt.timeIntervalSince1970
+                sqlite3_bind_double(statement, 1, start)
+                sqlite3_bind_double(statement, 2, start)
+                sqlite3_bind_int64(statement, 3, cursor.id)
+            }
 
             var scan = TrackHistoryScan()
             var rowIndex = 0
@@ -183,7 +191,7 @@ actor ChartReadConnection {
                         }
                         if pageLimit > 0, scan.page.count < pageLimit,
                            cursor == nil || isOlder(startedAt: startedAt, id: rowID, than: cursor) {
-                            scan.page.append(readListen(statement))
+                            scan.page.append(SQLiteListenStore.readListenRow(statement, offset: 0))
                         }
                     }
                     rowIndex += 1
@@ -220,36 +228,7 @@ actor ChartReadConnection {
 
     private func isOlder(startedAt: Date, id: Int64, than cursor: ListenCursor?) -> Bool {
         guard let cursor else { return true }
-        if startedAt != cursor.startedAt {
-            return startedAt < cursor.startedAt
-        }
-        return id < cursor.id
-    }
-
-    private func readListen(_ statement: OpaquePointer) -> Listen {
-        Listen(
-            id: sqlite3_column_int64(statement, 0),
-            raw: ListenMetadata(
-                title: text(statement, 1),
-                artist: text(statement, 2),
-                album: text(statement, 3),
-                albumArtist: text(statement, 4),
-            ),
-            processed: ListenMetadata(
-                title: text(statement, 5),
-                artist: text(statement, 6),
-                album: text(statement, 7),
-                albumArtist: text(statement, 8),
-            ),
-            bundleID: text(statement, 9),
-            duration: sqlite3_column_double(statement, 10),
-            playedDuration: sqlite3_column_double(statement, 11),
-            startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
-            capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
-            artworkHash: sqlite3_column_type(statement, 14) == SQLITE_NULL
-                ? nil
-                : text(statement, 14),
-        )
+        return ListenCursor(startedAt: startedAt, id: id).isOlder(than: cursor)
     }
 
     private func openReadOnly() throws -> OpaquePointer {

@@ -46,9 +46,8 @@ extension TracklogDroplet {
         guard let host else { return }
         // Ask first, dismiss second: a host that refuses the page must leave
         // History up so the inline refusal bar can explain itself.
-        if host.workspace.openSettingsPage(tracklogHistoryPageID, title: "History") {
+        if openSettingsPage(tracklogHistoryPageID, title: "History", dismissOnRefusal: false) {
             state.setHistorySettingsUnavailable(false)
-            dismissTakeoverForSettings()
         } else {
             host.log.notice("Opening the History settings page was refused")
             state.setHistorySettingsUnavailable(true)

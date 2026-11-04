@@ -3,8 +3,6 @@ import Foundation
 // MARK: - Track history
 
 extension CaptureRuntime {
-    // MARK: - Track history
-
     /// Opens one track's snapshot. The summary and the first page are separate
     /// reads on the dedicated read connection; the count is over the whole
     /// database, not the loaded History page.
@@ -12,7 +10,17 @@ extension CaptureRuntime {
         guard let key = LocalTrackIdentity.key(
             title: listen.processed.title,
             artist: listen.processed.artist,
-        ) else { return }
+        ) else {
+            state.trackHistory = TrackHistory(
+                identityKey: "",
+                title: listen.processed.title,
+                artist: listen.processed.artist,
+                album: listen.processed.album,
+                isLoading: false,
+                failure: .history(error: DatabaseError.unavailable("This listen has no track title.")),
+            )
+            return
+        }
         await loadTrackHistory(
             identityKey: key,
             title: listen.processed.title,

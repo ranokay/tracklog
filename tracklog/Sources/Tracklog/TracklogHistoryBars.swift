@@ -72,6 +72,7 @@ struct HistoryJumpBar: View {
 /// than leaving the button looking broken; Settings itself is still reachable.
 struct HistorySettingsUnavailableBar: View {
     @ObservedObject var state: TracklogAppState
+    @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
         HStack(spacing: DroppySpacing.md) {
@@ -97,6 +98,12 @@ struct HistorySettingsUnavailableBar: View {
             RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
                 .fill(AdaptiveColors.overlayAuto(0.08)),
         )
+        .overlay {
+            if SurfaceContrast.isIncreased(colorContrast) {
+                RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
+                    .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
+            }
+        }
         .padding(.horizontal, DroppySpacing.xl)
         .padding(.bottom, DroppySpacing.xs)
     }
