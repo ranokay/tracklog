@@ -132,6 +132,36 @@ public final class ChartReadModel {
         state.chartState.isRefreshing = false
     }
 
+    /// A local history edit or delete changed the processed values every local
+    /// grouping reads. Clear the published local snapshot even when Charts is
+    /// not on screen, so the next show cannot reuse a fresh-looking pre-edit
+    /// result; the durable local caches were cleared by the store transaction.
+    public func localHistoryChanged() async {
+        guard isActive,
+              effectiveSource(for: selection, connection: state.currentConnection).isLocal
+        else { return }
+        generation += 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshTaskIsForced = false
+        pendingForcedRefresh = nil
+        artworkTask?.cancel()
+        artworkTask = nil
+        clearAutomaticRefreshBlocks()
+        activeToken = nil
+        currentScopeKey = nil
+        state.chartState.snapshot = nil
+        state.chartState.totals = .none
+        state.chartState.refreshFailure = nil
+        state.chartState.totalFailure = nil
+        if isShowing {
+            state.chartState.phase = .loading
+            await load(force: false)
+        } else {
+            state.chartState.phase = .idle
+        }
+    }
+
     /// Both notifications change a resolved local window even though the
     /// selection has not changed.
     public func environmentChanged() async {

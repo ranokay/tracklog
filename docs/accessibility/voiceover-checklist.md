@@ -76,8 +76,19 @@ Expected structure:
 - Empty states are read.
 - `Jump to date` opens the History settings page and reads as a button. If the
   host refuses the page, the takeover says `Settings could not be opened here.
-  Open Tracklog's History settings to choose a date.` with a separate Dismiss
-  button; it never fails silently.
+  Open Tracklog's History settings to choose a date or edit a listen.` with a
+  separate Dismiss button; it never fails silently.
+- The `Actions for <title>` menu includes `Edit listen…` and `Delete listen…`.
+  Delete opens an inline confirmation; Edit dismisses to the Settings edit page.
+- The delete confirmation is one group read in order: `Delete "<title>"?`, the
+  local-removal sentence, one line per live delivery state, the Last.fm/local
+  footer, then separate `Cancel` and `Delete` buttons. Any waiting or retrying
+  delivery says `A send already under way may still arrive.` Cancel is the
+  default and Escape closes the confirmation without changing anything.
+- The Settings History edit page carries Track, Artist, Album and Album artist
+  fields, an off-by-default `Remember as rule` toggle, the per-service
+  consequences, and separate Cancel and Save buttons. Track and Artist cannot
+  be saved empty. A failed save stays on the page with its message.
 - A date-jumped window reads `Showing from <date and time>` with `Show newer
   listens` and `Newest` buttons. It keeps the requested window rather than
   resetting to the newest feed.

@@ -12,6 +12,8 @@ enum HarnessHistoryFixture: String {
     case trackError = "track-error"
     case feedError = "feed-error"
     case settingsRefused = "settings-refused"
+    case deleteListen = "delete"
+    case editListen = "edit"
     static var selected: HarnessHistoryFixture? {
         guard let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_HISTORY"] else {
             return nil
@@ -67,12 +69,13 @@ enum HarnessHistoryDemo {
                     content: content,
                 ),
             )
-        case .jump, .trackError, .feedError, .settingsRefused:
+        case .jump, .trackError, .feedError, .settingsRefused, .deleteListen, .editListen:
             return content.listens
         }
     }
 
     @MainActor
+    // swiftlint:disable:next cyclomatic_complexity
     static func show(on runtime: CaptureRuntime) async {
         guard let fixture = HarnessHistoryFixture.selected else { return }
         runtime.state.setPendingListExpanded(false)
@@ -90,6 +93,15 @@ enum HarnessHistoryDemo {
         case .trackMissingArtwork:
             if let row = runtime.state.listens.first(where: { $0.processed.title == "Blue Monday" }) {
                 await runtime.openTrackHistory(row)
+            }
+        case .deleteListen:
+            if let row = runtime.state.listens.first(where: { $0.processed.title == "Once in a Lifetime" }) {
+                runtime.state.requestDeleteListen(row)
+            }
+        case .editListen:
+            if let row = runtime.state.listens.first(where: { $0.processed.title == "Heart of Glass" }) {
+                runtime.state.requestListenEdit(row)
+                runtime.state.setHarnessSettingsPage(tracklogHistoryEditPageID)
             }
         }
     }

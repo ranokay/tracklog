@@ -114,6 +114,12 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var historySettingsUnavailable = false
     /// One track's paged local history, or nil when History shows the feed.
     @Published public internal(set) var trackHistory: TrackHistory?
+    /// The listen the Settings edit page is correcting, or nil.
+    @Published public internal(set) var listenEdit: Listen?
+    /// The listen whose delete confirmation is open, or nil.
+    @Published public internal(set) var pendingListenDelete: Listen?
+    @Published public internal(set) var deletingListen = false
+    @Published public internal(set) var deleteListenFailure: String?
     @Published public internal(set) var listenCount = 0
     @Published public internal(set) var lastListen: Listen?
     /// The current track's cover, ready for the widget and now-playing strip.
@@ -212,6 +218,37 @@ public final class TracklogAppState: ObservableObject {
 
     public func togglePendingList() {
         pendingListExpanded.toggle()
+    }
+
+    // MARK: - Local history mutations
+
+    public func requestListenEdit(_ listen: Listen) {
+        listenEdit = listen
+        cancelDeleteListen()
+    }
+
+    public func clearListenEdit() {
+        listenEdit = nil
+    }
+
+    public func requestDeleteListen(_ listen: Listen) {
+        pendingListenDelete = listen
+        deleteListenFailure = nil
+        deletingListen = false
+    }
+
+    public func cancelDeleteListen() {
+        pendingListenDelete = nil
+        deleteListenFailure = nil
+        deletingListen = false
+    }
+
+    public func setDeletingListen(_ deleting: Bool) {
+        deletingListen = deleting
+    }
+
+    public func setDeleteListenFailure(_ message: String?) {
+        deleteListenFailure = message
     }
 
     public init() {}

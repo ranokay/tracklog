@@ -131,6 +131,42 @@ public struct Listen: Identifiable, Equatable, Sendable {
             artworkHash: hash,
         )
     }
+
+    /// The same stored play with an explicit local edit applied to the values
+    /// history shows. The raw observation, id, time, artwork and dedup key stay
+    /// as captured.
+    public func withProcessed(_ metadata: ListenMetadata) -> Listen {
+        Listen(
+            id: id,
+            raw: raw,
+            processed: metadata,
+            bundleID: bundleID,
+            duration: duration,
+            playedDuration: playedDuration,
+            startedAt: startedAt,
+            capturedAt: capturedAt,
+            artworkHash: artworkHash,
+        )
+    }
+}
+
+public extension ListenMetadata {
+    /// The values a local edit stores: surrounding whitespace is not part of
+    /// the corrected display value.
+    var trimmedForEdit: ListenMetadata {
+        ListenMetadata(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            artist: artist.trimmingCharacters(in: .whitespacesAndNewlines),
+            album: album.trimmingCharacters(in: .whitespacesAndNewlines),
+            albumArtist: albumArtist.trimmingCharacters(in: .whitespacesAndNewlines),
+        )
+    }
+
+    /// A stored listen always has a title and artist. A local edit may clear
+    /// album and album artist but cannot make either required field empty.
+    var isValidEditedMetadata: Bool {
+        !title.isEmpty && !artist.isEmpty
+    }
 }
 
 /// A failure the user must be able to copy into a bug report.

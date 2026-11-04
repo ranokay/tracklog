@@ -133,6 +133,7 @@ extension CaptureRuntime {
 
     public func jumpHistory(to date: Date) async {
         guard started, let store else { return }
+        state.cancelDeleteListen()
         state.historyJumpInFlight = true
         defer { state.historyJumpInFlight = false }
         closeTrackHistory()
@@ -275,6 +276,7 @@ extension CaptureRuntime {
         state.historyJumpNotice = nil
         state.historyJumpInFlight = false
         state.historySettingsUnavailable = false
+        state.cancelDeleteListen()
         closeTrackHistory()
     }
 

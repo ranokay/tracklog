@@ -129,6 +129,12 @@ public extension SQLiteListenStore {
         )
     }
 
+    /// A local history edit or delete changes every local grouping, so none of
+    /// the stored local results remain valid. Service rows are untouched.
+    func clearLocalChartCaches(handle: OpaquePointer) throws {
+        try Self.execute(handle, "DELETE FROM chart_cache WHERE source = 'local'")
+    }
+
     private func pruneStaleChartRows(_ handle: OpaquePointer) throws {
         try Self.execute(
             handle,

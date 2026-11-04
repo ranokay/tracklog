@@ -25,6 +25,13 @@ struct TracklogHistorySettingsPage: View {
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Edit listen and Delete listen are in each History row's Actions menu. "
+                            + "Changes stay on this Mac; Last.fm history cannot be rewritten.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             } content: {
                 DropletSettingsCard {

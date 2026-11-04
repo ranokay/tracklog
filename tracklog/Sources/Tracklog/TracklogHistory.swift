@@ -64,6 +64,7 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
 
 // MARK: - The History section
 
+// swiftlint:disable:next type_body_length
 struct TracklogHistoryContent: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -77,12 +78,14 @@ struct TracklogHistoryContent: View {
     var body: some View {
         VStack(spacing: 0) {
             if let track = state.trackHistory {
+                deleteConfirmation
                 TracklogTrackHistoryContent(droplet: droplet, state: state, track: track)
             } else {
                 header
                 if state.historySettingsUnavailable {
                     HistorySettingsUnavailableBar(state: state)
                 }
+                deleteConfirmation
                 if let notice = state.historyJumpNotice {
                     HistoryJumpBar(
                         notice: notice,
@@ -116,6 +119,23 @@ struct TracklogHistoryContent: View {
     }
 
     // MARK: Header
+
+    @ViewBuilder
+    private var deleteConfirmation: some View {
+        if let pending = state.pendingListenDelete {
+            HistoryDeleteBar(
+                listen: pending,
+                deliveries: state.deliveries(for: pending),
+                connections: state.connections,
+                isDeleting: state.deletingListen,
+                failure: state.deleteListenFailure,
+                onCancel: { droplet.cancelDeleteListen() },
+                onDelete: {
+                    Task { await droplet.confirmDeleteListen() }
+                },
+            )
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.md) {

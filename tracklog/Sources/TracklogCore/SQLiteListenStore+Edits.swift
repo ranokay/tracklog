@@ -32,11 +32,18 @@ extension SQLiteListenStore {
 
     @discardableResult
     public func save(_ rule: SimpleEditRule) async throws -> SimpleEditRule {
+        try saveEdit(rule, handle: database())
+    }
+
+    /// Saves one rule on an existing connection. The caller owns any
+    /// transaction, so a history edit and its optional rule can commit
+    /// together.
+    @discardableResult
+    func saveEdit(_ rule: SimpleEditRule, handle: OpaquePointer) throws -> SimpleEditRule {
         if let error = rule.validationError {
             throw error
         }
 
-        let handle = try database()
         let key = rule.matchKey
 
         // Editing a rule's match tuple means the old row must not survive

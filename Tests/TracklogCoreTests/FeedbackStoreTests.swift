@@ -92,7 +92,7 @@ struct FeedbackStoreTests {
         do {
             let store = try SQLiteListenStore(url: database.url, migrations: previous)
             #expect(try await store.userVersion() == 8)
-            _ = try await store.insert(listen)
+            try database.insertLegacyListen(listen)
             await store.close()
         }
 

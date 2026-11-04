@@ -425,3 +425,38 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
         ]
     }
 }
+
+// MARK: - Local mutations
+
+extension HarnessDemoStore: ListenMutationStore {
+    func editListen(
+        id: Int64,
+        to metadata: ListenMetadata,
+        remembering rule: SimpleEditRule?,
+    ) async throws -> ListenEditResult {
+        let trimmed = metadata.trimmedForEdit
+        guard trimmed.isValidEditedMetadata else {
+            throw ListenMutationError.invalidMetadata
+        }
+        guard let index = listens.firstIndex(where: { $0.id == id }) else {
+            throw ListenMutationError.notFound
+        }
+        let updated = listens[index].withProcessed(trimmed)
+        listens[index] = updated
+        var savedRule: SimpleEditRule?
+        if let rule {
+            savedRule = try await save(rule)
+        }
+        chartRows = chartRows.filter { $0.key.source != .local }
+        return ListenEditResult(listen: updated, rule: savedRule)
+    }
+
+    func deleteListen(id: Int64, at _: Date) async throws {
+        guard let index = listens.firstIndex(where: { $0.id == id }) else {
+            throw ListenMutationError.notFound
+        }
+        listens.remove(at: index)
+        deliveryRows.removeAll { $0.listenID == id }
+        chartRows = chartRows.filter { $0.key.source != .local }
+    }
+}

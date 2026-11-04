@@ -257,6 +257,21 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 11) { handle in
+                // A deleted play keeps its duplicate suppression without
+                // keeping its readable metadata. The dedup key includes track,
+                // artist, album, bundle id and start time, so only its one-way
+                // hash is stored.
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE deleted_listens (
+                        dedup_hash TEXT PRIMARY KEY,
+                        deleted_at REAL NOT NULL
+                    );
+                    """,
+                )
+            },
         ]
     }
 
