@@ -7,7 +7,8 @@ extension CaptureRuntime {
     /// at the top of the feed or for the Newest action.
     public func reloadHistory() async {
         guard started, let store, !state.historyJumpInFlight else { return }
-        closeEntityDetail()
+        // Reloading the feed never closes a detail. A palette-opened detail
+        // mounts History underneath it and must stay up while the feed loads.
         state.pendingHistoryJump = nil
         state.historyJumpNotice = nil
         state.historyHasNewer = false

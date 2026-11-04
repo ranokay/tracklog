@@ -569,6 +569,56 @@ struct EntityDetailCompositionTests {
         )?.absoluteString == "https://listenbrainz.org/recording/recording-mbid")
     }
 
+    /// The palette's Return presents History and opens the detail in either
+    /// order. After a dismissal left the jumped rows loaded, the mount load
+    /// must still replace them with the newest feed and leave the detail up;
+    /// Back then reveals that feed, not the stale window.
+    @Test func aPaletteOpenedDetailLeavesTheNewestFeedUnderneath() async throws {
+        let composition = try await entityComposition { request in
+            if formParameters(request)["method"] == "artist.getInfo" {
+                return entityLastFMArtistInfo()
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+        await composition.runtime.reloadHistory()
+        let newest = historyBase.addingTimeInterval(1_200)
+
+        await composition.runtime.jumpHistory(to: historyBase.addingTimeInterval(60))
+        #expect(composition.state.historyJumpNotice != nil)
+        #expect(composition.state.listens.first?.startedAt == historyBase.addingTimeInterval(60))
+
+        // The takeover closes; its hide resets the jump state but not the rows.
+        composition.runtime.resetHistoryNavigation()
+        #expect(composition.state.historyJumpNotice == nil)
+        #expect(composition.state.listens.first?.startedAt == historyBase.addingTimeInterval(60),
+                "the reset alone does not reload the jumped rows")
+
+        // The detail opens before the mount load, the order that skipped the
+        // feed while a detail was checked against nil.
+        try await composition.runtime.openEntityDetail(artistRequest())
+        await composition.runtime.reloadHistory()
+        #expect(composition.state.entityDetail?.request.kind == .artist,
+                "loading the feed must not close a palette-opened detail")
+        #expect(composition.state.historyJumpNotice == nil)
+        #expect(composition.state.listens.first?.startedAt == newest)
+
+        await composition.runtime.backEntityDetail()
+        #expect(composition.state.entityDetail == nil)
+        #expect(composition.state.listens.first?.startedAt == newest,
+                "Back reveals the newest feed, not the jumped rows")
+
+        // The other order: the mount load finishes before the page opens.
+        await composition.runtime.jumpHistory(to: historyBase.addingTimeInterval(60))
+        composition.runtime.resetHistoryNavigation()
+        await composition.runtime.reloadHistory()
+        try await composition.runtime.openEntityDetail(artistRequest())
+        #expect(composition.state.entityDetail?.request.kind == .artist,
+                "a detail opened after the load stays up")
+        #expect(composition.state.listens.first?.startedAt == newest)
+    }
+
     // MARK: - Service failures
 
     private func openArtistAndWaitForService(

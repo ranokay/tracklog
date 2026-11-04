@@ -16,12 +16,12 @@ extension TracklogDroplet {
         guard let runtime else { return }
         if state.pendingHistoryJump != nil {
             await runtime.applyPendingHistoryJump()
-        } else if state.entityDetail == nil, state.historyJumpNotice == nil,
+        } else if state.historyJumpNotice == nil,
                   !state.historyJumpInFlight {
-            // A detail or a jumped window opened just before the surface
-            // mounted (the harness fixtures do this) must not be replaced by
-            // the feed load. The in-flight flag also stops a second surface
-            // copy from resetting a jump its sibling is still reading.
+            // A jumped window opened just before the surface mounted must not
+            // be replaced by the feed load. A detail may be opening at the
+            // same moment; reloadHistory loads the newest rows underneath it
+            // without closing it.
             await runtime.reloadHistory()
         }
     }
