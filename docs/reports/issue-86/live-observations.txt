@@ -1,0 +1,49 @@
+Issue #86 live harness observations (2026-11-04)
+
+Environment: TracklogHarness launched with `droppykit run`, fixture
+`TRACKLOG_HARNESS_DETAIL=override` and `TRACKLOG_HARNESS_SETTINGS_PAGE=images`,
+then the Expanded surface and Settings pane selections.
+
+AX readout, expanded surface with the artist page open:
+- AXWindow "Tracklog — DroppyKit harness"
+  - AXHeading "Blondie"
+  - AXOpaqueProviderGroup [actions=[scrolltotop,scrolltobottom]]
+    - AXButton "Heart of Glass, Blondie, 1 listen" help="Opens this track's page" [actions=[press]]
+
+The same tree contains three rendered surface copies (notch, island, camera).
+
+Settings pane, Images page:
+- "Chosen image", "Blondie"
+- Button "Choose image…"
+- Button "Remove image"
+- "Saved images", row "Blondie", Button "Remove"
+- "Artist images", Toggle "Look up artist images" (knob at the on position),
+  privacy note naming Apple.
+
+File picker:
+- Activating "Choose image…" opened NSOpenPanel in the harness host process.
+- Window title: "Choose an artist or album image".
+- The panel listed a JSON file from an earlier session and was cancelled with
+  Escape. No image was selected in this run.
+- This proves the panel opens in the real host process; it does not prove a
+  sandboxed Store build, which is not available on this machine.
+
+Palette:
+- A separate run with `TRACKLOG_HARNESS_PALETTE=normal` opened the palette over
+  the harness window. It showed the query `blo`, the Artists group with
+  "Blondie" carrying the override sleeve (orange circle), the other artists,
+  the footer `Return opens details · ⌥Return plays · ⌘Return opens Last.fm ·
+  Esc clears, then closes`.
+- An unrelated macOS TCC prompt ("Raycast.app wants to access files managed by
+  Kumo") took focus before Return could be sent on the Blondie row. The
+  palette was still receiving keys (Escape cleared its query), but the
+  detail-from-palette Return observation was not completed. Do not claim it
+  was run.
+
+Not run:
+- Live Last.fm `getInfo` reads: no working user app pair/session is configured
+  on this machine.
+- Live ListenBrainz reads: no user token is configured.
+- VoiceOver speech, focus order and keyboard traversal: no VoiceOver session
+  was started. The AX tree above is structural evidence only.
+- Droppy Playground install and a Store-signed build: not attempted.
