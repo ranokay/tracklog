@@ -2,7 +2,7 @@
 
 - Base: started from `10e20840c8f71913cb8c492cb779cdb23cf36aac` (`feat: build loved browsing (#87) (#115)`).
 - Branch: `feat/entity-details-image-overrides-86`.
-- Code head: `9eb6ed44e1e8397dc52fed424922a5913708166e`.
+- Code head: `07a43cb5bfdd24c971eca27ae25ce1fded4358bf`.
 - State: implementation, composition tests, harness fixtures, glossary and checklist updates. The receipt-backed gate passed at the code head; the report and evidence are the only later changes.
 - Scope: ticket 10 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -59,7 +59,15 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | `overridesSurviveRestartUnlinkDeletionAndStayOutOfExport` | Reopen, unlink, listen delete, export exclusion. |
 | `removingOrReplacingAnOverrideDeletesItsBytes` | Old blob absent after replace/remove, including after reopen. |
 | `aListenReferencedBlobSurvivesOverrideRemoval` | Shared content hash referenced by a listen survives. |
-| `anUnreadableOverrideFallsBackToNeutralAndStaysRemovable` | Missing stored copy → neutral + removable, after restart. |
+| `anUnreadableOverrideFallsBackToNeutralAndStaysRemovable` | Missing stored copy → neutral + removable, after restart; local section finishes; no Apple/image request. |
+| `anUndecodableOverrideAlsoOwnsTheNeutralSleeve` | Present-but-corrupt blob → neutral, no Apple request. |
+| `anUnreadableAlbumOverrideBeatsACapturedCoverAndTheServiceImage` | Unreadable album override beats captured and service images; chart/palette helpers stay override-owned. |
+| `theImageFileReaderRefusesEmptyOversizedAndInaccessibleFiles` | Empty/inaccessible → unreadable; real oversize → too large; valid image accepted. |
+| `deactivatingStopsAnInFlightOverrideLoad` | A held activation override read publishes nothing after deactivation. |
+| `aStartedOverrideKeepsItsDraftAfterTheDetailCloses` | Change image draft survives the detail close and saves through the selected-image API. |
+| `aDeleteOnTheTrackPageKeepsEveryLoadedPage` | Delete keeps rows beyond the first page. |
+| `aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone` | Failed reload keeps rows and failure bar; service section unchanged. |
+| `listenBrainzChartRowsCarryTheirMBIDsForEveryEntity` | Real ListenBrainz payloads give artist/release/recording MBIDs and all three links. |
 | `anOversizedSelectionIsRefusedBeforeItEntersTheStore` | 20 MiB input limit. |
 | `albumImagesUseOverrideThenCapturedThenServiceThenNeutral` | Album precedence and “service image only when reached”. |
 | `anUnavailableAlbumImageEndsInTheNeutralSleeve` | Missing album image → neutral, no image request. |
@@ -78,7 +86,7 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | settings export tests | Old export defaults the switch on; false round-trips; overrides absent. |
 | updated track-history tests | Track history now runs through the one entity surface. |
 
-Full suite: **778 tests in 106 suites**, exit `0`.
+Full suite: **786 tests in 106 suites**, exit `0`.
 
 ## Gate
 
@@ -88,16 +96,16 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `9eb6ed44e1e8397dc52fed424922a5913708166e`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T203447Z-c9d69661f137.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T203447Z-c9d69661f137.log`
-  - Duration: 1624.9 seconds.
-  - `git_before` and `git_after` both report head `9eb6ed4…`, empty porcelain status and the same tracked-content hash.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `07a43cb5bfdd24c971eca27ae25ce1fded4358bf`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T215500Z-15c6e622316d.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T215500Z-15c6e622316d.log`
+  - Duration: 1619.6 seconds.
+  - `git_before` and `git_after` both report head `07a43cb…`, empty porcelain status and the same tracked-content hash.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 violations in 335 files.
-- `swift test --package-path Tests`: 778 tests in 106 suites; 51 media tests in 7 suites.
+- `swift test --package-path Tests`: 786 tests in 106 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
-- New gate runs: `details-artist`, `details-artist-approximate`, `details-artist-no-connection`, `details-album`, `details-album-service-image`, `details-track`, `details-album-listenbrainz`, `details-override`, `details-corrupt-override`, `details-long-names`, `images-settings` and `charts-override`. Every `report.json` reported no problems and every declared surface `provided`.
+- New gate runs: `details-artist`, `details-artist-approximate`, `details-artist-no-connection`, `details-album`, `details-album-service-image`, `details-track`, `details-album-listenbrainz`, `details-override`, `details-corrupt-override`, `details-long-names`, `details-track-delete`, `history-jump-back`, `loved-detail-back`, `images-settings` and `charts-override`. Every `report.json` reported no problems and every declared surface `provided`.
 - Evidence: `docs/reports/issue-86/` holds the PNGs and report JSONs above plus a contrast shot and the live observation notes.
 
 ## Native observations
@@ -117,10 +125,13 @@ All images are in `docs/reports/issue-86/`.
 | ListenBrainz MBID | `album-listenbrainz` | One-line reason plus `Open on ListenBrainz`; `details-album-listenbrainz.png` |
 | Override | `override` | Orange override header and `Remove`; `details-override.png` |
 | Corrupt override | `corrupt-override` | Neutral sleeve, unreadable-copy sentence and `Remove`; `details-corrupt-override.png` |
+| Track delete confirmation | `track-delete` | Delete bar on the track page with Cancel/Delete; `details-track-delete.png` |
 | Long metadata | `long-names` | Long artist and track names stay inside the row and truncate/wrap without replacing the count; `details-long-names.png` |
-| Images settings | `override` + settings page `images` | Chosen image, Choose image/Remove image, saved Blondie row with Remove, lookup switch and privacy note; `images-settings.png` |
+| Images settings | `corrupt-override` + settings page `images` | Chosen image, Choose image/Remove image, saved Blondie row with Remove, lookup switch and privacy note; `images-settings.png` |
 | Chart row override | `override` + Charts | Blondie's chart row uses the orange override; `charts-override.png` |
 | Increased contrast | `artist` + contrast override | Detail separators and borders strengthen; `details-contrast.png` |
+| History jump survives a detail | `history-jump-back` + `TRACKLOG_HARNESS_HISTORY=jump` | Back reveals the same `Showing from 3 Nov 2026 at 21:18` window; `history-jump-back.png` |
+| Loved rows survive a detail | `loved-back` + Loved section | Back reveals the same loaded Loved rows; `loved-detail-back.png` |
 
 ### Live harness
 
@@ -130,7 +141,9 @@ The harness was launched with `droppykit run` and the real `TracklogHarness` pro
 - The Images page showed the pending `Chosen image` section, `Choose image…`, `Remove image`, the saved Blondie row with its own `Remove`, and the lookup switch in the on position with the Apple privacy note.
 - Activating `Choose image…` opened a real `NSOpenPanel` titled `Choose an artist or album image` in the host process. It was cancelled without choosing a file. This proves the direct AppKit route; a sandboxed Store build was not available.
 - A palette fixture run opened the separate palette over the harness; the Artists group showed Blondie with the orange override sleeve and the footer `Return opens details · ⌥Return plays · ⌘Return opens Last.fm · Esc clears, then closes`.
-- **Not completed:** the detail-from-palette Return observation. An unrelated macOS TCC prompt from Raycast took focus before Return was sent. Per the task rules I did not approve or dismiss that system prompt. The stale-takeover guard is implemented (`expandedSurfaceDidDismiss`/`takeoverDidDisappear` compare the owning presentation id), but I am not claiming a completed live run of that sequence.
+- **Change image flow (F1):** on the artist detail, `Change image…` reached the Settings pane with `Chosen image`, `Blondie`, `Choose image…` and `Remove image` after the takeover was gone. The draft survived the close, which is the F1 path. `Choose image…` opened the real `NSOpenPanel`. A file save was not completed: the Go-to-folder keystroke landed in the harness sidebar search instead of the panel, so no file was selected. The picker and draft path are verified; the actual save is covered by `aStartedOverrideKeepsItsDraftAfterTheDetailCloses`.
+- **Palette keys (F11):** with the palette open over the detail, Return on the Blondie row closed the palette and opened the Blondie artist detail; it survived the takeover presentation. Option-Return closed the palette and the harness Activity log recorded `open https://music.example/search?q=Blondie` (the play action). Command-Return was attempted but the Activity log kept only the Option-Return open line; I did not observe a Last.fm open, so I do not claim it passed live. The key router and both palette paths are covered by tests.
+- **Track delete (F2):** the confirmation renders on the track page and the shot is `details-track-delete.png`. The live Cancel/Delete clicks were not completed because the harness sidebar interaction stalled after a Settings page switch; the confirmation view is the same `HistoryDeleteBar` used by History, and the delete mutation is covered by the track-page reload test.
 - **Not run:** live Last.fm `getInfo` (no working app pair/session), live ListenBrainz, VoiceOver speech, Droppy Playground install, and a Store-signed build.
 
 ## Accessibility
@@ -160,3 +173,19 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has an Enti
 - `GLOSSARY.md` now defines **Artist image** and **Image override**, and the Artwork entry explicitly says artwork is not the artist image.
 - No branding, licensing, credential, host-capability or clean-room change. No new package. The droplet still depends only on DroppyKit.
 - Overrides are absent from the settings export; the lookup switch is an additive optional key (`artist_image_lookups`, defaulting on when absent).
+
+## Review fixes
+
+All eleven findings were addressed in `07a43cb`; the report separates what is proven by tests/fixtures from what was observed live.
+
+- **F1 — draft survives Change image.** `closeEntityDetail()` no longer clears `imageOverrideDraft`; deactivation and a new page still clear it. The harness has an Images settings route, and `aStartedOverrideKeepsItsDraftAfterTheDetailCloses` opens a page, begins an override, closes the detail and saves through `saveSelectedImageOverride`. Live: `Change image…` reached `Chosen image` with `Blondie` and `Choose image…` after the takeover disappeared; the panel opened. The final file save was not completed because the Go-to-folder keystroke landed in the harness sidebar search.
+- **F2 — track delete confirmation.** `TracklogEntityDetailView` renders `HistoryDeleteBar` for `state.pendingListenDelete`. `details-track-delete.png` shows Cancel/Delete. Live Cancel/Delete clicks were not completed after the harness sidebar stalled; the shared bar and the delete mutation are unchanged from #82 apart from where they render.
+- **F3 — originating list preserved.** The takeover keeps the section view mounted under the detail and hides it from hit testing/VoiceOver instead of replacing it. `history-jump-back.png` shows the same `Showing from 3 Nov 2026 at 21:18` window after Back; `loved-detail-back.png` shows the same loaded Loved rows after Back. Section switches and takeover dismissal still run the section's hide/reset.
+- **F4 — reload keeps rows.** `reload()` no longer calls `loadPage`; it keeps rows and the service section, merges the refreshed first page into the loaded pages, and keeps rows beside the failure bar. `aDeleteOnTheTrackPageKeepsEveryLoadedPage` loads 120 rows and deletes one; `aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone` holds 120 rows through a failed read and asserts the service section is unchanged. Back still reloads from scratch.
+- **F5 — unreadable override owns neutral.** An override row now marks `overridePresent`; a missing or undecodable blob resolves to neutral, skips the iTunes lookup and the album `getInfo` image request, and chart/palette helpers report the override as present with nil readable data. Tests cover missing, corrupt, artist and album-with-captured-cover cases. The doc comment now says neutral.
+- **F6 — Replace and unreadable rows.** Each saved row has `Replace` (same picker/draft) and `Remove`; an unreadable row reads `The saved copy could not be read. Replace or remove it.` with an element-specific VoiceOver label. `images-settings.png` shows both rows and both actions.
+- **F7 — no stale local write.** `loadOverride` re-reads `state.entityDetail` after the artwork await. `anUnreadableOverrideFallsBackToNeutralAndStaysRemovable` asserts the local section finishes.
+- **F8 — chart MBIDs.** `EntityRequest.chartItem` passes `providerID` for artists and albums as well as tracks. `listenBrainzChartRowsCarryTheirMBIDsForEveryEntity` decodes real ListenBrainz payloads and asserts `/artist/`, `/release/` and `/recording/` links.
+- **F9 — file reading off the main actor.** `ImageOverrideFileReader` starts the security scope before the size check, returns unreadable for empty/missing/unknown files, too large only for a real oversize, and is called from `Task.detached`. The reader test covers empty, sparse-oversized, missing and valid files; an unreadable or oversized choice never touches an existing override.
+- **F10 — owned activation work.** The override load and cache prune tasks are stored and cancelled in `deactivate()`; the unused `loadMoreTask` was removed. `deactivatingStopsAnInFlightOverrideLoad` holds the activation read, deactivates, releases it and asserts no publication.
+- **F11 — palette observation.** Return on the Blondie palette row opened the Blondie artist detail and it survived the takeover presentation. Option-Return closed the palette and the Activity log recorded `open https://music.example/search?q=Blondie`. Command-Return was attempted but not observed in the Activity log, so it is recorded as unobserved live; the key router and command path are tested. The earlier Raycast TCC prompt no longer blocked this pass.

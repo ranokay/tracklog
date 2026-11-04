@@ -47,3 +47,35 @@ Not run:
 - VoiceOver speech, focus order and keyboard traversal: no VoiceOver session
   was started. The AX tree above is structural evidence only.
 - Droppy Playground install and a Store-signed build: not attempted.
+
+Second pass (after the review fixes)
+
+F1, Change image:
+- Detail page -> Change image… -> Settings pane showed "Chosen image",
+  "Blondie", "Choose image…", "Remove image" after the takeover disappeared.
+  The draft survived the detail close.
+- Choose image… opened the NSOpenPanel titled "Choose an artist or album image".
+- The file save was not completed. A Cmd-Shift-G path keystroke landed in the
+  harness sidebar search field instead of the panel; no file was selected.
+  The composition test covers the save through saveSelectedImageOverride.
+
+F2, track delete:
+- The track page rendered the delete confirmation with Cancel and Delete
+  (gate shot details-track-delete.png). Live Cancel/Delete clicks were not
+  completed because the harness sidebar stopped responding after a Settings
+  page switch.
+
+F3, originating list:
+- Gate shot history-jump-back.png shows "Showing from 3 Nov 2026 at 21:18"
+  after opening a detail and going Back.
+- Gate shot loved-detail-back.png shows the same loaded Loved rows after
+  opening a detail and going Back.
+
+F11, palette keys:
+- With a detail open, the section-bar search button opened the palette over
+  the takeover. Return on the selected Blondie row closed the palette and
+  opened the Blondie artist detail; the detail survived.
+- Option-Return closed the palette; the harness Activity log recorded
+  `open https://music.example/search?q=Blondie`.
+- Command-Return was attempted; the Activity log kept only the Option-Return
+  open line, so a Last.fm open was not observed. Do not claim it passed live.
