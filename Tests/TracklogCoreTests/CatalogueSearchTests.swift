@@ -37,7 +37,13 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let clock = FakeClock(base)
         let credentials = MemoryCredentialStore()
         let adapters: [any ServiceAdapter] = [
-            LastFMAdapter(transport: transport, appCredentials: appCredentials),
+            LastFMAdapter(
+                transport: transport,
+                appCredentials: StoredLastFMAppCredentials(
+                    credentialStore: credentials,
+                    compiled: appCredentials,
+                ),
+            ),
             StubAdapter(kind: .libreFM, identity: ServiceIdentity(name: "libre")),
             StubAdapter(kind: .listenBrainz, identity: ServiceIdentity(name: "listener")),
         ]
@@ -284,8 +290,11 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         )
         #expect(await waitSettled(harness))
 
-        // One auth.getToken validation plus a full four-group refresh.
-        #expect(await transport.requestCount() == firstCount + 5)
+        // One auth.getToken validation plus a full four-group refresh, all
+        // signed with the newly saved app key.
+        let postSave = await Array((transport.parameters()).dropFirst(firstCount))
+        #expect(postSave.count == 5)
+        #expect(postSave.allSatisfy { $0["api_key"] == "new-key" })
     }
 
     // MARK: - Cancellation
