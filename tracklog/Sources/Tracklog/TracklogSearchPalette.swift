@@ -84,7 +84,7 @@ struct TracklogSearchPalette: View {
         .onChange(of: state.catalogueSearch.isSearching) { _, searching in
             if searching, !wasSearching {
                 announce("Searching the Last.fm catalogue.")
-            } else if !searching, wasSearching {
+            } else if !searching, wasSearching, state.catalogueSearch.hasSearched {
                 announce(summary(of: state.catalogueSearch))
                 ensureSelection(preferRow: true)
                 announceSelection()
@@ -423,7 +423,19 @@ struct TracklogSearchPalette: View {
         }
     }
 
+    @ViewBuilder
     private func resultRow(_ row: CatalogueRow) -> some View {
+        if row.pageURL == nil {
+            rowButton(row)
+        } else {
+            rowButton(row)
+                .accessibilityAction(named: Text("Open on Last.fm")) {
+                    openLastFM(row)
+                }
+        }
+    }
+
+    private func rowButton(_ row: CatalogueRow) -> some View {
         let isSelected = model.selectedID == SearchPaletteItem.row(row).id
         return Button {
             activate(.row(row))
@@ -444,7 +456,7 @@ struct TracklogSearchPalette: View {
                     }
                 }
                 Spacer(minLength: DroppySpacing.sm)
-                Image(systemName: state.playbackTemplate == nil ? "arrow.up.right.square" : "play.fill")
+                Image(systemName: rowIcon(row))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
                     .accessibilityHidden(true)
@@ -458,10 +470,7 @@ struct TracklogSearchPalette: View {
         .id(SearchPaletteItem.row(row).id)
         .accessibilityLabel(Text(rowAccessibilityLabel(row)))
         .accessibilityValue(Text("Last.fm catalogue"))
-        .accessibilityHint(Text(primaryHint))
-        .accessibilityAction(named: Text("Open on Last.fm")) {
-            openLastFM(row)
-        }
+        .accessibilityHint(Text(primaryHint(for: row)))
     }
 
     private func showMoreRow(_ kind: CatalogueGroupKind, count: Int) -> some View {
@@ -702,7 +711,7 @@ struct TracklogSearchPalette: View {
             return "Show more \(kind.title.lowercased())."
         case let .row(row):
             let title = row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)"
-            return "\(row.group.title), \(title). \(primaryHint)"
+            return "\(row.group.title), \(title). \(primaryHint(for: row))"
         }
     }
 
@@ -726,16 +735,26 @@ struct TracklogSearchPalette: View {
         return parts.joined(separator: ". ")
     }
 
+    private func rowIcon(_ row: CatalogueRow) -> String {
+        if row.pageURL == nil {
+            return "minus.circle"
+        }
+        return state.playbackTemplate == nil ? "arrow.up.right.square" : "play.fill"
+    }
+
     private func rowAccessibilityLabel(_ row: CatalogueRow) -> String {
         row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)"
     }
 
-    private var primaryHint: String {
+    private func primaryHint(for row: CatalogueRow) -> String {
         if state.playbackTemplate == nil {
-            "Return opens the Last.fm page. Command-Return does the same."
-        } else {
-            "Return searches and plays. Command-Return opens the Last.fm page."
+            return row.pageURL == nil
+                ? "Return reports that no Last.fm page is available for this result."
+                : "Return opens the Last.fm page. Command-Return does the same."
         }
+        return row.pageURL == nil
+            ? "Return searches and plays. No Last.fm page is available."
+            : "Return searches and plays. Command-Return opens the Last.fm page."
     }
 }
 
