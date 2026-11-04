@@ -2,8 +2,8 @@
 
 - Base: started from `10e20840c8f71913cb8c492cb779cdb23cf36aac` (`feat: build loved browsing (#87) (#115)`).
 - Branch: `feat/entity-details-image-overrides-86`.
-- Code head: `8c68562d8c9643f086cb01f9c52d3a54441cfba5`.
-- State: implementation, composition tests, harness fixtures, glossary and checklist updates, plus the review-round-2 fixes for F12, F13 and F14 and the live F1, F2, F11, F12 and F14 checks. The receipt-backed gate passed at the code head; the report and evidence are the only later changes.
+- Code head: `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`.
+- State: implementation, composition tests, harness fixtures, glossary and checklist updates, the review-round-2 fixes for F12, F13 and F14, the F15 picker-entity fix, and the live F1, F2, F11, F12, F14 and F15 checks. The receipt-backed gate passed at the previous code head `8c68562`; the receipt for `19768f7` is pending (the supervisor runs it next). The report and evidence are the only later changes.
 - Scope: ticket 10 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
 ## Contract
@@ -64,9 +64,11 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | `anUnreadableAlbumOverrideBeatsACapturedCoverAndTheServiceImage` | Unreadable album override beats captured and service images; chart/palette helpers stay override-owned. |
 | `theImageFileReaderRefusesEmptyOversizedAndInaccessibleFiles` | Empty/inaccessible → unreadable; real oversize → too large; valid image accepted. |
 | `deactivatingStopsAnInFlightOverrideLoad` | A held activation override read publishes nothing after deactivation. |
-| `aStartedOverrideKeepsItsDraftAfterTheDetailCloses` | Change image draft survives the detail close and saves through the selected-image API. |
-| `aSuccessfulSaveClearsTheDraft` | A save clears its own chosen entity. |
-| `theImagesPageLeavingClearsTheDraftWithoutLosingAnInFlightSave` | The page-leave clear runs while the store write is held; the save still lands and no draft remains. |
+| `aStartedOverrideKeepsItsDraftAfterTheDetailCloses` | Change image draft survives the detail close and saves through the explicit entity API. |
+| `aSuccessfulSaveClearsItsOwnDraft` | A save clears the draft only when it still names the saved entity. |
+| `anExplicitSaveSurvivesTheDraftBeingClearedFirst` | The page leaving during the file read clears the draft; the entity captured before the picker still receives the file. |
+| `anExplicitSaveTargetsItsOwnEntityAndLeavesAnotherDraft` | Replace on another row during the read changes the draft; the file still saves to the chosen entity and the other draft stays. |
+| `anExplicitSaveSurvivesTheDraftChangingDuringTheStoreWrite` | A draft change while the store write is held cannot redirect or lose the save. |
 | `aPaletteOpenedDetailLeavesTheNewestFeedUnderneath` | Jump, dismissal reset, detail opened before and after the mount load, then Back to the newest rows. |
 | `aDeleteOnTheTrackPageKeepsEveryLoadedPage` | Delete keeps rows beyond the first page. |
 | `aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone` | Failed reload keeps rows and failure bar; service section unchanged. |
@@ -91,7 +93,7 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | settings export tests | Old export defaults the switch on; false round-trips; overrides absent. |
 | updated track-history tests | Track history now runs through the one entity surface. |
 
-Full suite: **791 tests in 106 suites**, exit `0`.
+Full suite at the last gate (`8c68562`): **791 tests in 106 suites**, exit `0`. The F15 change removes two draft tests and adds four on the explicit save path; the focused run is 53 tests in the two entity suites, exit `0`. A full suite and gate receipt for `19768f7` are pending.
 
 ## Gate
 
@@ -101,17 +103,16 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `8c68562d8c9643f086cb01f9c52d3a54441cfba5`.
+- Receipt status: **pending for the F15 code head `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`**; the supervisor runs the gate next. The receipt below is the last completed one and covers `8c68562`, not this head.
+- Last completed receipt: exit `0`, frozen gate `true`, clean before and after, at head `8c68562d8c9643f086cb01f9c52d3a54441cfba5`.
   - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T230714Z-8813b33b95b2.json`
   - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T230714Z-8813b33b95b2.log`
   - Duration: 1765.9 seconds.
   - `git_before` and `git_after` both report head `8c68562…`, empty porcelain status and the same tracked-content hash.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 violations in 336 files.
-- `swift test --package-path Tests`: 791 tests in 106 suites; 51 media tests in 7 suites.
-- `droppykit build`: universal, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
-- `droppykit validate`: `Ready to submit`.
+- For `19768f7` before handing over: `hk check --all` (SwiftFormat, SwiftLint, jactionlint) clean with 0 violations in 336 files, and the focused `EntityImageCompositionTests` + `EntityDetailCompositionTests` run is 53 tests exit `0`. `droppykit run` rebuilt the droplet and harness from this head for the live F1/F15 recheck; the full suite, `droppykit build`/`validate` and surface shots are part of the pending gate.
+- Last completed gate details: `swift test --package-path Tests` 791 tests in 106 suites (51 media tests in 7 suites); `droppykit build` universal x86_64 + arm64; `droppykit validate` `Ready to submit`.
 - New gate runs: `details-artist`, `details-artist-approximate`, `details-artist-no-connection`, `details-album`, `details-album-service-image`, `details-track`, `details-album-listenbrainz`, `details-override`, `details-corrupt-override`, `details-long-names`, `details-track-delete`, `history-jump-back`, `loved-detail-back`, `images-settings` and `charts-override`. Every `report.json` reported no problems and every declared surface `provided`; `history-jump-back` still shows its jumped window after Back.
-- Evidence: `docs/reports/issue-86/` holds the PNGs and report JSONs above plus a contrast shot, `live-f1-detail-override.png` and the live observation notes.
+- Evidence: `docs/reports/issue-86/` holds the PNGs and report JSONs above plus a contrast shot, `live-f1-detail-override.png` (refreshed from the `19768f7` run) and the live observation notes.
 
 ## Native observations
 
@@ -198,4 +199,5 @@ All eleven round-1 findings were addressed in `07a43cb`. Round 2 found three mor
 - **F11 — palette keys (round 2).** Return on the Blondie palette row opened the Blondie artist detail. Command-Return on a fresh `TRACKLOG_HARNESS_PALETTE=normal` launch closed the palette and the harness Activity page recorded exactly `open https://www.last.fm/music/Blondie` (`01:05:21.674`); no detail opened. Option-Return was observed in round 1 (`open https://music.example/search?q=Blondie`). The key router and both palette paths are also covered by tests.
 - **F12 — a palette detail keeps the newest feed underneath.** `openHistory` no longer skips the load when `state.entityDetail != nil`, and `reloadHistory()` no longer calls `closeEntityDetail()`. The feed load therefore runs under a detail opened before or during the mount task, and the other `reloadHistory` caller (the jump bar's Newest action) has no detail to close because the bar is only reachable from the section, not the detail. `aPaletteOpenedDetailLeavesTheNewestFeedUnderneath` covers jump, dismissal reset, both orderings and Back; the in-takeover jump Back stays `history-jump-back`. Live: jump, palette opening, Return on Blondie, Back showed `Thursday, 5 November 2026` first with 6 listens and no `Showing from` bar.
 - **F13 — removing an album override restores the next source.** `removeOverride` restarts the album image path, and `maybeStartServiceImage` no longer drops a copy it already downloaded when precedence is not ready; the released page returns to `.service` without a second request, or fetches it when the override was up when the facts arrived. `removingAnAlbumOverrideRestoresTheServiceImage` asserts `.service` with exactly 1 request total; `removingAnAlbumOverrideStartsTheServiceImageThatArrivedUnderIt` asserts 0 before Remove and exactly 1 after. The Images copy now says "the page's next available image, or the neutral sleeve" instead of naming the captured cover only.
-- **F14 — the chosen image clears on the way out.** `finishImagesSettingsPage` is now called by the Images page's `onDisappear` (the unused `goBackInSettings` call is gone), a successful save clears only its own draft, and `selectOverrideImage` copies the draft before the first suspension so a page leaving mid-save cannot lose it. `aSuccessfulSaveClearsTheDraft` and `theImagesPageLeavingClearsTheDraftWithoutLosingAnInFlightSave` cover both paths, the second with a held store write. Live: after the F1 save the section cleared on the spot; opening `Change image…` again, leaving the Settings pane and returning showed no `Chosen image`, while the saved list stayed.
+- **F14 — the chosen image clears on the way out.** `finishImagesSettingsPage` is now called by the Images page's `onDisappear` (the unused `goBackInSettings` call is gone), a successful save clears only its own draft, and an explicit save copies the entity before the first suspension. `aSuccessfulSaveClearsItsOwnDraft`, `anExplicitSaveSurvivesTheDraftBeingClearedFirst`, `anExplicitSaveTargetsItsOwnEntityAndLeavesAnotherDraft` and `anExplicitSaveSurvivesTheDraftChangingDuringTheStoreWrite` cover the draft paths, the last with a held store write. Live: after the F1 save the section cleared on the spot; opening `Change image…` again, leaving the Settings pane and returning showed no `Chosen image`, while the saved list stayed.
+- **F15 — the picker saves to the entity it started with.** `chooseImageOverrideFile` now takes the draft and captures it before `runModal`, then passes that explicit entity through the off-main read to `saveImageOverride`. The page leaving during the read no longer makes the save throw `noSelection`, and Replace on another row no longer redirects the first file. `saveOverride` clears the draft only when it still names the saved entity, so the other entity's draft survives, and a failed save sets `state.imageOverrideError` even when the page has gone, where the next visit shows it. `saveSelectedImageOverride` and `selectOverrideImage` are removed and their tests moved to the explicit API. Live recheck on `19768f7`: `Change image…` → real panel → `Pictures` → `tracklog-issue86-panel-choice.png` → saved list `Blondie` with Replace/Remove; the reopened artist detail showed `Remove` and the chosen image (`live-f1-detail-override.png`, 4,533 sampled pixels). The panel's modal stall remains the runModal cause recorded in the live notes.

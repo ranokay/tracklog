@@ -173,3 +173,35 @@ F14, draft clearing (DONE):
   the save: the draft is copied before the first suspension. The
   composition test holds the store write, clears the draft, then lets the
   write finish and finds the override saved.
+
+Fourth pass (review round 3, F15)
+
+Environment: TracklogHarness rebuilt from 19768f7 with `droppykit run`,
+one fresh launch with TRACKLOG_HARNESS_DETAIL=artist. This re-runs the
+path F1 proved, now that the picker captures the entity before the panel
+instead of reading the draft after the file read.
+
+- Expanded surface -> Blondie artist detail -> Change image...
+- Settings pane showed "Chosen image" / "Blondie" / "Choose image...".
+- Choose image... opened NSOpenPanel "Choose an artist or album image"
+  in the TracklogHarness process. The panel opened in Pictures; the file
+  list row "tracklog-issue86-panel-choice.png" (PNG image, 162 KB,
+  outside the repository) was opened with AXOpen. The panel closed.
+- "Chosen image" cleared and "Saved images" showed "Blondie" with
+  "Replace image for Blondie" and "Remove image for Blondie".
+- Expanded surface again -> row menu "Open artist" -> Blondie detail:
+  "Change image..." and "Remove" are present, so the override owns the
+  detail. The refreshed screenshot docs/reports/issue-86/live-f1-detail-override.png
+  sampled 4,533 pixels of the chosen PNG's flat colour with the dominant
+  cluster in the header sleeve region, the same as the round-2 run.
+- The harness was quit after the check. `list_windows(app: "Tracklog")`
+  returned no windows; no NSOpenPanel was left open.
+
+The two F15 composition cases (draft cleared before the save, and the
+draft changed to another entity before the save) are covered at the
+runtime's explicit saveImageOverride seam; the live run exercises the
+same save path through the real panel.
+
+Gate receipt: pending for 19768f7 (the supervisor runs it next). The
+last completed receipt covers 8c68562 and is recorded in the main
+report.
