@@ -19,6 +19,7 @@ public final class TracklogPrincipal: NSObject, DropletPrincipal {
 
 /// Tracklog.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class TracklogDroplet: NSObject, Droplet {
     /// Must equal `DroppyDropletID` in the bundle's Info.plist and `id` in
     /// droplet.json. The loader refuses the bundle if the three disagree.

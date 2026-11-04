@@ -31,6 +31,7 @@ extension TracklogDroplet: SettingsPagesProviding {
         )
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func primaryPage(_ id: String) -> AnyView? {
         switch id {
         case tracklogRootPageID:
