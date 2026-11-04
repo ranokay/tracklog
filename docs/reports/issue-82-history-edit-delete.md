@@ -9,7 +9,7 @@
 - State: the owner agreed this contract in the implementation run before any
   code changed. Implementation, tests, harness evidence and the receipt-backed
   gate are complete. The gate ran at code head
-  `15fc972a3bceaa3b70eef6ee59d3408b1a8fe628`; later commits add this report and
+  `d379ad1a6e4acf1599c3aecac2a7f250dc20d437`; later commits add this report and
   evidence only.
 
 ## Contract
@@ -228,7 +228,7 @@ The tests use real temporary SQLite files (several reopened after a close),
 | 2 | History `Actions` menu has Edit/Delete; `history-edit` Settings page; `history-delete` confirmation; interactive AX walk. |
 | 3 | Immediate transactions; reopened SQLite tests; local chart/track/History refresh; storage-failure test. |
 | 4 | Exact edit-page and delete-bar copy; scripted transport proves no write-back. |
-| 5 | 15 focused tests with real SQLite, controlled clock/playback and scripted transport. |
+| 5 | 22 focused tests with real SQLite, controlled clock/playback and scripted transport. |
 | 6 | Receipt-backed gate; interactive native delete and edit runs; AX readouts; separate evidence classes below. |
 | 7 | No Tracklog identity, licence, credential, capability or dependency change; base `aa6bdeb`; unrelated work preserved. |
 
@@ -241,15 +241,15 @@ Command:
 ```
 
 - Result: exit `0`, frozen gate `true`, clean before and after, at head
-  `15fc972a3bceaa3b70eef6ee59d3408b1a8fe628`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T083158Z-498715eb74f2.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T083158Z-498715eb74f2.log`
-  - Duration: 1204.4 seconds.
+  `d379ad1a6e4acf1599c3aecac2a7f250dc20d437`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T090934Z-7785f10c72fc.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T090934Z-7785f10c72fc.log`
+  - Duration: 1046.9 seconds.
   - The commits after this code head are documentation and evidence only; the
     source and test tree the gate checked is unchanged.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint
   violations in 294 files.
-- `swift test --package-path Tests`: 642 tests in 97 suites; 51 media tests in
+- `swift test --package-path Tests`: 649 tests in 97 suites; 51 media tests in
   7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64.
 - `droppykit validate`: `Ready to submit`.
@@ -335,7 +335,7 @@ AX-tree inspection is not audible VoiceOver. The checklist is
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 642 tests / 97 suites; 15 focused mutation tests. These do not prove UI or runtime behaviour. |
+| Composition tests | Run | 649 tests / 97 suites; 22 focused mutation tests. These do not prove UI or runtime behaviour. |
 | Harness output | Run | `history-delete` and `history-edit`; every report `problems: []`; selected images above. |
 | Interactive harness AX | Run | Actions menu, cancel/confirm delete, edit-and-save walk; AX readouts above. |
 | Real host load | **Not passed** | The droplet was not installed in Droppy Playground; no changes outside the repository. |

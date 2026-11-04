@@ -483,6 +483,17 @@ struct HistoryMutationTests {
         )
         #expect(processed.title == "Corrected")
         #expect(processed.album == "Right")
+
+        // The Edits page's own save is a full replacement, not the merged
+        // history-edit behaviour.
+        let fullReplace = SimpleEditRule(
+            match: rule.match,
+            replacement: .init(album: "Full replace"),
+            savedAt: mutationBase,
+        )
+        let storedReplace = try await reopened.save(fullReplace)
+        #expect(storedReplace.replacement.track == nil)
+        #expect(storedReplace.replacement.album == "Full replace")
     }
 
     @Test func aFailedRuleValidationRollsBackTheEdit() async throws {
