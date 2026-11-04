@@ -2,7 +2,7 @@
 
 - Base: started from `8fb73ff7db105c817cb65c54100886e84f57d0b5` (`feat: build catalogue search and search-and-play (#85)`).
 - Branch: `feat/loved-list-current-connection`
-- Code head: `d5bef8412b597d67459c3c2e3dfaf898cafc5f99` (the gate receipt below is for this head; later commits are documentation and evidence only).
+- Code head: `5bb0f2058f901e3d75e09c8e7e1ebafca662e511` (the gate receipt below is for this head; later commits are documentation and evidence only).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 11 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -112,16 +112,41 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `d5bef8412b597d67459c3c2e3dfaf898cafc5f99`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T152312Z-cdfa6a3e75f2.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T152312Z-cdfa6a3e75f2.log`
-  - Duration: 1355.7 seconds.
-  - `git_before` and `git_after` both report head `d5bef84…`, empty porcelain status and the same tracked-content hash.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `5bb0f2058f901e3d75e09c8e7e1ebafca662e511`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T165810Z-62da6415aa9d.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T165810Z-62da6415aa9d.log`
+  - Duration: 1373.7 seconds.
+  - `git_before` and `git_after` both report head `5bb0f20…`, empty porcelain status and the same tracked-content hash.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 321 files.
 - `swift test --package-path Tests`: 736 tests in 104 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `loved-normal`, `loved-loading`, `loved-empty`, `loved-failed`, `loved-unsupported`, `loved-app-credentials`, `loved-long-names`, `loved-no-connection`, `loved-needs-sign-in`, `loved-credential-rejected`, `loved-paused`, `loved-action-failure`, `loved-refresh-failure`, `loved-rate-limited`, `loved-metadata-unavailable`.
+
+## Test stability
+
+The gate run at `ebabc0c` was killed at its 3600-second limit because the
+engine tests stalled; the receipt is
+`/Users/ranokay/.local/state/agent-tools/gates/20261104T154648Z-1ed411717776.json`
+(`frozen_gate: false`). A reproduction test (removed after the transcript)
+confirmed the cause: after the Last.fm `track.unlove` request was recorded, the
+old test advanced its fake clock once; the ListenBrainz lookup then recorded
+its spacing time after that advance, so the POST waited for `base + 2` and the
+only advance was `base + 1`. The logged order is in
+`docs/reports/issue-87/f19-reproduction.txt`: `track.unlove start at 1000000.0`,
+`test advances clock to 1000001.0`, `lookup recorded at 1000001.0`, then no
+feedback post.
+
+The two spacing tests now wait for the lookup itself before advancing, and
+advance two seconds past it. The whole Loved suite carries a one-minute
+`.timeLimit`, so a future stall fails the test rather than hanging the gate.
+The full Loved suite passed **25 consecutive runs** under the load of the two
+orphaned helpers from another worktree (about 149% CPU each); command, iteration
+count and transcript are in `docs/reports/issue-87/f19-25-runs.txt`. The delivery
+test helper's `DeliveryGate.waitUntilEntered` is now bounded at three seconds and
+returns a Bool; every existing caller asserts it, so a send that never enters is
+a failed test. The cause of the orphaned helper's send never entering was not
+established; that process belongs to another worktree and was left untouched.
 
 ## Native observations
 
@@ -188,6 +213,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Loved
 | Live service shape | Run (public, unauthenticated) | Libre.fm and ListenBrainz shape checks; no account names or rows retained. No authenticated Last.fm/Libre.fm/ListenBrainz smoke, because the run has no user credentials. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Settings handoff from Loved | **Not run** | The harness host refuses `openSettingsPage`; the button is wired but the real host page is not observed. |
+| Test stability | Run | 25 consecutive Loved suite runs under load, each exit 0; reproduction and bounded-wait evidence in `docs/reports/issue-87/f19-reproduction.txt` and `f19-25-runs.txt`. |
 | Audible VoiceOver | **Not run** | AX-tree inspection only. |
 
 No new package dependency, credential path, delivery route or database migration. The current-connection switcher, services, adapters and HUD were reused. The Loved list never claims a range-love total; the only counts are the rows currently loaded and the count of entries the service could not name. Last.fm/GNU FM loved rows carry no album, so reconciliation matches normalized title and artist and a row unlove clears every local identity for that pair; ListenBrainz rows also carry the service's release name. Unloving a Loved row fans out through the existing feedback policy, and a partial success leaves the row and names the source service.
