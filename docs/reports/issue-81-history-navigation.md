@@ -96,6 +96,7 @@ replace the feed, and capture continues.
   Swift by the shared key. No SQL `lower()` and no stored derived key.
 - `CaptureRuntime+History.swift`: jump, newer/older paging, exact has-more,
   anchored capture reload, one-shot request and in-flight guard.
+- `CaptureRuntime+HistoryNotice.swift`: the small position/missing-day notice helpers.
 - `CaptureRuntime+TrackHistory.swift`: open/reload/load-more/close, scoped
   failure.
 - `TracklogAppState.swift`: published track/jump/pending/settings state.
@@ -156,11 +157,11 @@ Command:
 ```
 
 - Result and receipt: exit `0`, frozen gate `true`, clean before and after, at
-  head `cc51fa1b301d36f7aa19d3ac0e3ee3deb3c1ca60`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T045718Z-e77862c43e95.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T045718Z-e77862c43e95.log`
-  - Duration: 890.7 seconds.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 284 files.
+  head `c70fda0e258eb24fee415aa6fd931a3f44bcb189`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T053334Z-82a4394e0aeb.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T053334Z-82a4394e0aeb.log`
+  - Duration: 850.9 seconds.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 285 files.
 - `swift test --package-path Tests`: 624 tests in 95 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64.
 - `droppykit validate`: `Ready to submit`.
