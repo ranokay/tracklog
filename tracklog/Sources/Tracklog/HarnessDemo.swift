@@ -74,7 +74,13 @@ enum HarnessDemo {
             )
         }
 
-        if let chartFixture {
+        if let paletteFixture = HarnessPaletteFixture.selected {
+            if paletteFixture.linksLastFM {
+                _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
+            } else {
+                _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+            }
+        } else if let chartFixture {
             if chartFixture.linksListenBrainz {
                 _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
             }

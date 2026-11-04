@@ -180,6 +180,36 @@ Checks:
 - Pre-existing states at activation are silent.
 - Successful scrobbles and now-playing starts are silent.
 
+## Search palette
+
+Expected structure, in order:
+
+1. Search field `Search the Last.fm catalogue`, focused on open, plus Clear and
+   Close buttons.
+2. The `Last.fm catalogue` source label and the search status.
+3. Group headers for Artists, Albums, Tracks and Loved. Each header is a button
+   with an expanded/collapsed value.
+4. Up to 5 result rows per group and a `Show more <group>` row; Return toggles
+   a header or expands the group.
+5. A credentials banner when the app pair is missing or rejected, with an
+   `Open Settings` button.
+6. A footer that says whether Play is configured.
+
+Checks:
+
+- The field keeps focus while Up and Down move through headers and rows.
+- VoiceOver hears the selected row through the palette's announcement, not by
+  moving focus out of the field.
+- When the query settles, one summary names every group's count, no-match,
+  failed or unavailable state.
+- A group header and a `Show more` row are reachable with Up/Down; Return
+  toggles or expands them.
+- Esc clears the text first and closes only when the field is empty.
+- While an input method has marked text, Return, arrows and Esc stay in the
+  field editor and run no palette action.
+- The takeover has no text field; its search button only opens the palette.
+- Group failures are announced and read, each with its own Try again.
+
 ## Motion, contrast and type
 
 - Reduce Motion turns slides and pops into crossfades; no looping or ambient
@@ -199,6 +229,7 @@ Fill in for each smoke:
 | History | | | | | |
 | History navigation | | | | | |
 | Charts | | | | | |
+| Search palette | | | | | |
 | Settings | | | | | |
 | HUD | | | | | |
 

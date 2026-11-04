@@ -83,6 +83,7 @@ extension TracklogWidget {
                 pausedUntil: state.pausedUntil,
                 hasTrack: state.nowPlaying != nil,
                 includesListenControls: true,
+                includesPalette: true,
             )
         } label: {
             Image(systemName: "ellipsis")

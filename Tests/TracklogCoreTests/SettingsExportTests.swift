@@ -1,3 +1,4 @@
+// swiftlint:disable type_body_length
 import Foundation
 import Testing
 @testable import TracklogCore
@@ -160,6 +161,7 @@ struct SettingsExportTests: CaptureTestHelpers {
         #expect(Set(object.keys) == ["version", "settings", "apps", "simple_edits", "blocks"])
         let settingsObject = try #require(object["settings"] as? [String: Any])
         #expect(Set(settingsObject.keys) == ["scrobbling_enabled", "now_playing_enabled", "minimum_duration"])
+        #expect(settingsObject["search_template"] == nil)
         let firstEdit = try #require((object["simple_edits"] as? [[String: Any]])?.first)
         #expect(Set(firstEdit.keys) == ["match", "replacement"])
         #expect(Set((firstEdit["match"] as? [String: Any])?.keys.map(\.self) ?? [])
@@ -273,6 +275,60 @@ struct SettingsExportTests: CaptureTestHelpers {
         #expect(decoded.simpleEdits.isEmpty)
         #expect(decoded.blocks.isEmpty)
     }
+
+    @Test func anExportCarriesTheSearchTemplate() async throws {
+        let (database, store) = try await seededStore(credentials: MemoryCredentialStore())
+        defer { withExtendedLifetime(database) {} }
+        let raw = "https://music.example/search?q={query}"
+        let runtime = CaptureRuntime(
+            clock: FakeClock(base),
+            source: ReplayedNowPlaying(),
+            store: store,
+            allowlist: store,
+            edits: store,
+            blocks: store,
+            settings: settings(),
+            playbackTemplate: SearchTemplate.parseOrNil(raw),
+        )
+
+        let export = try await runtime.makeSettingsExport()
+        #expect(export.settings.searchTemplate == raw)
+
+        let object = try #require(try JSONSerialization.jsonObject(with: export.encoded()) as? [String: Any])
+        let settingsObject = try #require(object["settings"] as? [String: Any])
+        #expect(settingsObject["search_template"] as? String == raw)
+    }
+
+    @Test func anOlderExportWithoutTheTemplateStillDecodes() throws {
+        let data = Data(
+            #"""
+            {"version":1,"settings":{"scrobbling_enabled":true,"now_playing_enabled":true,
+            "minimum_duration":30},"apps":[],"simple_edits":[],"blocks":[]}
+            """#.utf8,
+        )
+
+        let export = try SettingsExport.decode(data)
+        #expect(export.settings.searchTemplate == nil)
+        #expect(export.settings.minimumDuration == 30)
+    }
+
+    @Test func aSearchTemplateRoundTripsAsAnOptionalSetting() throws {
+        let raw = "https://music.example/search?q={query}"
+        let export = SettingsExport(
+            settings: SettingsExportSettings(
+                scrobblingEnabled: true,
+                nowPlayingEnabled: true,
+                minimumDuration: 30,
+                searchTemplate: raw,
+            ),
+            apps: [],
+            simpleEdits: [],
+            blocks: [],
+        )
+
+        let decoded = try SettingsExport.decode(export.encoded())
+        #expect(decoded.settings.searchTemplate == raw)
+    }
 }
 
 private actor FailingSimpleEditStore: SimpleEditStore {
@@ -288,3 +344,5 @@ private actor FailingSimpleEditStore: SimpleEditStore {
         throw DatabaseError.unavailable("the edits table is unavailable")
     }
 }
+
+// swiftlint:enable type_body_length

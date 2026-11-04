@@ -12,8 +12,16 @@ struct TracklogMenuItems: View {
     let pausedUntil: Date?
     let hasTrack: Bool
     let includesListenControls: Bool
+    var includesPalette = false
 
     var body: some View {
+        if includesPalette {
+            Button("Search and play…") {
+                droplet.openSearchPalette()
+            }
+            Divider()
+        }
+
         if includesListenControls {
             if status.canUndo {
                 Button("Undo cancel") {

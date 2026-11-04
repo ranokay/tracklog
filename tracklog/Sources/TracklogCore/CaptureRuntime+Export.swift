@@ -48,6 +48,7 @@ public extension CaptureRuntime {
             apps: apps,
             edits: edits,
             blocks: blocks,
+            searchTemplate: state.playbackTemplate?.rawValue,
         )
     }
 }

@@ -70,5 +70,6 @@ public extension TracklogDroplet {
         runtime?.charts?.hide()
         runtime?.resetHistoryNavigation()
         state.setPendingListExpanded(false)
+        state.setSearchRefusal(nil)
     }
 }

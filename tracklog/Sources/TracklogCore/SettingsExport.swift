@@ -39,9 +39,10 @@ public struct SettingsExport: Codable, Equatable, Sendable {
         apps: [SeenApp],
         edits: [SimpleEditRule],
         blocks: [BlockRule],
+        searchTemplate: String? = nil,
     ) {
         self.init(
-            settings: SettingsExportSettings(settings),
+            settings: SettingsExportSettings(settings, searchTemplate: searchTemplate),
             apps: apps.map(SettingsExportApp.init),
             simpleEdits: edits.map(SettingsExportSimpleEdit.init),
             blocks: blocks.map(SettingsExportBlock.init),
@@ -68,28 +69,34 @@ public struct SettingsExport: Codable, Equatable, Sendable {
     }
 }
 
-/// The three durable capture switches. The pause is excluded: it references
-/// this session, not a portable preference.
+/// The three durable capture switches plus the optional search-and-play
+/// template. The pause is excluded: it references this session, not a portable
+/// preference. The template is additive: an export without the key still
+/// decodes, and a nil template is omitted from a new document.
 public struct SettingsExportSettings: Codable, Equatable, Sendable {
     public let scrobblingEnabled: Bool
     public let nowPlayingEnabled: Bool
     public let minimumDuration: TimeInterval
+    public let searchTemplate: String?
 
     public init(
         scrobblingEnabled: Bool,
         nowPlayingEnabled: Bool,
         minimumDuration: TimeInterval,
+        searchTemplate: String? = nil,
     ) {
         self.scrobblingEnabled = scrobblingEnabled
         self.nowPlayingEnabled = nowPlayingEnabled
         self.minimumDuration = minimumDuration
+        self.searchTemplate = searchTemplate
     }
 
-    init(_ settings: CaptureSettings) {
+    init(_ settings: CaptureSettings, searchTemplate: String? = nil) {
         self.init(
             scrobblingEnabled: settings.scrobblingEnabled,
             nowPlayingEnabled: settings.nowPlayingEnabled,
             minimumDuration: settings.minimumDuration,
+            searchTemplate: searchTemplate,
         )
     }
 
@@ -97,6 +104,7 @@ public struct SettingsExportSettings: Codable, Equatable, Sendable {
         case scrobblingEnabled = "scrobbling_enabled"
         case nowPlayingEnabled = "now_playing_enabled"
         case minimumDuration = "minimum_duration"
+        case searchTemplate = "search_template"
     }
 }
 

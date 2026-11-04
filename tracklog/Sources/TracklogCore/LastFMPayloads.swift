@@ -116,6 +116,104 @@ struct LastFMTopTracksValue: Decodable {
     let track: LastFMChartEntryList?
 }
 
+// MARK: - Search
+
+struct LastFMArtistMatchValue: Decodable {
+    let name: String?
+    let url: String?
+    let mbid: String?
+}
+
+struct LastFMAlbumMatchValue: Decodable {
+    let name: String?
+    let artist: String?
+    let url: String?
+    let mbid: String?
+}
+
+struct LastFMTrackMatchValue: Decodable {
+    let name: String?
+    let artist: String?
+    let url: String?
+    let mbid: String?
+}
+
+struct LastFMLovedTrackValue: Decodable {
+    let name: String?
+    let artist: LastFMChartArtistValue?
+    let url: String?
+    let mbid: String?
+}
+
+/// Last.fm returns a single match as an object and several as an array.
+struct LastFMList<Value: Decodable>: Decodable {
+    let items: [Value]
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let list = try? container.decode([Value].self) {
+            items = list
+        } else {
+            items = try [container.decode(Value.self)]
+        }
+    }
+}
+
+struct LastFMArtistSearchPayload: Decodable {
+    let results: LastFMArtistSearchResults?
+}
+
+struct LastFMArtistSearchResults: Decodable {
+    let artistmatches: LastFMArtistMatches?
+}
+
+struct LastFMArtistMatches: Decodable {
+    let artist: LastFMList<LastFMArtistMatchValue>?
+}
+
+struct LastFMAlbumSearchPayload: Decodable {
+    let results: LastFMAlbumSearchResults?
+}
+
+struct LastFMAlbumSearchResults: Decodable {
+    let albummatches: LastFMAlbumMatches?
+}
+
+struct LastFMAlbumMatches: Decodable {
+    let album: LastFMList<LastFMAlbumMatchValue>?
+}
+
+struct LastFMTrackSearchPayload: Decodable {
+    let results: LastFMTrackSearchResults?
+}
+
+struct LastFMTrackSearchResults: Decodable {
+    let trackmatches: LastFMTrackMatches?
+}
+
+struct LastFMTrackMatches: Decodable {
+    let track: LastFMList<LastFMTrackMatchValue>?
+}
+
+struct LastFMLovedTracksPayload: Decodable {
+    let lovedtracks: LastFMLovedTracksValue?
+}
+
+struct LastFMLovedTracksValue: Decodable {
+    let track: LastFMList<LastFMLovedTrackValue>?
+    let attr: LastFMPageAttr?
+
+    enum CodingKeys: String, CodingKey {
+        case track
+        case attr = "@attr"
+    }
+}
+
+struct LastFMPageAttr: Decodable {
+    let page: LastFMFlexibleInt?
+    let totalPages: LastFMFlexibleInt?
+}
+
 struct ScrobblePayload: Decodable {
     let scrobbles: ScrobblesValue?
 }

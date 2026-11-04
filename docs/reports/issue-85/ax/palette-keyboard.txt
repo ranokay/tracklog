@@ -1,0 +1,49 @@
+# AX readout — Search palette, keyboard walk
+
+Fixtures:
+- `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_PALETTE=normal` for the
+  selection and group walk.
+- `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_PALETTE=loved-held
+  TRACKLOG_HARNESS_OPEN_REFUSED=1` for the held-Loved case.
+
+The field stayed focused throughout.
+
+## Automatic selection and held Loved
+
+`loved-held` returns Artists, Albums and Tracks immediately and holds Loved in
+loading. As soon as Artists has a row, the first result row (Blondie) is
+selected automatically; the headless fixture then runs the primary action
+while Loved is still loading.
+
+- The primary action was refused; the panel closed and reopened with the
+  inline notice.
+- `Artists` still read `Expanded. 10 results`, so Return had acted on the
+  selected row, not on the Artists header.
+- `Loved` stayed a busy group; the reopened panel preserved the query and the
+  loading state.
+- Screenshot: `palette-loved-held-return.png`.
+
+This replaces the earlier walk where the first Return collapsed Artists: with
+results present, automatic selection is a result row, never a header.
+
+## Group and Show-more walk (`normal`)
+
+1. On open the first row `Blondie` is selected and announced once. The field
+   keeps focus.
+2. `down × 5` from Blondie reaches `Show more artists`; `return` expands the
+   group from five to ten rows and moves the selection to the first newly
+   visible row (Bloc).
+3. `up` from the first row reaches the `Artists` header; `return` collapses it,
+   and the header value changes from `Expanded. 10 results` to `Collapsed`.
+   Headers and Show more rows are reached only through Up/Down.
+4. `escape` with `blo` in the field: the field became empty, the panel stayed
+   open and showed the empty prompt.
+5. `escape` again: the panel was removed from the window list.
+6. A foreground click on the harness window (outside the panel) closed the
+   panel.
+
+## Input-method rule
+
+`PaletteKeyRouterTests.aMarkedInputMethodTextKeepsEveryPaletteKeyInTheFieldEditor`
+proves Return, keypad Enter, arrows and Escape pass through while marked text
+is present. A live IME run was not performed.

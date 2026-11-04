@@ -137,6 +137,7 @@ private extension CaptureRuntime {
         // warning even though the effective pair did not change.
         clearLastFMAppCredentialProblem()
         await loadLastFMAppCredentials()
+        catalogueSearch?.credentialsChanged()
 
         guard changed || lastFMInvalidationPending else { return }
         do {

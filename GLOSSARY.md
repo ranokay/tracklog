@@ -103,3 +103,15 @@ The cover shown with the current track and with each listen in History. It comes
 ## Neutral sleeve
 
 The stand-in drawn when a listen has no artwork, the lookup failed, or the track came through Automation. Its note glyph and weight are derived from the track identity, so the same track always gets the same sleeve and two tracks do not look accidentally identical.
+
+## Catalogue search
+
+The uncached Last.fm-only read behind the palette: an artist, album or track search, plus the loved tracks of the current Last.fm connection. It needs the app pair, not a user session, and never reads or caches local history.
+
+## Palette
+
+The droplet-owned floating search panel opened from the takeover's section bar, the shelf overflow or the rebindable shortcut. It is the only typed surface outside Settings and closes before any Settings page opens.
+
+## Loved track
+
+A track the account behind the current Last.fm connection has marked as loved. Loved results are account-scoped and explain when that connection is not Last.fm.

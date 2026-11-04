@@ -33,6 +33,10 @@ public final class CaptureRuntime {
     /// history or no credential store exists, which is only a test/harness
     /// composition.
     public let charts: ChartReadModel?
+    /// The palette's one catalogue read model. Nil when the composition has no
+    /// catalogue adapter (only a test or a transport-less harness).
+    public let catalogueSearch: CatalogueSearchReadModel?
+    let persistPlaybackTemplate: (@MainActor (String?) -> Void)?
 
     var started = false
     /// Identifies the start that owns `started`, so a cancelled older start
@@ -99,6 +103,7 @@ public final class CaptureRuntime {
         blocks: (any BlockStore)? = nil,
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
+        catalogueClients: [any CatalogueSearching] = [],
         compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
@@ -116,6 +121,9 @@ public final class CaptureRuntime {
         chartSelection: ChartSelection = .standard,
         persistChartSelection: (@MainActor (ChartSelection) -> Void)? = nil,
         chartCalendar: @escaping @MainActor () -> Calendar = { ChartCalendar.current },
+        playbackTemplate: SearchTemplate? = nil,
+        persistPlaybackTemplate: (@MainActor (String?) -> Void)? = nil,
+        catalogueSearchTimeout: TimeInterval = CatalogueSearchReadModel.defaultTimeout,
     ) {
         self.state = state
         self.clock = clock
@@ -191,6 +199,8 @@ public final class CaptureRuntime {
         state.lastFMCompiledCredentialsPresent = compiledLastFMAppCredentials.isConfigured
         state.lastFMOverridePresent = false
         state.mediaStatus = source.mediaStatus
+        state.playbackTemplate = playbackTemplate
+        self.persistPlaybackTemplate = persistPlaybackTemplate
 
         if let chartStore = store as? any ChartStore, let credentials {
             charts = ChartReadModel(
@@ -208,6 +218,17 @@ public final class CaptureRuntime {
             charts = nil
         }
 
+        if let catalogueClient = (serviceAdapters.compactMap { $0 as? any CatalogueSearching } + catalogueClients).first {
+            catalogueSearch = CatalogueSearchReadModel(
+                state: state,
+                clock: clock,
+                client: catalogueClient,
+                timeout: catalogueSearchTimeout,
+            )
+        } else {
+            catalogueSearch = nil
+        }
+
         wireOutboxCallbacks()
     }
 
@@ -222,6 +243,7 @@ public final class CaptureRuntime {
         settings: CaptureSettings = CaptureSettings(),
         credentials: (any CredentialStore)? = nil,
         serviceAdapters: [any ServiceAdapter] = [],
+        catalogueClients: [any CatalogueSearching] = [],
         compiledLastFMAppCredentials: LastFMAppCredentials = .compiled,
         connectionLog: (@MainActor (ConnectionEvent) -> Void)? = nil,
         deliveryLog: (@MainActor (DeliveryEvent) -> Void)? = nil,
@@ -237,6 +259,9 @@ public final class CaptureRuntime {
         chartSelection: ChartSelection = .standard,
         persistChartSelection: (@MainActor (ChartSelection) -> Void)? = nil,
         chartCalendar: @escaping @MainActor () -> Calendar = { ChartCalendar.current },
+        playbackTemplate: SearchTemplate? = nil,
+        persistPlaybackTemplate: (@MainActor (String?) -> Void)? = nil,
+        catalogueSearchTimeout: TimeInterval = CatalogueSearchReadModel.defaultTimeout,
     ) -> CaptureRuntime {
         var store: SQLiteListenStore?
         var failure: CaptureFailure?
@@ -260,6 +285,7 @@ public final class CaptureRuntime {
             blocks: store,
             credentials: credentials,
             serviceAdapters: serviceAdapters,
+            catalogueClients: catalogueClients,
             compiledLastFMAppCredentials: compiledLastFMAppCredentials,
             connectionLog: connectionLog,
             deliveryLog: deliveryLog,
@@ -277,6 +303,9 @@ public final class CaptureRuntime {
             chartSelection: chartSelection,
             persistChartSelection: persistChartSelection,
             chartCalendar: chartCalendar,
+            playbackTemplate: playbackTemplate,
+            persistPlaybackTemplate: persistPlaybackTemplate,
+            catalogueSearchTimeout: catalogueSearchTimeout,
         )
     }
 
@@ -371,6 +400,7 @@ extension CaptureRuntime {
         let generation = startGeneration
         state.mediaStatus = source.mediaStatus
         charts?.activate()
+        catalogueSearch?.activate()
         clearExpiredPauseOnActivation()
 
         if let store {

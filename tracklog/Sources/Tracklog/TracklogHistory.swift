@@ -57,6 +57,7 @@ extension TracklogDroplet: ExpandedSurfaceProviding, ExpandedSurfaceHosting {
         // A host dismissal returns the next presentation to History. New
         // explicit Charts requests set the section again after this callback.
         state.setTakeoverSection(.history)
+        state.setSearchRefusal(nil)
         // The view owns only transient scroll state; the next presentation is
         // a fresh view that reloads the first page.
     }

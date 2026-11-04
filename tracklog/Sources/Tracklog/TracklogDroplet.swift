@@ -19,6 +19,7 @@ public final class TracklogPrincipal: NSObject, DropletPrincipal {
 
 /// Tracklog.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class TracklogDroplet: NSObject, Droplet {
     /// Must equal `DroppyDropletID` in the bundle's Info.plist and `id` in
     /// droplet.json. The loader refuses the bundle if the three disagree.
@@ -49,6 +50,8 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// event replaces it before the host's priority bands decide, and the
     /// announcement fires only after the host accepts the presentation.
     var hudSession: HUDHostSession?
+    /// The search palette's one panel. Lazy because it needs the droplet.
+    lazy var searchPaletteController = TracklogSearchPaletteController(droplet: self)
 
     /// Whether the droplet can start a Libre.fm link at all. The harness has
     /// no transport, so its pages say so instead of offering a dead button.
@@ -69,10 +72,21 @@ public final class TracklogDroplet: NSObject, Droplet {
     var exportPanel: NSSavePanel?
     var exportAlert: NSAlert?
 
+    // swiftlint:disable:next function_body_length
     public func activate(host: DropletHost) throws {
         self.host = host
 
         let isHarness = host.environment.isHarness
+        if !isHarness {
+            // No default chord: the user rebinds it on Droppy's Shortcuts page.
+            host.shortcuts.register(
+                id: "tracklog.search-palette",
+                title: "Search and play",
+                defaultShortcut: nil,
+            ) { [weak self] in
+                self?.openSearchPalette()
+            }
+        }
         let hudSession = HUDHostSession(
             host: TracklogHUDHost(droplet: self),
             announce: { presentation in
@@ -138,6 +152,9 @@ public final class TracklogDroplet: NSObject, Droplet {
                     state.setTakeoverSection(.charts)
                 } else {
                     await HarnessHistoryDemo.show(on: runtime)
+                }
+                if let paletteFixture = HarnessPaletteFixture.selected {
+                    await HarnessPaletteDemo.show(paletteFixture, on: self)
                 }
                 // The HUD page renders nothing until the droplet presents, so
                 // the shot needs one deterministic card. It goes through the

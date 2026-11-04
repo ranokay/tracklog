@@ -149,6 +149,14 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var takeoverSection: TakeoverSection = .history
     /// The one Core charts read model's published state.
     @Published public internal(set) var chartState = ChartViewState(selection: .standard)
+    /// The validated URL template used by search and play. Nil when none is
+    /// configured; no built-in default.
+    @Published public internal(set) var playbackTemplate: SearchTemplate?
+    /// The palette's published search state. Search is never cached.
+    @Published public internal(set) var catalogueSearch = CatalogueSearchState()
+    /// A refused play or Settings handoff from a takeover row action. Shown by
+    /// the takeover's refusal bar and cleared when it is dismissed.
+    @Published public internal(set) var searchRefusal: String?
 
     public var pendingCount: Int {
         pendingQueue.count
@@ -214,6 +222,10 @@ public final class TracklogAppState: ObservableObject {
 
     public func setHistorySettingsUnavailable(_ unavailable: Bool) {
         historySettingsUnavailable = unavailable
+    }
+
+    public func setSearchRefusal(_ message: String?) {
+        searchRefusal = message
     }
 
     public func togglePendingList() {

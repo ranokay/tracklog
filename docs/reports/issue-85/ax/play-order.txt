@@ -1,0 +1,43 @@
+# Code-read evidence — play order, issue #85
+
+`Docs/DroppyKit/Launchers.md` sets the order: close the panel at once, then run
+the action. The code follows that order for both row actions.
+
+## Primary action (Return on a result row)
+
+1. `TracklogSearchPalette.activate(.row(row))` calls
+   `droplet.playPaletteRow(row)` and returns without touching focus or the
+   notice.
+2. `TracklogDroplet.playPaletteRow` calls
+   `searchPaletteController.close(endingSearch: false)` first.
+3. `TracklogSearchPaletteController.close` removes the local key monitor and
+   the resign-key/app observers, calls `DroppyPanelActivation.finish()`, then
+   `panel.orderOut(nil)` and clears the controller. The search session is
+   deliberately left open.
+4. Only then does `SearchPlayback.performPrimary` call the injected opener,
+   which is `host.workspace.open`.
+5. `.opened` calls `runtime.catalogueSearch.endSession()`.
+6. A refusal, a row with no page, or an empty query reopens the same session
+   with `searchPaletteController.open(reusingSession: true, notice: …)`. The
+   reopened view carries the inline notice.
+
+`DroppyPanelActivation.finish()` hands the foreground back to `returningTo`,
+the app the palette was summoned over. Because the open happens after
+`finish()`, the browser is not sent behind that app.
+
+## Command-Return
+
+`TracklogSearchPalette.commandActivateSelected` calls
+`droplet.openLastFMPageFromPalette(row)`, which uses the same close-first
+sequence and the same `.opened` / `.refusedPage` / `.noPage` outcomes.
+
+## Evidence
+
+- Harness `loved-held` with `TRACKLOG_HARNESS_OPEN_REFUSED=1`:
+  `palette-loved-held-return.png` shows the row action refused and the panel
+  reopened with the notice while Artists stays expanded.
+- Harness `failed-launch` with `TRACKLOG_HARNESS_OPEN_REFUSED=1`:
+  `palette-failed-launch.png` shows the same close/reopen path.
+- The real host foreground result is **not run**: the harness's
+  `DroppyPanelActivation.begin` returns nil, so the foreground handoff cannot be
+  observed there, and Droppy Playground was not installed.

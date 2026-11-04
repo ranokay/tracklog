@@ -157,6 +157,49 @@ struct HistoryDeleteBar: View {
     }
 }
 
+/// A Play action or Settings handoff from a takeover row was refused. It is
+/// the takeover's own refusal bar, not a HUD: the action happened here, so
+/// the explanation stays here until Dismiss.
+struct SearchRefusalBar: View {
+    @ObservedObject var state: TracklogAppState
+    let message: String
+    @Environment(\.colorSchemeContrast) private var colorContrast
+
+    var body: some View {
+        HStack(spacing: DroppySpacing.md) {
+            Image(systemName: "arrow.up.right.square")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: DroppySpacing.sm)
+            Button("Dismiss") {
+                state.setSearchRefusal(nil)
+            }
+            .buttonStyle(DroppyQuietButtonStyle(size: .small))
+        }
+        .padding(.horizontal, DroppySpacing.lg)
+        .padding(.vertical, DroppySpacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
+                .fill(AdaptiveColors.overlayAuto(0.08)),
+        )
+        .overlay {
+            if SurfaceContrast.isIncreased(colorContrast) {
+                RoundedRectangle(cornerRadius: DroppyRadius.ms, style: .continuous)
+                    .stroke(AdaptiveColors.contrastTintAuto.opacity(0.32), lineWidth: 1)
+            }
+        }
+        .padding(.horizontal, DroppySpacing.xl)
+        .padding(.bottom, DroppySpacing.xs)
+    }
+}
+
 /// The host refused to open the History settings page. Say so here rather
 /// than leaving the button looking broken; Settings itself is still reachable.
 struct HistorySettingsUnavailableBar: View {

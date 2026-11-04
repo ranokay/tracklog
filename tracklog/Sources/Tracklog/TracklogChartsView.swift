@@ -300,26 +300,44 @@ struct TracklogChartsView: View {
     private var rankedList: some View {
         let items = state.chartState.snapshot?.items ?? []
         let unit = state.chartState.snapshot?.countUnit ?? .listens
-        return ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(items) { item in
-                    ChartRankRow(
-                        item: item,
-                        type: state.chartState.selection.type,
-                        unit: unit,
-                        artwork: item.artworkHash.flatMap { state.artworkByHash[$0] },
-                        sourceLabel: sourceLabel,
-                        periodLabel: periodLabel,
-                    )
-                }
-                Text(ChartCopy.shownCount(items.count, type: state.chartState.selection.type))
-                    .font(.caption2)
-                    .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DroppySpacing.sm)
+        return ScrollView(.vertical) { LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(items) { item in
+                ChartRankRow(
+                    item: item,
+                    type: state.chartState.selection.type,
+                    unit: unit,
+                    artwork: item.artworkHash.flatMap { state.artworkByHash[$0] },
+                    sourceLabel: sourceLabel,
+                    periodLabel: periodLabel,
+                    onPlay: {
+                        droplet.searchAndPlay(
+                            query: chartPlaybackQuery(
+                                item,
+                                type: state.chartState.selection.type,
+                            ),
+                        )
+                    },
+                )
             }
+            Text(ChartCopy.shownCount(items.count, type: state.chartState.selection.type))
+                .font(.caption2)
+                .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DroppySpacing.sm)
+        }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Artists search by name; albums and tracks use the artist and the row
+    /// title. An empty subtitle (a local artist chart) falls back to the title.
+    private func chartPlaybackQuery(_ item: ChartItem, type: ChartType) -> String {
+        switch type {
+        case .artists:
+            CatalogueQuery.artist(item.title)
+        case .albums, .tracks:
+            CatalogueQuery.combined(item.subtitle, item.title)
+        }
     }
 
     private var loadingState: some View {
@@ -672,6 +690,7 @@ struct ChartRankRow: View {
     let artwork: Data?
     let sourceLabel: String
     let periodLabel: String
+    let onPlay: () -> Void
     @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
@@ -720,6 +739,12 @@ struct ChartRankRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityValue(Text(ChartCopy.rowAccessibilityValue(source: sourceLabel, period: periodLabel)))
+        .accessibilityAction(named: Text("Search and play")) {
+            onPlay()
+        }
+        .contextMenu {
+            Button("Search and play", action: onPlay)
+        }
         .overlay(alignment: .bottom) {
             if SurfaceContrast.isIncreased(colorContrast) {
                 SurfaceSeparator()

@@ -126,11 +126,23 @@ struct HistoryRow: View {
             .accessibilityLabel(rowLabel)
             .accessibilityValue(deliveryValue)
             .accessibilityHint(Text("Shows this track's history"))
+            .accessibilityAction(named: Text("Search and play")) {
+                droplet.searchAndPlay(
+                    title: listen.processed.title,
+                    artist: listen.processed.artist,
+                )
+            }
         } else {
             infoContent
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(rowLabel)
                 .accessibilityValue(deliveryValue)
+                .accessibilityAction(named: Text("Search and play")) {
+                    droplet.searchAndPlay(
+                        title: listen.processed.title,
+                        artist: listen.processed.artist,
+                    )
+                }
         }
     }
 
@@ -255,6 +267,12 @@ struct HistoryRow: View {
                     }
                 }
             }
+        }
+        Button("Search and play") {
+            droplet.searchAndPlay(
+                title: listen.processed.title,
+                artist: listen.processed.artist,
+            )
         }
         Section("History") {
             Button("Edit listen…") {
