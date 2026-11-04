@@ -113,7 +113,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, current: nil, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         #expect(harness.search.group(.artists)?.phase == .ready)
@@ -143,7 +143,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         )
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         for kind in CatalogueGroupKind.allCases {
@@ -174,7 +174,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         #expect(harness.search.group(.artists)?.phase == .failed(.appCredentials(.invalidKey)))
@@ -208,7 +208,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await transport.waitUntilEntered(4))
         #expect(await transport.maxConcurrentRequests() == 4)
         #expect(CatalogueSearchReadModel.resultsPerGroup == 10)
@@ -283,7 +283,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await transport.waitUntilEntered(2))
 
         model.updateQuery("hea")
@@ -322,7 +322,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await transport.waitUntilEntered(4))
         #expect(harness.search.isSearching)
 
@@ -338,7 +338,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
 
         model.activate()
         model.beginSession()
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         model.deactivate()
@@ -364,7 +364,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         #expect(harness.search.group(.artists)?.phase == .failed(.offline))
@@ -392,7 +392,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 0.15)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         #expect(harness.search.group(.artists)?.phase == .ready)
@@ -433,7 +433,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "heart")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "heart")
         #expect(await waitSettled(harness))
 
         let loved = try #require(harness.search.group(.loved))
@@ -448,12 +448,45 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(lovedRequests.allSatisfy { $0["limit"] == "200" })
     }
 
+    @Test func lovedReportsTheLimitEvenWithFewerThanTenMatches() async throws {
+        let transport = CatalogueTransport { parameters in
+            switch parameters["method"] {
+            case "artist.search":
+                return artistSearchResponse(oneArtist("Blondie"))
+            case "album.search":
+                return albumSearchResponse(oneAlbum("Parallel Lines", artist: "Blondie"))
+            case "track.search":
+                return trackSearchResponse(oneTrack("Heart of Glass", artist: "Blondie"))
+            default:
+                let page = Int(parameters["page"] ?? "1") ?? 1
+                return lovedTracksResponse(
+                    [(title: "Heart \(page)", artist: "Blondie", url: nil)],
+                    page: page,
+                    totalPages: 9,
+                )
+            }
+        }
+        let harness = try await makeHarness(transport: transport, timeout: 1)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "heart")
+        #expect(await waitSettled(harness))
+
+        let loved = try #require(harness.search.group(.loved))
+        #expect(loved.phase == .ready)
+        #expect(loved.rows.count == 5)
+        #expect(loved.detail?.contains("first 1,000 checked") == true)
+
+        let lovedRequests = await transport.parameters().filter { $0["method"] == "user.getlovedtracks" }
+        #expect(lovedRequests.compactMap { $0["page"] } == ["1", "2", "3", "4", "5"])
+    }
+
     @Test func lovedStopsWhenTheLastPageIsReached() async throws {
         let transport = lovedTransport(totalPages: 2)
         let harness = try await makeHarness(transport: transport, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "heart")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "heart")
         #expect(await waitSettled(harness))
 
         let loved = try #require(harness.search.group(.loved))
@@ -470,7 +503,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, current: .listenBrainz, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await waitSettled(harness))
 
         let loved = try #require(harness.search.group(.loved))
@@ -490,7 +523,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
             let harness = try await makeHarness(transport: transport, current: current, timeout: 1)
             let model = try harness.model
 
-            await speakDebounce(harness.clock, model, "blo")
+            await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
             #expect(await waitSettled(harness))
 
             let requests = await transport.requests
@@ -531,7 +564,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let harness = try await makeHarness(transport: transport, enabled: true, timeout: 1)
         let model = try harness.model
 
-        await speakDebounce(harness.clock, model, "blo")
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await transport.waitUntilEntered(1))
         #expect(harness.search.isSearching)
 

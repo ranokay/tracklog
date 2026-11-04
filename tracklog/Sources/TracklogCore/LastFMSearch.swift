@@ -50,7 +50,7 @@ public extension LastFMClient {
                 title: title,
                 subtitle: artist,
                 playbackQuery: CatalogueQuery.track(artist: artist, title: title),
-                pageURL: CatalogueURL.https(entry.url),
+                pageURL: CatalogueURL.httpsURL(from: entry.url),
             )
         }
         let currentPage = loved.attr?.page?.value ?? page
@@ -73,7 +73,7 @@ public extension LastFMClient {
                 title: title,
                 subtitle: "",
                 playbackQuery: CatalogueQuery.artist(title),
-                pageURL: CatalogueURL.https(entry.url),
+                pageURL: CatalogueURL.httpsURL(from: entry.url),
             )
         }
         return CataloguePage(rows: Array(rows.prefix(limit)), hasMore: rows.count > limit)
@@ -94,7 +94,7 @@ public extension LastFMClient {
                 title: title,
                 subtitle: artist,
                 playbackQuery: CatalogueQuery.album(artist: artist, album: title),
-                pageURL: CatalogueURL.https(entry.url),
+                pageURL: CatalogueURL.httpsURL(from: entry.url),
             )
         }
         return CataloguePage(rows: Array(rows.prefix(limit)), hasMore: rows.count > limit)
@@ -115,7 +115,7 @@ public extension LastFMClient {
                 title: title,
                 subtitle: artist,
                 playbackQuery: CatalogueQuery.track(artist: artist, title: title),
-                pageURL: CatalogueURL.https(entry.url),
+                pageURL: CatalogueURL.httpsURL(from: entry.url),
             )
         }
         return CataloguePage(rows: Array(rows.prefix(limit)), hasMore: rows.count > limit)
@@ -129,7 +129,7 @@ public extension LastFMClient {
 /// Service-supplied links are opened only when they normalise to a real https
 /// address. A row whose link fails this check has no Last.fm action.
 enum CatalogueURL {
-    static func https(_ raw: String?) -> URL? {
+    static func httpsURL(from raw: String?) -> URL? {
         guard let raw else { return nil }
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, var components = URLComponents(string: text) else { return nil }

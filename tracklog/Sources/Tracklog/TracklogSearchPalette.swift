@@ -228,7 +228,7 @@ struct TracklogSearchPalette: View {
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
             } else if state.catalogueSearch.isWaiting {
-                Text("Waiting for more characters")
+                Text("Waiting to search")
                     .font(.caption2)
                     .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
             } else if state.catalogueSearch.hasSearched {
@@ -645,31 +645,28 @@ struct TracklogSearchPalette: View {
 
     private func ensureSelection(preferRow: Bool = false) {
         let items = visibleItems
-        if preferRow, !userMovedSelection,
-           let firstRow = items.first(where: {
-               if case .row = $0 {
-                   true
-               } else {
-                   false
-               }
-           }) {
-            model.selectedID = firstRow.id
+        if preferRow, !userMovedSelection, let first = firstRow(in: items) {
+            model.selectedID = first.id
             return
         }
         if let selected = model.selectedID, items.contains(where: { $0.id == selected }) {
             return
         }
-        if preferRow, let firstRow = items.first(where: {
+        if preferRow, let first = firstRow(in: items) {
+            model.selectedID = first.id
+            return
+        }
+        model.selectedID = items.first?.id
+    }
+
+    private func firstRow(in items: [SearchPaletteItem]) -> SearchPaletteItem? {
+        items.first {
             if case .row = $0 {
                 true
             } else {
                 false
             }
-        }) {
-            model.selectedID = firstRow.id
-            return
         }
-        model.selectedID = items.first?.id
     }
 
     private func toggleGroup(_ kind: CatalogueGroupKind) {

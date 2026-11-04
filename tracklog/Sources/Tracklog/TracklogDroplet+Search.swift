@@ -19,10 +19,6 @@ extension TracklogDroplet {
         searchPaletteController.open()
     }
 
-    func closeSearchPalette() {
-        searchPaletteController.close()
-    }
-
     func paletteQueryChanged(_ text: String) {
         runtime?.catalogueSearch?.updateQuery(text)
     }
@@ -77,7 +73,7 @@ extension TracklogDroplet {
         switch outcome {
         case .opened, .openedSettings:
             state.setSearchRefusal(nil)
-        case .noPage, .noQuery, .refused, .settingsRefused:
+        case .noPage, .noQuery, .refused, .refusedPage, .settingsRefused:
             state.setSearchRefusal(outcome.failureMessage)
         }
     }
@@ -100,38 +96,29 @@ extension TracklogDroplet {
     /// The palette closes before Settings opens. A refused handoff reopens the
     /// same search session with an inline notice instead of leaving nothing.
     func openSearchSettingsFromPalette() {
-        let wasOpen = searchPaletteController.isOpen
-        searchPaletteController.close(endingSearch: false)
-        let opened = openSettingsPage(
-            tracklogSearchPageID,
+        handOffSettings(
+            pageID: tracklogSearchPageID,
             title: "Search and play",
-            dismissOnRefusal: false,
+            refusal: "Settings could not be opened here. Open Tracklog's Search settings from Droppy Settings.",
         )
-        if opened {
-            runtime?.catalogueSearch?.endSession()
-        } else if wasOpen {
-            searchPaletteController.open(
-                reusingSession: true,
-                notice: "Settings could not be opened here. Open Tracklog's Search settings from Droppy Settings.",
-            )
-        }
     }
 
     func openLastFMAppCredentialsFromPalette() {
+        handOffSettings(
+            pageID: tracklogLastFMAppCredentialsPageID,
+            title: "Last.fm app credentials",
+            refusal: "Settings could not be opened here. Open the Last.fm app credentials page from Droppy Settings.",
+        )
+    }
+
+    private func handOffSettings(pageID: String, title: String, refusal: String) {
         let wasOpen = searchPaletteController.isOpen
         searchPaletteController.close(endingSearch: false)
-        let opened = openSettingsPage(
-            tracklogLastFMAppCredentialsPageID,
-            title: "Last.fm app credentials",
-            dismissOnRefusal: false,
-        )
+        let opened = openSettingsPage(pageID, title: title, dismissOnRefusal: false)
         if opened {
             runtime?.catalogueSearch?.endSession()
         } else if wasOpen {
-            searchPaletteController.open(
-                reusingSession: true,
-                notice: "Settings could not be opened here. Open the Last.fm app credentials page from Droppy Settings.",
-            )
+            searchPaletteController.open(reusingSession: true, notice: refusal)
         }
     }
 }

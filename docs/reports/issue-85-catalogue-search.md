@@ -11,7 +11,7 @@
 The owner confirmed the palette and result interactions in [#85 comment 6625541675](https://github.com/ranokay/tracklog/issues/85#issuecomment-6625541675). This implementation follows that contract:
 
 - **Playback URL schemes.** Only `http` and `https` are rendered and opened. Every play goes through `host.workspace.open`; `NSWorkspace` is never used to bypass the host. The Settings page refuses any other scheme.
-- **One surface at a time.** Opening the palette from the takeover dismisses the takeover first, using the same `dismissTakeoverForSettings` path Settings uses. Opening Settings from the palette closes the palette first. A second summon closes the panel. Clicking outside closes it. One `close(reason:)` funnel removes the key monitor and observers, ends the search session, calls `DroppyPanelActivation.finish()`, orders the panel out and clears the controller; `deactivate()` uses the same funnel.
+- **One surface at a time.** Opening the palette from the takeover dismisses the takeover first, using the same `dismissTakeoverForSettings` path Settings uses. Opening Settings from the palette closes the palette first. A second summon closes the panel. Clicking outside closes it. One `close(endingSearch:)` funnel removes the key monitor and observers, ends the search session, calls `DroppyPanelActivation.finish()`, orders the panel out and clears the controller; `deactivate()` uses the same funnel.
 - **Opening paths.** A search button in the takeover's section bar, an item in the shelf overflow menu (palette opener only), and a rebindable `global-shortcuts` shortcut with no default chord. The panel is a droplet-owned 680 × 560 `NSPanel` clamped to the screen's visible frame, on `DroppyPanelSurface`, activated with `DroppyPanelActivation`. The `launcher` capability is not used.
 - **Loved results.** The Loved group filters the current connection's loved tracks when that connection is Last.fm, reading at most 5 pages of 200 per query. The group is labelled with the account (`Loved by <account>`) and says `first 1,000 checked` only when more pages remained. Otherwise it explains why the group is unavailable. It never appears as an empty group, and a user connection is not needed for catalogue reads.
 - **Keyboard and groups.** Groups are Artists, Albums, Tracks and Loved, five rows visible, collapsible, each with a Show more row. ↑/↓ move through group headers, result rows and Show more rows; Return toggles a header, expands Show more, or runs the primary action on a row. Esc clears the text first and closes only when the text is empty. The search field keeps focus; selection is announced. Collapsed and expanded state resets on every open.
@@ -65,12 +65,13 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | `oneGroupFailureLeavesTheOtherGroupsIntact` | A transport failure fails only Artists. |
 | `aTimedOutGroupFailsWithoutHoldingTheOthers` | A held group times out while the others finish; the race returns without waiting for the held request. |
 | `lovedReadsAtMostFivePagesAndSaysWhenTheLimitWasReached` | Five pages of 200, ten matching rows, account detail and `first 1,000 checked`. |
+| `lovedReportsTheLimitEvenWithFewerThanTenMatches` | Five pages with only one match each still say `first 1,000 checked`; the cap is decided by pages read, not by reaching ten rows. |
 | `lovedStopsWhenTheLastPageIsReached` | Two pages, no limit text. |
 | `lovedExplainsWhenTheCurrentConnectionIsNotLastFM` | ListenBrainz current: unavailable explanation, no loved request. |
 | `lastFMRequestsKeepTheirEndpointAndSessionKeyForLibreFMAndListenBrainz` | Endpoint and no `sk` under both other current connections. |
 | `aHeldSearchDoesNotBlockCaptureOrDelivery` | Held search; a listen persists and its delivery reaches delivered before the search is released. |
 | `aSetTemplatePlaysTheEncodedRowQuery`, `withoutATemplateThePaletteRowOpensItsLastFMPage`, `withoutATemplateTheStandalonePlayActionOpensSearchSettings` | Both primary behaviours and the Settings remedy. |
-| `aRefusedLaunchIsReportedAndNotSwallowed`, `aRefusedSettingsHandoffIsReported` | The controlled opener reports refused launches and refused Settings handoffs. |
+| `aRefusedLaunchIsReportedAndNotSwallowed`, `aRefusedLastFMPageIsReportedWithoutBlamingTheTemplate`, `aRefusedSettingsHandoffIsReported` | The controlled opener reports refused template launches, refused Last.fm page opens and refused Settings handoffs separately. |
 | `aRowWithoutAValidPageOffersNoLastFMAction` | No Last.fm action for a row whose service URL is invalid. |
 | `schemelessAndHTTPLinksBecomeHTTPS`, `otherSchemesHostlessAndUserInfoValuesAreRejected` | Service links normalise to https; other schemes, hostless values and userinfo are rejected. |
 | `aQueryIsEncodedWithRFC3986UnreservedCharacters`, `substitutionIsOnePassSoTypedPlaceholderTextStaysData` | Encoding and one-pass substitution. |
@@ -79,7 +80,7 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | settings export tests | Old export without the template still decodes; a template round-trips; runtime export carries the saved value. |
 | `savingPublishesAndPersistsOnlyAValidTemplate` | Valid save publishes/persists; invalid save changes nothing. |
 
-Full suite: **670 tests in 102 suites**, exit `0`.
+Full suite: **672 tests in 102 suites**, exit `0`.
 
 ## Gate
 
@@ -89,13 +90,9 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `56d3943f20d1fa0496a2bb9f7903c01680b9e833`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092018Z-31d3ec83f383.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092018Z-31d3ec83f383.log`
-  - Duration: 1055.2 seconds.
-  - `git_before` and `git_after` both report head `56d3943…`, empty porcelain status and the same tracked-content hash.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 306 files.
-- `swift test --package-path Tests`: 670 tests in 102 suites; 51 media tests in 7 suites.
+- Result and receipt: the final gate runs after the review fixes in this report; its receipt and exit code are recorded in the follow-up evidence commit. The earlier `56d3943` receipt was superseded when the loved cap, refused-page message and debounce label were corrected.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean.
+- `swift test --package-path Tests`: 672 tests in 102 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `search-refusal` and `search-settings`; every existing expanded surface now shows the section-bar search button.
@@ -162,7 +159,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Searc
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 670 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
+| Composition tests | Run | 672 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
 | Harness output | Run | Gate `search-refusal`, `search-settings`, existing expanded-surface states; interactive palette states and screenshots. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Shortcut in Droppy's Shortcuts page | **Not run** | The shortcut is registered with `defaultShortcut: nil`; the real host page was not opened. |

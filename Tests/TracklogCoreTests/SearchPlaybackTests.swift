@@ -107,6 +107,21 @@ struct SearchPlaybackTests {
         #expect(outcome.failureMessage?.contains("could not be opened") == true)
     }
 
+    @Test func aRefusedLastFMPageIsReportedWithoutBlamingTheTemplate() {
+        let spy = Spy()
+        spy.openResult = false
+        let action = playback(template: nil, spy: spy)
+
+        let outcome = action.performPrimary(row())
+
+        guard case .refusedPage = outcome else {
+            Issue.record("expected a refused Last.fm page, got \(outcome)")
+            return
+        }
+        #expect(outcome.failureMessage?.contains("Last.fm page") == true)
+        #expect(outcome.failureMessage?.contains("template") == false)
+    }
+
     @Test func aRowWithoutAValidPageOffersNoLastFMAction() {
         let action = playback(template: nil, spy: Spy())
         let noPage = row(page: nil)

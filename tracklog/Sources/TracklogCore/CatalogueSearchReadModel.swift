@@ -318,24 +318,24 @@ private extension CatalogueSearchReadModel {
 
         let result = await timed(seconds: timeout) { () -> (rows: [CatalogueRow], capped: Bool) in
             var matches: [CatalogueRow] = []
-            var page = 1
+            var pagesRead = 0
             var hasMore = false
-            while page <= lovedPagesPerQuery {
+            while pagesRead < lovedPagesPerQuery {
                 let read = try await client.lovedTracks(
                     account: connection.identity,
-                    page: page,
+                    page: pagesRead + 1,
                     limit: lovedPageSize,
                 )
+                pagesRead += 1
                 matches.append(contentsOf: read.rows.filter { matchesQuery($0, query: query) })
                 hasMore = read.hasMore
                 if !hasMore || matches.count >= resultsPerGroup {
                     break
                 }
-                page += 1
             }
             return (
                 Array(matches.prefix(resultsPerGroup)),
-                hasMore && page == lovedPagesPerQuery,
+                hasMore && pagesRead == lovedPagesPerQuery,
             )
         }
 

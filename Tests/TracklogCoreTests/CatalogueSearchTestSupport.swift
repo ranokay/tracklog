@@ -155,7 +155,7 @@ func catalogueWaitUntil(
 }
 
 @MainActor
-func speakDebounce(_ clock: FakeClock, _ model: CatalogueSearchReadModel, _ query: String) async {
+func updateQueryAndAdvanceDebounce(_ clock: FakeClock, _ model: CatalogueSearchReadModel, _ query: String) async {
     model.updateQuery(query)
     let deadline = ContinuousClock.now.advanced(by: .seconds(3))
     while clock.sleeperCount == 0, ContinuousClock.now < deadline {

@@ -8,6 +8,7 @@ public enum PlaybackOutcome: Equatable, Sendable {
     case noPage
     case noQuery
     case refused(URL)
+    case refusedPage(URL)
     case settingsRefused
 
     /// A sentence the caller can show as-is, or nil when the action worked.
@@ -21,6 +22,8 @@ public enum PlaybackOutcome: Equatable, Sendable {
             "There is nothing to search for."
         case .refused:
             "Search and play could not be opened. Check the URL template in Search settings."
+        case .refusedPage:
+            "The Last.fm page could not be opened. Try again, or open it in your browser."
         case .settingsRefused:
             "Settings could not be opened here. Open Tracklog's Search settings to set a playback URL."
         }
@@ -69,7 +72,7 @@ public struct SearchPlayback {
     /// Command-Return. The Last.fm page is the service's, never the template's.
     public func openLastFMPage(_ row: CatalogueRow) -> PlaybackOutcome {
         guard let url = row.pageURL else { return .noPage }
-        return open(url)
+        return openURL(url) ? .opened(url) : .refusedPage(url)
     }
 
     private func open(_ url: URL) -> PlaybackOutcome {
