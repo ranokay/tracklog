@@ -266,6 +266,22 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(await transport.requestCount() == firstCount * 2)
     }
 
+    @Test func changingAppCredentialsRefreshesEveryGroup() async throws {
+        let transport = standardTransport()
+        let harness = try await makeHarness(transport: transport, timeout: 1)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
+        #expect(await waitSettled(harness))
+        let firstCount = await transport.requestCount()
+        #expect(firstCount == 4)
+
+        model.credentialsChanged()
+        #expect(await waitSettled(harness))
+
+        #expect(await transport.requestCount() == firstCount * 2)
+    }
+
     // MARK: - Cancellation
 
     @Test func aNewQueryCancelsTheOldAndIgnoresLateReplies() async throws {
@@ -637,12 +653,25 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
         #expect(await transport.waitUntilEntered(1))
         #expect(harness.search.group(.loved)?.phase == .loading)
+        #expect(await catalogueWaitUntil {
+            harness.search.group(.artists)?.phase == .ready
+                && harness.search.group(.albums)?.phase == .ready
+                && harness.search.group(.tracks)?.phase == .ready
+        })
+        let initialRequests = await transport.requestCount()
+        #expect(initialRequests == 4)
+
+        // A snapshot for the same current account must not restart anything.
+        try await harness.runtime.setCurrentConnection(lastFM.id)
+        await turnMainActor(20)
+        #expect(await transport.requestCount() == initialRequests)
 
         try await harness.runtime.setCurrentConnection(listenBrainz.id)
         #expect(await catalogueWaitUntil {
             harness.search.group(.loved)?.phase == .unavailable && !harness.search.isSearching
         })
         #expect(harness.search.group(.loved)?.detail?.contains("ListenBrainz") == true)
+        #expect(await transport.requestCount() == initialRequests)
 
         await transport.release()
         await turnMainActor(50)
@@ -653,6 +682,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
             harness.search.group(.loved)?.phase == .ready && !harness.search.isSearching
         })
         #expect(harness.search.group(.loved)?.detail?.contains("listener") == true)
+        #expect(await transport.requestCount() == initialRequests + 1)
     }
 
     // MARK: - Isolation from other service roots

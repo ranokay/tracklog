@@ -50,6 +50,9 @@ public extension TracklogDroplet {
         lastFMAppCredentialsProvider = nil
         networkReachability?.stop()
         networkReachability = nil
+        // The host also releases registered shortcuts on deactivate; do it
+        // here as well so teardown does not depend on that host step.
+        host?.shortcuts.unregister(id: "tracklog.search-palette")
         runtime?.stop()
         runtime = nil
         hudSession?.deactivate()

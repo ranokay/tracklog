@@ -22,8 +22,11 @@ public final class CatalogueSearchReadModel {
     private var isSessionOpen = false
     private var generation = 0
     private var debounceTask: Task<Void, Never>?
-    private var groupTasks: [Task<Void, Never>] = []
+    private var groupTasks: [CatalogueGroupKind: Task<Void, Never>] = [:]
+    private var groupTokens: [CatalogueGroupKind: Int] = [:]
     private var completionTask: Task<Void, Never>?
+    private var completionToken = 0
+    private var lastConnectionKey: String?
 
     public init(
         state: TracklogAppState,
@@ -41,6 +44,7 @@ public final class CatalogueSearchReadModel {
 
     public func activate() {
         isActive = true
+        lastConnectionKey = Self.connectionKey(state.currentConnection)
     }
 
     public func deactivate() {
@@ -54,6 +58,7 @@ public final class CatalogueSearchReadModel {
         isSessionOpen = true
         cancelWork()
         generation += 1
+        lastConnectionKey = Self.connectionKey(state.currentConnection)
         state.catalogueSearch = CatalogueSearchState()
     }
 
@@ -103,23 +108,39 @@ public final class CatalogueSearchReadModel {
         start(query: query, token: generation)
     }
 
-    /// The current connection changed while the palette is open. The loved
-    /// group is account-scoped, so the whole query is read again; the account
-    /// check in each answer's generation keeps the old rows from landing.
+    /// The current connection changed while the palette is open. Artist, album
+    /// and track results do not depend on the connection, so only Loved is
+    /// read again. A snapshot that does not move the current account key (a
+    /// pause, a same-identity re-auth, a non-current unlink or an outbox auth
+    /// event) restarts nothing.
     public func connectionsChanged() {
+        guard isActive, isSessionOpen else { return }
+        let key = Self.connectionKey(state.currentConnection)
+        guard key != lastConnectionKey else { return }
+        lastConnectionKey = key
+
+        let search = state.catalogueSearch
+        guard search.isSearching || search.hasSearched else { return }
+        let query = search.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= Self.minimumQueryLength else { return }
+        refreshLoved(query: query)
+    }
+
+    /// Last.fm's application pair changed. Every catalogue group is signed
+    /// with it, so the open query is read in full.
+    public func credentialsChanged() {
         guard isActive, isSessionOpen else { return }
         let search = state.catalogueSearch
         guard search.isWaiting || search.isSearching || search.hasSearched else { return }
         let query = search.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= Self.minimumQueryLength else { return }
-        cancelWork()
-        generation += 1
-        start(query: query, token: generation)
+        retry()
     }
 
     // MARK: - Reading
 
     private func start(query: String, token: Int) {
+        cancelGroups()
         var search = state.catalogueSearch
         search.isWaiting = false
         search.isSearching = true
@@ -131,34 +152,73 @@ public final class CatalogueSearchReadModel {
         }
         state.catalogueSearch = search
 
+        for kind in CatalogueGroupKind.allCases {
+            startGroup(kind, query: query, queryToken: token)
+        }
+        completionTask = makeCompletion(for: token)
+    }
+
+    private func refreshLoved(query: String) {
+        var search = state.catalogueSearch
+        if let index = search.groups.firstIndex(where: { $0.kind == .loved }) {
+            search.groups[index].phase = .loading
+            search.groups[index].rows = []
+            search.groups[index].detail = nil
+        }
+        search.isSearching = true
+        state.catalogueSearch = search
+
+        startGroup(.loved, query: query, queryToken: generation)
+        completionTask?.cancel()
+        completionTask = makeCompletion(for: generation)
+    }
+
+    private func startGroup(
+        _ kind: CatalogueGroupKind,
+        query: String,
+        queryToken: Int,
+    ) {
+        let groupToken = (groupTokens[kind] ?? 0) + 1
+        groupTokens[kind] = groupToken
+        groupTasks[kind]?.cancel()
+
         let connection = state.currentConnection
         let client = client
         let timeout = timeout
-        groupTasks = CatalogueGroupKind.allCases.map { kind in
-            Task { @MainActor [weak self] in
-                let read = await Self.read(
-                    kind: kind,
-                    client: client,
-                    connection: connection,
-                    query: query,
-                    timeout: timeout,
-                )
-                guard let self, !Task.isCancelled else { return }
-                apply(read, kind: kind, token: token)
-            }
-        }
-        let tasks = groupTasks
-        completionTask = Task { @MainActor [weak self] in
-            for task in tasks {
-                _ = await task.value
-            }
+        groupTasks[kind] = Task { @MainActor [weak self] in
+            let read = await Self.read(
+                kind: kind,
+                client: client,
+                connection: connection,
+                query: query,
+                timeout: timeout,
+            )
             guard let self, !Task.isCancelled else { return }
-            finish(token: token)
+            apply(read, kind: kind, queryToken: queryToken, groupToken: groupToken)
         }
     }
 
-    private func apply(_ read: GroupRead, kind: CatalogueGroupKind, token: Int) {
-        guard token == generation,
+    private func makeCompletion(for queryToken: Int) -> Task<Void, Never> {
+        completionToken += 1
+        let token = completionToken
+        let tasks = Array(groupTasks.values)
+        return Task { @MainActor [weak self] in
+            for task in tasks {
+                _ = await task.value
+            }
+            guard let self, !Task.isCancelled, completionToken == token else { return }
+            finish(queryToken: queryToken)
+        }
+    }
+
+    private func apply(
+        _ read: GroupRead,
+        kind: CatalogueGroupKind,
+        queryToken: Int,
+        groupToken: Int,
+    ) {
+        guard queryToken == generation,
+              groupTokens[kind] == groupToken,
               isActive,
               isSessionOpen,
               let index = state.catalogueSearch.groups.firstIndex(where: { $0.kind == kind })
@@ -185,8 +245,8 @@ public final class CatalogueSearchReadModel {
         state.catalogueSearch = search
     }
 
-    private func finish(token: Int) {
-        guard token == generation, isActive, isSessionOpen else { return }
+    private func finish(queryToken: Int) {
+        guard queryToken == generation, isActive, isSessionOpen else { return }
         var search = state.catalogueSearch
         search.isSearching = false
         state.catalogueSearch = search
@@ -199,15 +259,20 @@ public final class CatalogueSearchReadModel {
         state.catalogueSearch = CatalogueSearchState()
     }
 
+    private func cancelGroups() {
+        for task in groupTasks.values {
+            task.cancel()
+        }
+        groupTasks = [:]
+        completionToken += 1
+        completionTask?.cancel()
+        completionTask = nil
+    }
+
     private func cancelWork() {
         debounceTask?.cancel()
         debounceTask = nil
-        for task in groupTasks {
-            task.cancel()
-        }
-        groupTasks = []
-        completionTask?.cancel()
-        completionTask = nil
+        cancelGroups()
     }
 }
 
@@ -352,6 +417,19 @@ private extension CatalogueSearchReadModel {
         case let .failure(failure):
             return .failed(failure)
         }
+    }
+
+    /// The current account a Loved read is scoped to. The connection's auth
+    /// state is deliberately excluded: catalogue reads use the application
+    /// pair and never a listener session.
+    nonisolated static func connectionKey(_ connection: Connection?) -> String {
+        guard let connection else { return "none" }
+        return [
+            String(connection.id ?? -1),
+            connection.kind.rawValue,
+            connection.endpoint.description,
+            connection.identity,
+        ].joined(separator: "\u{1F}")
     }
 
     nonisolated static func unique(_ rows: [CatalogueRow]) -> [CatalogueRow] {
