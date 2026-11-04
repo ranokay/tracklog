@@ -41,6 +41,11 @@ Each state was a fresh harness launch with
 - `AXButton` `Open Services`.
 - No rows: the state never pretends the account has no loved tracks.
 
+The remaining required states — needs sign-in, rejected credential, paused
+with its reason bar, the per-row action failure and its Dismiss, refresh
+failure over rows, the rate-limit wait and metadata unavailable — are in
+`required-states.txt` with their harness fixtures.
+
 ## Unreachable in this build
 
 - A Pleroma connection has no `ServiceKind` yet (#97 owns additional service
@@ -48,7 +53,3 @@ Each state was a fresh harness launch with
   The read model still refuses any kind without a reader with the same
   unavailable treatment; the custom-root fixture above is the reachable
   unsupported path.
-- The `metadataUnavailable` state (a successful read whose every entry lacks
-  track metadata) is covered by composition tests; it has no harness fixture
-  because the synthetic Last.fm reader always supplies names and the
-  ListenBrainz fixture does not drive the harness window.

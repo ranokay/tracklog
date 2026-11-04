@@ -147,10 +147,20 @@ Expected structure:
   refresh-failure states are separate spoken states with their own actions.
   `Loved tracks unavailable` is not an empty listen; `No loved tracks` is only
   a successful empty read.
-- A rate limit says when to try again and does not offer an ignored retry.
+- A rate limit says when to try again and does not offer an ignored retry;
+  once the wait ends the refresh and the action become available again.
+- A first read rejected with 401/403 reads `<service> rejected the saved
+  credential. Sign in on Services.` while Services still shows the connection
+  signed in.
 - A row action the source connection did not confirm stays in the list and is
   explained by `Could not unlove “<title>” on <service>. The service did not
-  confirm the change.` with a separate Dismiss button.
+  confirm the change.` with a separate Dismiss button; Dismiss removes only the
+  notice.
+- A refresh failure over existing rows keeps them and reads `Could not refresh
+  loved tracks. Showing the last loaded list.` with the failure and Try again.
+- A successful read whose entries all lack metadata reads `Loved tracks need
+  metadata` with the omitted count; it never claims the account has no loved
+  tracks.
 - Unlove is offered only when the current connection is enabled, signed in and
   supports love. A paused, signed-out or unsupported connection says why in a
   separate notice.
