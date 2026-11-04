@@ -99,7 +99,7 @@ struct TracklogSettings: View {
                     .id(tracklogChartsPageID)
                     TracklogSettingsPageLink(droplet: droplet,
                                              "History",
-                                             subtitle: "Jump to a date and time in your local history.",
+                                             subtitle: "Jump to a date, or edit and delete a local listen.",
                                              page: tracklogHistoryPageID) {
                         SettingsLinkTile(systemImage: "clock.arrow.circlepath")
                     }

@@ -256,6 +256,14 @@ struct HistoryRow: View {
                 }
             }
         }
+        Section("History") {
+            Button("Edit listen…") {
+                droplet.requestListenEdit(listen)
+            }
+            Button("Delete listen…", role: .destructive) {
+                droplet.requestDeleteListen(listen)
+            }
+        }
         Button("Block") {
             droplet.quickBlock(listen)
         }

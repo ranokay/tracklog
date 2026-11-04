@@ -97,9 +97,13 @@ run_history_shots() {
 # The browse states #81 names: empty, large, a track snapshot, missing art,
 # a positioned jump with its newer action, the two failure scopes and the
 # refusal bar the harness's own Settings refusal produces.
-for fixture in empty large track track-missing-artwork jump track-error feed-error settings-refused; do
+for fixture in empty large track track-missing-artwork jump track-error feed-error settings-refused delete; do
     run_history_shots "$fixture"
 done
+
+echo "==> surface shots: history-edit"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_HISTORY=edit TRACKLOG_HARNESS_SETTINGS_PAGE=history-edit droppykit run -- --shots ./shots/history-edit --report ./shots/history-edit/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/history-edit/report.json tracklog/shots/history-edit
 
 echo "==> surface shots: history-settings"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=history droppykit run -- --shots ./shots/history-settings --report ./shots/history-settings/report.json --shot-height 1900)

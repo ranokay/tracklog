@@ -28,12 +28,22 @@ final class TracklogHUDHost: HUDHosting {
 @MainActor
 enum TracklogAccessibilityAnnouncer {
     static func post(_ presentation: HUDPresentation) {
+        announce(
+            presentation.spoken,
+            priority: announcementPriority(presentation.priority),
+        )
+    }
+
+    /// A direct announcement for a confirmation that is not a HUD card, such
+    /// as the History delete bar. It is posted on the action, never on a view
+    /// rebuild, so VoiceOver hears it once.
+    static func announce(_ text: String, priority: NSAccessibilityPriorityLevel = .high) {
         NSAccessibility.post(
             element: NSApplication.shared,
             notification: .announcementRequested,
             userInfo: [
-                .announcement: presentation.spoken,
-                .priority: announcementPriority(presentation.priority).rawValue,
+                .announcement: text,
+                .priority: priority.rawValue,
             ],
         )
     }

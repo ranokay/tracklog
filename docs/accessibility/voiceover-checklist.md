@@ -76,8 +76,19 @@ Expected structure:
 - Empty states are read.
 - `Jump to date` opens the History settings page and reads as a button. If the
   host refuses the page, the takeover says `Settings could not be opened here.
-  Open Tracklog's History settings to choose a date.` with a separate Dismiss
-  button; it never fails silently.
+  Open Tracklog's History settings to choose a date or edit a listen.` with a
+  separate Dismiss button; it never fails silently.
+- The `Actions for <title>` menu includes `Edit listen…` and `Delete listen…`.
+  Delete opens an inline confirmation; Edit dismisses to the Settings edit page.
+- The delete confirmation is one group read in order: `Delete "<title>"?`, the
+  local-removal sentence, one line per live delivery state, the Last.fm/local
+  footer, then separate `Cancel` and `Delete` buttons. Any waiting or retrying
+  delivery says `A send already under way may still arrive.` Cancel is the
+  default and Escape closes the confirmation without changing anything.
+- The Settings History edit page carries Track, Artist, Album and Album artist
+  fields, an off-by-default `Remember as rule` toggle, the per-service
+  consequences, and separate Cancel and Save buttons. Track and Artist cannot
+  be saved empty. A failed save stays on the page with its message.
 - A date-jumped window reads `Showing from <date and time>` with `Show newer
   listens` and `Newest` buttons. It keeps the requested window rather than
   resetting to the newest feed.
@@ -91,8 +102,10 @@ Checks:
 
 - Delivery state pairs a glyph with spoken words; colour is never the only
   signal.
-- The takeover is pointer-and-VoiceOver only. The droplet claims no keyboard
-  path until the menu bar extra lands. Record this as a known gap, not a pass.
+- The takeover is pointer-and-VoiceOver for traversal. Escape closes the delete
+  confirmation. Full Tab traversal of the takeover remains a known gap: record
+  `defaults read NSGlobalDomain AppleKeyboardUIMode` and leave the Tab-order
+  check not run when it is `0`.
 - Opening Settings dismisses the takeover.
 - No text field exists anywhere in the takeover.
 
@@ -124,8 +137,9 @@ Settings is the only typed surface and must be fully keyboard-operable.
 Checks:
 
 - Root `scrobbling` and the pages `services`, `edits`, `blocks`, `data`,
-  `about`, plus `apps`, `charts`, `history`, `lastfm-credentials`, `add-service` and per-connection
-  pages are reachable.
+  `about`, plus `apps`, `charts`, `history`, `history-edit`,
+  `lastfm-credentials`, `add-service` and per-connection pages are reachable.
+  `history-edit` is contextual: it is opened by a History row's Edit action.
 - Every control is reachable with Tab/Shift-Tab and operable with Space,
   Return or the arrow keys.
 - History holds one `Date and time` picker and `Show in History`. The picker is

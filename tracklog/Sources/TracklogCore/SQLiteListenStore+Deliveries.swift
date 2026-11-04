@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import SQLite3
 
@@ -36,6 +37,11 @@ extension SQLiteListenStore {
     }
 
     private func insertListenRow(_ listen: Listen, handle: OpaquePointer) throws -> Listen? {
+        // A play the listener deleted is not recorded again by a restart or a
+        // replayed feed. The tombstone stores only the one-way dedup hash.
+        if try isTombstoned(listen.dedupKey, handle: handle) {
+            return nil
+        }
         let statement = try prepare(
             handle,
             """
@@ -395,3 +401,5 @@ extension SQLiteListenStore {
             : Date(timeIntervalSince1970: sqlite3_column_double(statement, index))
     }
 }
+
+// swiftlint:enable file_length

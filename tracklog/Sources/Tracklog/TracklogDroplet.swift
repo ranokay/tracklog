@@ -277,6 +277,16 @@ public final class TracklogDroplet: NSObject, Droplet {
         dismissOnRefusal: Bool = true,
     ) -> Bool {
         guard let host else { return false }
+        // The harness provides its own Settings page host: it can render the
+        // droplet's nested page but refuses the host's page request. The
+        // history edit page needs the same harness route so the interactive
+        // edit flow can be inspected there. The date-jump page keeps its
+        // documented refusal state.
+        if host.environment.isHarness, id == tracklogHistoryEditPageID {
+            state.setHarnessSettingsPage(id)
+            dismissTakeoverForSettings()
+            return true
+        }
         if !dismissOnRefusal {
             guard host.workspace.openSettingsPage(id, title: title) else { return false }
             dismissTakeoverForSettings()

@@ -74,7 +74,19 @@ The authoritative record of listens on this Mac. Global and independent of conne
 
 ## Simple edit
 
-A saved metadata rule with four optional match fields and four optional replacements. An inactive match field is a wildcard; every active one must equal the listen's current value, case-insensitively and trimmed. Matching rules merge replacements field by field, most specific first and then newest first. An inactive replacement leaves the field alone; an empty album or album artist replacement clears it. Local history keeps the values each listen was captured with.
+A saved metadata rule with four optional match fields and four optional replacements. An inactive match field is a wildcard; every active one must equal the listen's current value, case-insensitively and trimmed. Matching rules merge replacements field by field, most specific first and then newest first. An inactive replacement leaves the field alone; an empty album or album artist replacement clears it. Local history keeps the values each listen was captured with until a listener explicitly edits that row. A simple edit applies to future plays; a one-off row edit is a local edit.
+
+## Local edit
+
+A one-off correction to one stored listen. It changes only the processed title, artist, album and album artist; the raw observation, stored identity, start time, artwork and duplicate key stay as captured. Title and artist remain required; album and album artist can be cleared. Unlike a simple edit, it does not create a rule unless the listener chooses remember as rule. It changes local history, local charts and track history only; it does not rewrite service history.
+
+## Remember as rule
+
+The optional part of a local edit that saves a simple edit matching every non-empty field of the listen's raw observation after sentinel cleanup. It replaces only the fields the one-off edit changed and applies to future plays only, never to existing history. It may revise the current in-flight scrobble through the normal simple-edit path. It is saved with the row edit in one transaction.
+
+## Delete tombstone
+
+A hidden one-way hash of a deleted listen's duplicate key, kept so the same play is not recorded again after a restart or replayed feed. It contains no readable track, artist, album or source metadata. It is not a history row, an export row or a chart count. A later play with a different start time is a repeat and remains capturable.
 
 ## Block
 

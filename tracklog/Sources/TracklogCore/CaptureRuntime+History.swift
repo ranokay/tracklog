@@ -133,6 +133,7 @@ extension CaptureRuntime {
 
     public func jumpHistory(to date: Date) async {
         guard started, let store else { return }
+        state.cancelDeleteListen()
         state.historyJumpInFlight = true
         defer { state.historyJumpInFlight = false }
         closeTrackHistory()
@@ -219,7 +220,10 @@ extension CaptureRuntime {
     /// runtime is the store's only writer, so every store change routes
     /// through `persist` and this reload. A second writer would need the store
     /// to publish changes.
-    func reloadVisibleHistory(in store: any ListenStore) async {
+    func reloadVisibleHistory(
+        in store: any ListenStore,
+        requiresScrobbling: Bool = true,
+    ) async {
         let limit = max(state.listens.count, historyPageSize)
         let request = nextHistoryRequest()
         do {
@@ -239,7 +243,7 @@ extension CaptureRuntime {
                 total: total,
                 request: request,
                 generation: startGeneration,
-                needsScrobbling: true,
+                needsScrobbling: requiresScrobbling,
                 hasMore: hasOlder,
             ) else { return }
             historyWindowStart = hasNewer ? listens.first.flatMap(ListenCursor.init) : nil
@@ -248,7 +252,7 @@ extension CaptureRuntime {
                 from: store,
                 request: request,
                 generation: startGeneration,
-                needsScrobbling: true,
+                needsScrobbling: requiresScrobbling,
             )
             await loadStoredArtwork(for: listens)
             await loadFeedback(for: listens.map(\.processed.identity))
@@ -256,7 +260,7 @@ extension CaptureRuntime {
             guard isCurrentHistoryRequest(
                 request,
                 startGeneration: startGeneration,
-                needsScrobbling: true,
+                needsScrobbling: requiresScrobbling,
             ) else { return }
             recordHistoryFailure(error)
         }
@@ -275,6 +279,7 @@ extension CaptureRuntime {
         state.historyJumpNotice = nil
         state.historyJumpInFlight = false
         state.historySettingsUnavailable = false
+        state.cancelDeleteListen()
         closeTrackHistory()
     }
 

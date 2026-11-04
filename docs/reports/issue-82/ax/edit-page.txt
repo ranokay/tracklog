@@ -1,0 +1,36 @@
+# AX readout — Settings edit page and edited row
+
+Fixture: `TRACKLOG_DEMO_STATE=playing`. Opened `Actions for Heart of Glass` →
+`Edit listen…`; the History takeover dismissed and the harness Settings pane
+showed the contextual page.
+
+## Edit page
+
+- `AXHeading` = `Edit listen`
+- `AXStaticText` = `Changes stay on this Mac. Last.fm history cannot be rewritten; Libre.fm and ListenBrainz are not changed by this update.`
+- `AXTextField` `Track` value `Heart of Glass`
+- `AXTextField` `Artist` value `Blondie`
+- `AXTextField` `Album` value `Parallel Lines`
+- `AXTextField` `Album artist` value empty
+- `AXCheckBox` `Remember as rule` value `0`
+- `AXStaticText` = `Delivered to ListenBrainz: that copy stays.`
+- `AXButton` `Cancel`
+- `AXButton` `Save` (disabled until a field changes)
+
+The run set `Album` to `Parallel Lines (Deluxe)`, toggled
+`Remember as rule` on, and pressed Return for the page's default Save action.
+The page closed and History returned with the corrected row.
+
+## Edited row
+
+The History feed reads:
+
+- `AXButton` label
+  `Heart of Glass, Blondie, Parallel Lines (Deluxe), 18:42`, value
+  `delivered to ListenBrainz`, help `Shows this track's history`.
+- The separate `AXMenuButton` is `Actions for Heart of Glass`.
+- The row kept its id, start time and delivered state; only the displayed
+  metadata changed.
+- The pinned now-playing strip's heart changed from `Loved` to `Not loved`:
+  the edited album is a new processed identity and the old feedback was not
+  migrated. That is the accepted feedback consequence.

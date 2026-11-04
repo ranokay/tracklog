@@ -1,0 +1,39 @@
+# AX readout — delete confirmation
+
+Fixture: `TRACKLOG_DEMO_STATE=playing`. Normal History; pending list expanded.
+Opened `Actions for Dreams` → `Delete listen…`.
+
+The bar reads in order, three identical surface copies:
+
+- `AXHeading` = `Delete “Dreams”?`
+- `AXStaticText` = `This listen will be removed from this Mac's history.`
+- `AXStaticText` = `Waiting for ListenBrainz: that delivery will be discarded. A send already under way may still arrive.`
+- `AXStaticText` = `Last.fm cannot rewrite history. Libre.fm and ListenBrainz are not changed by this update.`
+- `AXButton` `Cancel` with a separate press action and the Escape shortcut.
+- `AXButton` `Delete`, help `Removes this listen from this Mac's history.`
+
+The confirmation is a separate, non-modal bar. It does not auto-confirm.
+`Cancel` closed the bar and left the row and its pending delivery untouched.
+
+A second walk opened the same bar for `Once in a Lifetime` and pressed
+`Delete`:
+
+- The bar and the row disappeared.
+- The header changed from `6 listens` to `5 listens`.
+- The pending list no longer showed that listen's delivery.
+- `Delete` did not call a service; the row and its local delivery rows were
+  removed together.
+
+## Keyboard walk (normal History)
+
+- `Escape` with the bar open: passed. The bar closed; the row and its pending
+  delivery stayed.
+- `Return` with the bar open: passed with a focus caveat. The bar and row
+  stayed. Focus was the harness sidebar `Search` field, so this does not prove
+  Return on a focused Delete button; the Delete button has no default Return
+  binding.
+- `Tab`: not run. Twelve foreground Tab presses left the focused element at
+  `[2] AXTextField` (Search). `defaults read NSGlobalDomain
+  AppleKeyboardUIMode` returned `0` (Full Keyboard Access off), so the harness
+  cannot expose the Cancel-then-Delete Tab order. The key was delivered; the
+  focus order was unavailable.
