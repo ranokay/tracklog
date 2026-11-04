@@ -115,7 +115,7 @@ replace the feed, and capture continues.
 
 New tests use real temporary SQLite, `FakeClock`, replayed playback, the
 scripted ListenBrainz transport and the dedicated read connection. The
-focused suite is 17 tests in three suites.
+focused suite is 19 tests in four suites.
 
 | Test | Closes |
 | --- | --- |
@@ -125,7 +125,7 @@ focused suite is 17 tests in three suites.
 | `aMissingDayNamesTheDayAndShowsTheNextListen` | Empty day, after-newest, before-oldest notices. |
 | `anEmptyHistoryShowsNoJumpNotice` | Empty database has the ordinary empty state. |
 | `aCaptureDoesNotMoveAJumpedWindow` | Capture while browsing older history keeps the window; Newest restores the live top. |
-| `aFailedJumpKeepsTheLoadedFeed` | A failed jump read leaves the feed and reports history failure. |
+| `aFailedJumpKeepsTheLoadedFeed` | A failed jump read leaves the feed, reports history failure and keeps the one-shot request for the next open. |
 | `aPendingJumpSurvivesARefusedPresentationAndConsumesOnce` | Stopped runtime retains; started runtime consumes once; Newest clears. |
 | `aPendingJumpSurvivesANavigationResetButNotARestart` | Refused/interrupted presentation retention; restart clears. |
 | `trackHistoryShowsFullCountFirstListenAndPagesIndependently` | 150-track listens interleaved with 50 others; 50-row pages, full count, first date, feed untouched. |
@@ -135,6 +135,8 @@ focused suite is 17 tests in three suites.
 | `aTrackReadFailureStaysInTheTrackViewAndCaptureContinues` | Scoped failure, feed/global failures untouched, capture persists, retry recovers. |
 | `aCaptureWhileTrackHistoryIsOpenAppearsOnReload` | Snapshot semantics; reload has the new count, unchanged first date, no duplicate. |
 | `trackHistorySurvivesRelaunchAndRestartClearsNavigation` | Reopened SQLite has the same count/first/rows; stop clears track/jump/pending. |
+| `aCancelledLoadMoreLeavesTheViewReadyToRetry` | A load-more cancelled mid-scan clears `isLoading`; the retry uses the same cursor with no skipped or duplicate row. |
+| `aPickerMinuteStartIgnoresHiddenSeconds` | A picked minute carrying 37 hidden seconds positions at the 00:00:10 listen; the raw second value skips it. |
 | `aHeldTrackHistoryScanDoesNotBlockCapture` | Held read connection at row 64; capture still persists and now playing advances; reload sees the new row. |
 
 ### Observable acceptance map (#81)
@@ -158,12 +160,12 @@ Command:
 ```
 
 - Result and receipt: exit `0`, frozen gate `true`, clean before and after, at
-  head `c70fda0e258eb24fee415aa6fd931a3f44bcb189`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T053334Z-82a4394e0aeb.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T053334Z-82a4394e0aeb.log`
-  - Duration: 850.9 seconds.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 285 files.
-- `swift test --package-path Tests`: 624 tests in 95 suites; 51 media tests in 7 suites.
+  head `49677e231d607271d3b0bdc08bcab451e811ad8e`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T060735Z-ce17d61ee992.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T060735Z-ce17d61ee992.log`
+  - Duration: 857.0 seconds.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 286 files.
+- `swift test --package-path Tests`: 626 tests in 96 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64.
 - `droppykit validate`: `Ready to submit`.
 - Every harness report `verdict: ok`, `problems: []`, active activation, every declared surface provided.
@@ -198,6 +200,9 @@ Harness fixtures, playing unless noted:
 - Refusal: pressing `Jump to date` in the harness showed
   `Settings could not be opened here. Open Tracklog's History settings to
   choose a date.` with Dismiss.
+- Row menu: right-clicking a feed row or a track row opened the same
+  `Deliveries`/`Feedback`/`Block`/`Copy metadata` menu; the feed row remained
+  one `AXButton` with `AXPress`.
 
 ## Accessibility
 
@@ -230,7 +235,7 @@ container, not the button label. That keeps the row as one `AXButton` with
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 624 tests / 95 suites after the focused additions. These do not prove UI or runtime behaviour. |
+| Composition tests | Run | 626 tests / 96 suites after the focused additions. These do not prove UI or runtime behaviour. |
 | Harness output | Run | Empty, large, track, missing-art, jump, track-error, feed-error, refusal and Settings shots; interactive AX readouts. |
 | Real host load | **Not passed** | The droplet was not installed in Droppy Playground; no changes outside the repository. |
 | Live service qualification | **Not passed** | No live credentials or production writes; track history reads made no service request. |
