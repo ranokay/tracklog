@@ -2,7 +2,7 @@
 
 - Base: started from `8fb73ff7db105c817cb65c54100886e84f57d0b5` (`feat: build catalogue search and search-and-play (#85)`).
 - Branch: `feat/loved-list-current-connection`
-- Code head: `5bb0f2058f901e3d75e09c8e7e1ebafca662e511` (the gate receipt below is for this head; later commits are documentation and evidence only).
+- Code head: `d454635fe7d7b9ad1063c620b75ee9446da9259d` (tests and evidence for the F19 bounded-wait round; the last receipt-backed gate passed at `5bb0f20` and the owner runs the gate on this head).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 11 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -112,7 +112,7 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `5bb0f2058f901e3d75e09c8e7e1ebafca662e511`.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `5bb0f2058f901e3d75e09c8e7e1ebafca662e511`. This is the last gate run before the test-only F19 round; the owner runs the gate on the new head.
   - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T165810Z-62da6415aa9d.json`
   - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T165810Z-62da6415aa9d.log`
   - Duration: 1373.7 seconds.
@@ -137,16 +137,26 @@ only advance was `base + 1`. The logged order is in
 `test advances clock to 1000001.0`, `lookup recorded at 1000001.0`, then no
 feedback post.
 
-The two spacing tests now wait for the lookup itself before advancing, and
-advance two seconds past it. The whole Loved suite carries a one-minute
-`.timeLimit`, so a future stall fails the test rather than hanging the gate.
-The full Loved suite passed **25 consecutive runs** under the load of the two
-orphaned helpers from another worktree (about 149% CPU each); command, iteration
-count and transcript are in `docs/reports/issue-87/f19-25-runs.txt`. The delivery
-test helper's `DeliveryGate.waitUntilEntered` is now bounded at three seconds and
-returns a Bool; every existing caller asserts it, so a send that never enters is
-a failed test. The cause of the orphaned helper's send never entering was not
-established; that process belongs to another worktree and was left untouched.
+The two spacing tests now wait for the lookup itself, record a failed
+expectation and return without advancing if it does not arrive, and advance two
+seconds past it when it does. Every task await in the suite (`action`, `show`,
+`load`, `refresh`) uses a bounded completion wait: whichever finishes first, the
+task or the deadline, resumes the waiter, so a stuck task records a failure and
+the test returns without waiting for it. The temporary stall proof in
+`docs/reports/issue-87/f19-stall-proof.txt` shows a never-resumed task failing
+after 2.130 seconds and `swift test` exiting `1` in 6.13 seconds. A one-minute
+`.timeLimit` remains only as a secondary guard for unrelated waits; it cannot
+stop an unstructured task and is not credited with doing so.
+
+The Loved suite passed **25 consecutive runs** (37 tests each, all exit 0) after
+this change; per-iteration results are in
+`docs/reports/issue-87/f19-25-runs.txt`. The earlier 25-run under the two
+orphaned helpers' ~300% combined CPU is part of the round-4 evidence; those
+processes were stopped before this run. The delivery test helper's
+`DeliveryGate.waitUntilEntered` is bounded at three seconds and every existing
+caller asserts it, so a send that never enters is a failed test. The cause of the
+orphaned helper's send never entering was not established; that process belonged
+to another worktree and was left untouched.
 
 ## Native observations
 
@@ -213,7 +223,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Loved
 | Live service shape | Run (public, unauthenticated) | Libre.fm and ListenBrainz shape checks; no account names or rows retained. No authenticated Last.fm/Libre.fm/ListenBrainz smoke, because the run has no user credentials. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Settings handoff from Loved | **Not run** | The harness host refuses `openSettingsPage`; the button is wired but the real host page is not observed. |
-| Test stability | Run | 25 consecutive Loved suite runs under load, each exit 0; reproduction and bounded-wait evidence in `docs/reports/issue-87/f19-reproduction.txt` and `f19-25-runs.txt`. |
+| Test stability | Run | 25 consecutive Loved suite runs after the bounded-wait change, each exit 0; reproduction, stall proof and per-iteration results in `docs/reports/issue-87/f19-reproduction.txt`, `f19-stall-proof.txt` and `f19-25-runs.txt`. |
 | Audible VoiceOver | **Not run** | AX-tree inspection only. |
 
 No new package dependency, credential path, delivery route or database migration. The current-connection switcher, services, adapters and HUD were reused. The Loved list never claims a range-love total; the only counts are the rows currently loaded and the count of entries the service could not name. Last.fm/GNU FM loved rows carry no album, so reconciliation matches normalized title and artist and a row unlove clears every local identity for that pair; ListenBrainz rows also carry the service's release name. Unloving a Loved row fans out through the existing feedback policy, and a partial success leaves the row and names the source service.
