@@ -75,7 +75,7 @@ Command on the gate head:
 | `swift test --package-path Tests` | 607 tests in 92 suites; 51 media tests in 7 suites; 90 chart tests in 4 chart suites |
 | `droppykit build` | universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 |
 | `droppykit validate` | `Ready to submit` |
-| 29 harness report runs (4 base states + 25 chart states) | every report `verdict: ok`, `problems: []`, `activation.active: true`, `activation.error: null` |
+| 29 harness report runs (4 base states + 25 chart-related runs) | every report `verdict: ok`, `problems: []`, `activation.active: true`, `activation.error: null` |
 
 Chart states rendered and checked by the gate:
 
@@ -137,8 +137,8 @@ The checklist used is `docs/accessibility/voiceover-checklist.md`. AX-tree inspe
 | Saved rows after failed refresh | Passed (AX) | Interactive failed-saved refresh kept rows and `Saved 2 hr ago`. |
 | No text field in the takeover | Passed (AX) | The expanded surface contains buttons, menus and static text only; the only text field is the harness search outside the surface. |
 | Custom → Settings handoff | Not passed (host) | Harness Custom press was a no-op because the harness refuses `openSettingsPage`; `settings-charts.png` shows the destination page. The real Droppy Playground handoff was not run. |
-| Browse-only keyboard takeover | Known gap | The takeover remains pointer-and-VoiceOver only; no keyboard path is claimed. |
-| Audible VoiceOver speech | Not passed / blocked | Enabling VoiceOver or changing macOS accessibility settings was outside this run's authorization; no speech was captured. AX labels above are not audible evidence. |
+| Browse-only keyboard takeover | Unpassed (known gap) | The takeover remains pointer-and-VoiceOver only; no keyboard path is claimed. |
+| Audible VoiceOver speech | Unpassed / blocked | Enabling VoiceOver or changing macOS accessibility settings was outside this run's authorization; no speech was captured. AX labels above are not audible evidence. |
 
 ## Runtime isolation
 
