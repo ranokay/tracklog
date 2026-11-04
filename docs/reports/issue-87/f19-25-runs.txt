@@ -1,0 +1,27 @@
+# F19 — 25 consecutive Loved suite runs under load
+
+Command, run from the worktree root with the two orphaned
+`t3-15b81b49` helpers still spinning (PIDs 40494 and 47605, about 149% CPU
+each at the time):
+
+```sh
+for i in $(seq 1 25); do
+  echo "=== iteration $i ==="
+  swift test --package-path Tests --filter LovedBrowsingTests
+  echo "exit:$?"
+done
+```
+
+Result: 25 iterations, each `Test run with 37 tests in 1 suite passed` and
+`exit:0`. The per-iteration pass line is present 25 times; the `exit:0` count is
+25.
+
+The full transcript is at `/tmp/f19-25-runs.log` (196 KB, 2,101 lines). The
+orphaned helpers were left untouched, as instructed.
+
+The gate helper `DeliveryGate.waitUntilEntered` now has a three-second bound and
+returns a Bool; every existing caller asserts it, so a send that never enters
+records a test failure instead of spinning forever. The current run did not
+establish why the orphaned helper's send never entered: that process belongs to
+another worktree and was not inspected beyond the reviewer's sample. The
+bounded wait is the containment; the product delivery path was not changed.

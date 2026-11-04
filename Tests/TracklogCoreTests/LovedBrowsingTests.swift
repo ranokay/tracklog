@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import TracklogCore
 
-@Suite("Loved browsing", .serialized)
+@Suite("Loved browsing", .serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct LovedBrowsingTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
@@ -348,8 +348,10 @@ struct LovedBrowsingTests {
         await runtime.loved?.show()
         let row = try #require(runtime.state.lovedState.rows.first)
         let action = Task { await runtime.unloveLovedRow(row) }
+        // The lookup records its spacing timestamp before the POST. Wait for
+        // the lookup itself, then advance past any spacing it recorded.
         _ = await lovedWaitForRequests(transport, count: 3)
-        clock.advance(to: base.addingTimeInterval(1))
+        clock.advance(to: base.addingTimeInterval(2))
         let confirmed = await action.value
         #expect(confirmed)
         #expect(runtime.state.lovedState.rows.isEmpty)
@@ -414,8 +416,10 @@ struct LovedBrowsingTests {
         let row = try #require(runtime.state.lovedState.rows.first)
 
         let action = Task { await runtime.unloveLovedRow(row) }
-        _ = await lovedWaitForRequests(transport, count: 2)
-        clock.advance(to: base.addingTimeInterval(1))
+        // Wait for the lookup, not merely the Last.fm call: the lookup records
+        // the spacing timestamp the ListenBrainz POST will wait on.
+        _ = await lovedWaitForRequests(transport, count: 3)
+        clock.advance(to: base.addingTimeInterval(2))
         let confirmed = await action.value
         #expect(confirmed == false)
         #expect(runtime.state.lovedState.rows.count == 1)

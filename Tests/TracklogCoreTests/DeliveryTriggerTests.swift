@@ -103,7 +103,7 @@ struct DeliveryTriggerTests {
         )
 
         harness.outbox.activate()
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         harness.outbox.deactivate()
         harness.outbox.activate()
         await turnMainActor()
@@ -204,7 +204,7 @@ struct DeliveryTriggerTests {
         }
 
         harness.outbox.activate()
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         harness.outbox.suspend(connectionID: connection.id ?? -1)
         harness.outbox.resume(connectionID: connection.id ?? -1)
         await gate.release()

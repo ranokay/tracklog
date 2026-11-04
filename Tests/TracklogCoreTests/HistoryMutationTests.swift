@@ -356,7 +356,7 @@ struct HistoryMutationTests {
         let clock = try #require(runtime.clock as? FakeClock)
         clock.advance(to: stored.capturedAt)
         runtime.networkBecameAvailable()
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
 
         try await runtime.deleteListen(stored)
 

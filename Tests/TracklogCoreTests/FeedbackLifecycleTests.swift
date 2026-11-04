@@ -32,7 +32,7 @@ struct FeedbackLifecycleTests: CaptureTestHelpers {
         await runtime.start()
 
         let love = Task { await runtime.toggleLove(for: listen) }
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         let unlove = Task { await runtime.toggleLove(for: listen) }
         await turnMainActor()
         await gate.release()
@@ -160,7 +160,7 @@ struct FeedbackLifecycleTests: CaptureTestHelpers {
         await runtime.start()
 
         let love = Task { await runtime.toggleLove(for: listen) }
-        await lookupGate.waitUntilEntered()
+        #expect(await lookupGate.waitUntilEntered(), "the lookupGate is entered")
         _ = try await runtime.unlinkConnection(id: connection.id ?? -1)
         await lookupGate.release()
         await love.value
@@ -250,7 +250,7 @@ struct FeedbackLifecycleTests: CaptureTestHelpers {
         await runtime.start()
 
         let first = Task { await runtime.toggleLove(for: listen) }
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         let second = Task { await runtime.toggleLove(for: listen) }
         let third = Task { await runtime.toggleLove(for: listen) }
         await turnMainActor()

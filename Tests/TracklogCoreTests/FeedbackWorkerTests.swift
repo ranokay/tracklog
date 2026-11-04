@@ -65,7 +65,7 @@ struct FeedbackWorkerTests {
                 connectionIDs: [connectionID],
             )
         }
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         harness.outbox.deactivate()
         harness.outbox.activate()
 

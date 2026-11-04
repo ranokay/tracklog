@@ -259,7 +259,7 @@ struct DeliveryOutboxTests {
         }
 
         harness.outbox.activate()
-        await gate.waitUntilEntered()
+        #expect(await gate.waitUntilEntered(), "the gate is entered")
         harness.outbox.drain(connectionIDs: [connection.id ?? -1])
         await gate.release()
 
