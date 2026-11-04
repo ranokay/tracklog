@@ -136,6 +136,8 @@ public final class TracklogDroplet: NSObject, Droplet {
                 if ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "charts"
                     || HarnessChartFixture.selected != nil {
                     state.setTakeoverSection(.charts)
+                } else {
+                    await HarnessHistoryDemo.show(on: runtime)
                 }
                 // The HUD page renders nothing until the droplet presents, so
                 // the shot needs one deterministic card. It goes through the
@@ -280,31 +282,15 @@ public final class TracklogDroplet: NSObject, Droplet {
         if expandingPending {
             state.setPendingListExpanded(true)
         }
+        // Re-presenting the mounted surface tears its view down and would
+        // discard a jump applied just before. If History is already the
+        // current presentation, its own change observers pick the request up.
+        if host.notchSurface.expandedState.current?.surfaceID == tracklogHistorySurfaceID {
+            return
+        }
         host.notchSurface.presentExpandedSurface(
             ExpandedSurfacePresentationRequest(surfaceID: tracklogHistorySurfaceID),
         )
-    }
-
-    // MARK: - History
-
-    func reloadHistory() async {
-        await runtime?.reloadHistory()
-    }
-
-    func loadMoreHistory() async {
-        await runtime?.loadMoreHistory()
-    }
-
-    func artworkData(for listen: Listen) -> Data? {
-        guard let hash = listen.artworkHash else { return nil }
-        return state.artworkByHash[hash]
-    }
-
-    func copyMetadata(for listen: Listen) {
-        guard let host else { return }
-        if !host.workspace.copyToPasteboard(listen.processed.copyText) {
-            host.log.notice("Copy metadata was refused")
-        }
     }
 
     // MARK: - Media

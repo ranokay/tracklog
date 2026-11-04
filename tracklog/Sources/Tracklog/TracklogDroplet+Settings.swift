@@ -43,6 +43,8 @@ extension TracklogDroplet: SettingsPagesProviding {
             AnyView(TracklogBlocksPage(droplet: self, state: state))
         case tracklogChartsPageID:
             AnyView(TracklogChartsSettingsPage(droplet: self, state: state))
+        case tracklogHistoryPageID:
+            AnyView(TracklogHistorySettingsPage(droplet: self, state: state))
         case tracklogDataPageID:
             AnyView(TracklogDataPage(droplet: self, state: state))
         case tracklogAboutPageID:
@@ -97,6 +99,11 @@ extension TracklogDroplet: SettingsPagesProviding {
                 title: "Charts",
                 keywords: ["custom", "range", "dates", "local", "statistics"],
                 anchorID: tracklogChartsPageID,
+            ),
+            SettingsSearchEntry(
+                title: "History",
+                keywords: ["jump", "date", "time", "older", "local", "listens"],
+                anchorID: tracklogHistoryPageID,
             ),
             SettingsSearchEntry(
                 title: "Data",

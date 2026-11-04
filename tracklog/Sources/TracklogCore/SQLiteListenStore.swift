@@ -203,7 +203,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
         }
     }
 
-    private func readListens(_ statement: OpaquePointer, handle: OpaquePointer) throws -> [Listen] {
+    func readListens(_ statement: OpaquePointer, handle: OpaquePointer) throws -> [Listen] {
         var listens: [Listen] = []
         while true {
             switch sqlite3_step(statement) {

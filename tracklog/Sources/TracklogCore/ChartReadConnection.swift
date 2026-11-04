@@ -100,6 +100,158 @@ actor ChartReadConnection {
         }
     }
 
+    // MARK: - Track history
+
+    /// The full count and first listen for one local track key. This is the
+    /// full scan the summary needs; it runs on this connection, never on the
+    /// writer actor.
+    func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
+        let scan = try await trackHistoryScan(
+            matching: key,
+            pageBefore: nil,
+            pageLimit: 0,
+            needsSummary: true,
+        )
+        return TrackHistorySummary(count: scan.count, firstListenedAt: scan.firstListenedAt)
+    }
+
+    /// One page of that track, newest first. The scan stops once the page is
+    /// full; a page request never computes the summary.
+    func trackHistoryPage(
+        matching key: String,
+        limit: Int,
+        before cursor: ListenCursor?,
+    ) async throws -> [Listen] {
+        guard limit > 0 else { return [] }
+        let scan = try await trackHistoryScan(
+            matching: key,
+            pageBefore: cursor,
+            pageLimit: limit,
+            needsSummary: false,
+        )
+        return scan.page
+    }
+
+    private struct TrackHistoryScan {
+        var page: [Listen] = []
+        var count = 0
+        var firstListenedAt: Date?
+    }
+
+    // swiftlint:disable:next cyclomatic_complexity
+    private func trackHistoryScan(
+        matching key: String,
+        pageBefore cursor: ListenCursor?,
+        pageLimit: Int,
+        needsSummary: Bool,
+    ) async throws -> TrackHistoryScan {
+        guard !isClosed else {
+            throw DatabaseError.open("the chart reader is closed")
+        }
+        let handle = try openReadOnly()
+        defer { sqlite3_close(handle) }
+
+        try execute(handle, "BEGIN DEFERRED")
+        do {
+            let statement = try prepare(
+                handle,
+                """
+                SELECT id, raw_title, raw_artist, raw_album, raw_album_artist,
+                       title, artist, album, album_artist, bundle_id,
+                       duration, played_duration, started_at, captured_at, artwork_hash
+                FROM listens
+                ORDER BY started_at DESC, id DESC
+                """,
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var scan = TrackHistoryScan()
+            var rowIndex = 0
+            while true {
+                switch sqlite3_step(statement) {
+                case SQLITE_ROW:
+                    let startedAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 12))
+                    let rowID = sqlite3_column_int64(statement, 0)
+                    let rowKey = LocalTrackIdentity.key(
+                        title: text(statement, 5),
+                        artist: text(statement, 6),
+                    )
+                    if rowKey == key {
+                        if needsSummary {
+                            scan.count += 1
+                            scan.firstListenedAt = startedAt
+                        }
+                        if pageLimit > 0, scan.page.count < pageLimit,
+                           cursor == nil || isOlder(startedAt: startedAt, id: rowID, than: cursor) {
+                            scan.page.append(readListen(statement))
+                        }
+                    }
+                    rowIndex += 1
+                    if rowIndex % 64 == 0 {
+                        try checkOwnership()
+                        await Task.yield()
+                        try checkOwnership()
+                        if let observer = rowObserver {
+                            await observer(rowIndex)
+                            try checkOwnership()
+                        }
+                    }
+                    // A page request owns no summary, so it can stop as soon
+                    // as the page is full. A summary request scans the whole
+                    // history.
+                    if !needsSummary, pageLimit > 0, scan.page.count == pageLimit {
+                        try checkOwnership()
+                        try execute(handle, "COMMIT")
+                        return scan
+                    }
+                case SQLITE_DONE:
+                    try checkOwnership()
+                    try execute(handle, "COMMIT")
+                    return scan
+                default:
+                    throw DatabaseError.sqlite(errorMessage(handle))
+                }
+            }
+        } catch {
+            try? execute(handle, "ROLLBACK")
+            throw error
+        }
+    }
+
+    private func isOlder(startedAt: Date, id: Int64, than cursor: ListenCursor?) -> Bool {
+        guard let cursor else { return true }
+        if startedAt != cursor.startedAt {
+            return startedAt < cursor.startedAt
+        }
+        return id < cursor.id
+    }
+
+    private func readListen(_ statement: OpaquePointer) -> Listen {
+        Listen(
+            id: sqlite3_column_int64(statement, 0),
+            raw: ListenMetadata(
+                title: text(statement, 1),
+                artist: text(statement, 2),
+                album: text(statement, 3),
+                albumArtist: text(statement, 4),
+            ),
+            processed: ListenMetadata(
+                title: text(statement, 5),
+                artist: text(statement, 6),
+                album: text(statement, 7),
+                albumArtist: text(statement, 8),
+            ),
+            bundleID: text(statement, 9),
+            duration: sqlite3_column_double(statement, 10),
+            playedDuration: sqlite3_column_double(statement, 11),
+            startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
+            capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
+            artworkHash: sqlite3_column_type(statement, 14) == SQLITE_NULL
+                ? nil
+                : text(statement, 14),
+        )
+    }
+
     private func openReadOnly() throws -> OpaquePointer {
         var handle: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX

@@ -19,6 +19,8 @@ public extension CaptureRuntime {
         feedbackIdentity = nil
         deliveryOutbox?.deactivate()
         stopFeed()
+        resetHistoryNavigation()
+        state.pendingHistoryJump = nil
         started = false
     }
 

@@ -42,6 +42,12 @@ public final class CaptureRuntime {
     /// by an older in-flight append.
     var historyGeneration = 0
     var historyLoading = false
+    /// The newest row of a window that does not extend to the live top. Nil
+    /// means the normal newest-first feed.
+    var historyWindowStart: ListenCursor?
+    /// Identifies the newest track-history read, so closing the view or
+    /// opening another track cannot be overwritten by an older read.
+    var trackHistoryGeneration = 0
     var artworkIdentity: String?
     var artworkTask: Task<Void, Never>?
     var deliveryRefreshTask: Task<Void, Never>?

@@ -68,6 +68,7 @@ public extension TracklogDroplet {
 
     func takeoverDidDisappear() {
         runtime?.charts?.hide()
+        runtime?.resetHistoryNavigation()
         state.setPendingListExpanded(false)
     }
 }

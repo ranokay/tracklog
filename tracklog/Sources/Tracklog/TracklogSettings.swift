@@ -98,6 +98,13 @@ struct TracklogSettings: View {
                     }
                     .id(tracklogChartsPageID)
                     TracklogSettingsPageLink(droplet: droplet,
+                                             "History",
+                                             subtitle: "Jump to a date and time in your local history.",
+                                             page: tracklogHistoryPageID) {
+                        SettingsLinkTile(systemImage: "clock.arrow.circlepath")
+                    }
+                    .id(tracklogHistoryPageID)
+                    TracklogSettingsPageLink(droplet: droplet,
                                              "Data",
                                              subtitle: "Media diagnostics and your portable settings export.",
                                              page: tracklogDataPageID) {

@@ -1,0 +1,22 @@
+# AX readout — jumped window and newer paging
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_HISTORY=jump`.
+The fixture jumps to 3 November 2026, 20:00.
+
+Initial state:
+
+- `AXStaticText = "Showing from 3 Nov 2026 at 21:18"`.
+- `AXButton (Show newer listens)` 138 × 31.
+- `AXButton (Newest)`.
+- `AXHeading (Tuesday, 3 November 2026, 2 listens)`.
+- `AXButton` `Blue Monday, New Order, 21:18`, value
+  `delivered to ListenBrainz`, help `Shows this track's history`.
+- `AXButton` `Tainted Love, Soft Cell, 19:02`, value
+  `No delivery targets`.
+
+Pressing `Show newer listens` (`AXPress`) prepended the newer page and kept
+the jump anchor (`Blue Monday, 21:18`) in the list. The older-day rows stayed
+in place below it and the newly loaded today rows appeared above. When the
+window reached the newest stored listen the jump bar disappeared and the
+regular feed remained; the Activity page recorded the earlier
+`present "history"` request. Repeated newer loads produced no duplicate rows.

@@ -67,10 +67,25 @@ Expected structure:
 - Each row is one element: `<title>, <artist>, <album>, <time>` with a delivery
   value that names each service for a mixed state.
 - A separate `Actions for <title>` menu holds the row actions.
+- Pressing the row itself opens that track's local history. The row must expose
+  the button trait and a default press action; its press area must stop before
+  the separate Actions menu.
 - The pending banner is one element plus its action button.
 - The paused bar reads `Scrobbling paused until <time>` with a separate Resume
   button.
 - Empty states are read.
+- `Jump to date` opens the History settings page and reads as a button. If the
+  host refuses the page, the takeover says `Settings could not be opened here.
+  Open Tracklog's History settings to choose a date.` with a separate Dismiss
+  button; it never fails silently.
+- A date-jumped window reads `Showing from <date and time>` with `Show newer
+  listens` and `Newest` buttons. It keeps the requested window rather than
+  resetting to the newest feed.
+- Track history reads the track title as a heading, the full `<n> listens`
+  count, `First listened <date>`, and each row as `<title>, <artist>, <album>,
+  <date and time>` with its delivery value. Back to History is a separate
+  button. A track read failure reads `Track history unavailable` with Try again
+  and Back to History; it never replaces the feed.
 
 Checks:
 
@@ -109,10 +124,13 @@ Settings is the only typed surface and must be fully keyboard-operable.
 Checks:
 
 - Root `scrobbling` and the pages `services`, `edits`, `blocks`, `data`,
-  `about`, plus `apps`, `charts`, `lastfm-credentials`, `add-service` and per-connection
+  `about`, plus `apps`, `charts`, `history`, `lastfm-credentials`, `add-service` and per-connection
   pages are reachable.
 - Every control is reachable with Tab/Shift-Tab and operable with Space,
   Return or the arrow keys.
+- History holds one `Date and time` picker and `Show in History`. The picker is
+  the only place a jump date is typed; Show in History dismisses to the
+  positioned takeover.
 - Token and secret fields are secure and never show a saved value back.
 - Data names the live media source, Copy diagnostics works, and Export settings
   is present; Import is absent.
@@ -165,6 +183,7 @@ Fill in for each smoke:
 | --- | --- | --- | --- | --- | --- |
 | Shelf widget | | | | | |
 | History | | | | | |
+| History navigation | | | | | |
 | Charts | | | | | |
 | Settings | | | | | |
 | HUD | | | | | |

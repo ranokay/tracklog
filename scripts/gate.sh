@@ -35,6 +35,7 @@ echo "==> surface shots"
 mkdir -p tracklog/shots
 rm -rf tracklog/shots/playing tracklog/shots/paused tracklog/shots/off tracklog/shots/feed-unavailable tracklog/shots/charts
 rm -rf tracklog/shots/charts-*
+rm -rf tracklog/shots/history-*
 rm -f tracklog/shots/report.json tracklog/shots/*.png
 
 # The main report keeps the documented path and the playing state. Each extra
@@ -84,6 +85,25 @@ python3 scripts/check_shot_report.py tracklog/shots/charts-reduced-motion/report
 echo "==> surface shots: charts-settings"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal TRACKLOG_HARNESS_SECTION=charts TRACKLOG_HARNESS_SETTINGS_PAGE=charts droppykit run -- --shots ./shots/charts-settings --report ./shots/charts-settings/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/charts-settings/report.json tracklog/shots/charts-settings
+
+echo "==> surface shots: history"
+run_history_shots() {
+    local fixture="$1"
+    echo "==> surface shots: history-$fixture"
+    (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_HISTORY="$fixture" droppykit run -- --shots "./shots/history-$fixture" --report "./shots/history-$fixture/report.json" --shot-height 1900)
+    python3 scripts/check_shot_report.py "tracklog/shots/history-$fixture/report.json" "tracklog/shots/history-$fixture"
+}
+
+# The browse states #81 names: empty, large, a track snapshot, missing art,
+# a positioned jump with its newer action, the two failure scopes and the
+# refusal bar the harness's own Settings refusal produces.
+for fixture in empty large track track-missing-artwork jump track-error feed-error settings-refused; do
+    run_history_shots "$fixture"
+done
+
+echo "==> surface shots: history-settings"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=history droppykit run -- --shots ./shots/history-settings --report ./shots/history-settings/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/history-settings/report.json tracklog/shots/history-settings
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"
