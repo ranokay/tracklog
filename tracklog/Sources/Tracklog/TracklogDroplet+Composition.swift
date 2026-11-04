@@ -5,7 +5,7 @@ import TracklogMedia
 
 extension TracklogDroplet {
     func makeHarnessRuntime(hud: HUDHostSession) -> CaptureRuntime {
-        let store = HarnessDemoStore()
+        let store = HarnessDemoStore(fixture: HarnessHistoryFixture.selected)
         let credentials = MemoryCredentialStore()
         let demoState = HarnessDemoState.selected
         let chartSelection = HarnessChartFixture.selected?.selection

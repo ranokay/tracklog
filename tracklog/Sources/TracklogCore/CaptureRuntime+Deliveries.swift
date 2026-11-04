@@ -26,7 +26,8 @@ extension CaptureRuntime {
         evaluateDeliveryHUD()
         scheduleStuckEvaluation()
 
-        let listenIDs = state.listens.compactMap(\.id)
+        let listenIDs = (state.listens + (state.trackHistory?.listens ?? []))
+            .compactMap(\.id)
         guard !listenIDs.isEmpty else {
             guard isCurrentDeliveryReload(generation) else { return }
             state.deliveriesByListen = [:]

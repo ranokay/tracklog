@@ -100,6 +100,137 @@ actor ChartReadConnection {
         }
     }
 
+    // MARK: - Track history
+
+    /// The full count and first listen for one local track key. This is the
+    /// full scan the summary needs; it runs on this connection, never on the
+    /// writer actor.
+    func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
+        let scan = try await trackHistoryScan(
+            matching: key,
+            pageBefore: nil,
+            pageLimit: 0,
+            needsSummary: true,
+        )
+        return TrackHistorySummary(count: scan.count, firstListenedAt: scan.firstListenedAt)
+    }
+
+    /// One page of that track, newest first. The scan stops once the page is
+    /// full; a page request never computes the summary.
+    func trackHistoryPage(
+        matching key: String,
+        limit: Int,
+        before cursor: ListenCursor?,
+    ) async throws -> [Listen] {
+        guard limit > 0 else { return [] }
+        let scan = try await trackHistoryScan(
+            matching: key,
+            pageBefore: cursor,
+            pageLimit: limit,
+            needsSummary: false,
+        )
+        return scan.page
+    }
+
+    private struct TrackHistoryScan {
+        var page: [Listen] = []
+        var count = 0
+        var firstListenedAt: Date?
+    }
+
+    // swiftlint:disable:next cyclomatic_complexity
+    private func trackHistoryScan(
+        matching key: String,
+        pageBefore cursor: ListenCursor?,
+        pageLimit: Int,
+        needsSummary: Bool,
+    ) async throws -> TrackHistoryScan {
+        guard !isClosed else {
+            throw DatabaseError.open("the chart reader is closed")
+        }
+        let handle = try openReadOnly()
+        defer { sqlite3_close(handle) }
+
+        try execute(handle, "BEGIN DEFERRED")
+        do {
+            let filter = cursor == nil
+                ? ""
+                : "WHERE started_at < ? OR (started_at = ? AND id < ?)"
+            let statement = try prepare(
+                handle,
+                """
+                SELECT \(SQLiteListenStore.listenColumns)
+                FROM listens
+                \(filter)
+                ORDER BY started_at DESC, id DESC
+                """,
+            )
+            defer { sqlite3_finalize(statement) }
+            if let cursor {
+                let start = cursor.startedAt.timeIntervalSince1970
+                sqlite3_bind_double(statement, 1, start)
+                sqlite3_bind_double(statement, 2, start)
+                sqlite3_bind_int64(statement, 3, cursor.id)
+            }
+
+            var scan = TrackHistoryScan()
+            var rowIndex = 0
+            while true {
+                switch sqlite3_step(statement) {
+                case SQLITE_ROW:
+                    let startedAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 12))
+                    let rowID = sqlite3_column_int64(statement, 0)
+                    let rowKey = LocalTrackIdentity.key(
+                        title: text(statement, 5),
+                        artist: text(statement, 6),
+                    )
+                    if rowKey == key {
+                        if needsSummary {
+                            scan.count += 1
+                            scan.firstListenedAt = startedAt
+                        }
+                        if pageLimit > 0, scan.page.count < pageLimit,
+                           cursor == nil || isOlder(startedAt: startedAt, id: rowID, than: cursor) {
+                            scan.page.append(SQLiteListenStore.readListenRow(statement, offset: 0))
+                        }
+                    }
+                    rowIndex += 1
+                    if rowIndex % 64 == 0 {
+                        try checkOwnership()
+                        await Task.yield()
+                        try checkOwnership()
+                        if let observer = rowObserver {
+                            await observer(rowIndex)
+                            try checkOwnership()
+                        }
+                    }
+                    // A page request owns no summary, so it can stop as soon
+                    // as the page is full. A summary request scans the whole
+                    // history.
+                    if !needsSummary, pageLimit > 0, scan.page.count == pageLimit {
+                        try checkOwnership()
+                        try execute(handle, "COMMIT")
+                        return scan
+                    }
+                case SQLITE_DONE:
+                    try checkOwnership()
+                    try execute(handle, "COMMIT")
+                    return scan
+                default:
+                    throw DatabaseError.sqlite(errorMessage(handle))
+                }
+            }
+        } catch {
+            try? execute(handle, "ROLLBACK")
+            throw error
+        }
+    }
+
+    private func isOlder(startedAt: Date, id: Int64, than cursor: ListenCursor?) -> Bool {
+        guard let cursor else { return true }
+        return ListenCursor(startedAt: startedAt, id: id).isOlder(than: cursor)
+    }
+
     private func openReadOnly() throws -> OpaquePointer {
         var handle: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX

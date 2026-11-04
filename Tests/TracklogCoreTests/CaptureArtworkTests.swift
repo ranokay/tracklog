@@ -115,6 +115,53 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         #expect(runtime.state.failure == nil)
     }
 
+    @Test func aStalePageCannotEraseAKnownCover() async throws {
+        let database = try TemporaryDatabase()
+        let baseStore = try SQLiteListenStore(url: database.url)
+        let store = StaleArtworkStore(baseStore)
+        let clock = FakeClock(base)
+        let source = ReplayedNowPlaying()
+        source.artworkData = try #require(testImageData())
+        let runtime = CaptureRuntime(
+            clock: clock,
+            source: source,
+            store: store,
+            allowlist: InMemoryAppAllowlist(),
+            settings: CaptureSettings(scrobblingEnabled: true),
+            historyPageSize: 1,
+        )
+        await runtime.start()
+
+        await replay(thresholdSamples(track()), on: runtime, clock: clock)
+        await eventually { runtime.state.listens.first?.artworkHash != nil }
+        let hash = try #require(runtime.state.listens.first?.artworkHash)
+
+        // A second listen of the same track exists in the store but is below
+        // the loaded page. Both pages are now returned with a nil artwork
+        // hash, standing in for a read that happened before `attachArtwork`.
+        let older = Listen(
+            raw: ListenMetadata(track()),
+            processed: ListenMetadata(track()),
+            bundleID: "com.apple.Music",
+            duration: 30,
+            playedDuration: 30,
+            startedAt: base.addingTimeInterval(-60),
+            capturedAt: base,
+        )
+        _ = try await store.insert(older)
+        await store.setStripsArtwork(true)
+
+        await runtime.reloadVisibleHistory(in: store)
+        #expect(runtime.state.listens.first?.artworkHash == hash,
+                "a stale page must not erase a cover filled while it was read")
+
+        await runtime.loadMoreHistory()
+        #expect(runtime.state.listens.count == 2)
+        #expect(runtime.state.listens.last?.artworkHash == hash,
+                "an appended stale page keeps the known cover too")
+        runtime.stop()
+    }
+
     @Test func aStoredCoverLoadsForNowPlayingWithoutAskingTheSource() async throws {
         let database = try TemporaryDatabase()
         let firstClock = FakeClock(base)

@@ -14,6 +14,17 @@ public struct ListenCursor: Equatable, Sendable {
         guard let id = listen.id else { return nil }
         self.init(startedAt: listen.startedAt, id: id)
     }
+
+    /// The one keyset order: start time first, then stored row id.
+    public func isOlder(than other: ListenCursor) -> Bool {
+        startedAt < other.startedAt
+            || (startedAt == other.startedAt && id < other.id)
+    }
+
+    public func isNewer(than other: ListenCursor) -> Bool {
+        startedAt > other.startedAt
+            || (startedAt == other.startedAt && id > other.id)
+    }
 }
 
 /// Durable local history. A background actor in production, a fake in tests.

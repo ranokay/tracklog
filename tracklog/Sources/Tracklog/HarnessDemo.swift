@@ -165,19 +165,22 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     var chartRows: [ChartCacheKey: ChartCacheEntry] = [:]
     var currentConnection: Int64?
     var nextConnectionID: Int64 = 1
+    /// The fixture this store was built for. Production never sets it.
+    let historyFixture: HarnessHistoryFixture?
     private var nextListenID: Int64 = 1_000
     private var nextDeliveryID: Int64 = 1_000
 
-    init() {
+    init(fixture: HarnessHistoryFixture? = nil) {
+        historyFixture = fixture
         let content = HarnessDemoData.makeContent()
-        listens = content.listens
+        listens = HarnessHistoryDemo.listens(for: fixture, content: content)
         artworks = content.artworks
         artworkHashes = content.hashes
         seenApps = SeededPlayers.bundleIDs.map { SeenApp(bundleID: $0, isAllowed: true) }
             + [SeenApp(bundleID: "com.apple.podcasts", isAllowed: false)]
         simpleEdits = Self.makeSimpleEdits()
         blockRules = Self.makeBlocks()
-        deliveryRows = HarnessDemoData.makeDeliveries()
+        deliveryRows = fixture == .empty ? [] : HarnessDemoData.makeDeliveries()
         let lovedIdentity = ListenMetadata(
             title: "Heart of Glass",
             artist: "Blondie",
@@ -190,6 +193,8 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
                 updatedAt: Date(timeIntervalSince1970: 1_000_000),
             ),
         ]
+        nextListenID = (listens.compactMap(\.id).max() ?? 0) + 1
+        nextDeliveryID = (deliveryRows.map(\.id).max() ?? 0) + 1
     }
 
     func feedback(for identities: [String]) async throws -> [String: TrackFeedback] {
@@ -235,13 +240,15 @@ actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockSt
     }
 
     func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try checkFeedReads()
         guard let cursor else { return Array(listens.prefix(limit)) }
         guard let index = listens.firstIndex(where: { $0.id == cursor.id }) else { return [] }
         return Array(listens[(index + 1)...].prefix(limit))
     }
 
     func count() async throws -> Int {
-        listens.count
+        try checkFeedReads()
+        return listens.count
     }
 
     func artwork(for hash: String) async throws -> Data? {

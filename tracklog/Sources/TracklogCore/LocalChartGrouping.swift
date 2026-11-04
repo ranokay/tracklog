@@ -1,5 +1,28 @@
 import Foundation
 
+/// The one local track identity shared by the Tracks chart and track history.
+/// It is the normalized processed title and artist, joined the same way as
+/// every other identity in the engine. It is deliberately not the stored raw
+/// `track_identity` (which includes album and album artist and keeps raw
+/// spellings) and not the feedback identity (which includes album and album
+/// artist).
+public enum LocalTrackIdentity {
+    /// One track: normalized title and artist. A blank artist still has a
+    /// title-only key, so a stored row with no artist can open its own history.
+    public static func key(title: String, artist: String) -> String? {
+        guard !Identity.normalized(title).isEmpty else { return nil }
+        return Identity.joined([title, artist])
+    }
+
+    /// The Tracks chart's stricter form: the chart omits rows missing either
+    /// field, so its key is nil for them. Every chart key is exactly
+    /// ``key(title:artist:)`` for a complete row.
+    public static func chartKey(title: String, artist: String) -> String? {
+        guard !Identity.normalized(artist).isEmpty else { return nil }
+        return key(title: title, artist: artist)
+    }
+}
+
 /// The one local grouping rule. SQLite streams rows into it; the harness
 /// feeds its in-memory listens through the same accumulator so the demo cannot
 /// disagree with production.
@@ -74,7 +97,6 @@ public struct LocalChartAggregator {
         album: String,
         albumArtist: String,
     ) -> GroupedFields? {
-        let titleKey = Identity.normalized(title)
         let artistKey = Identity.normalized(artist)
         let albumKey = Identity.normalized(album)
         switch type {
@@ -97,9 +119,9 @@ public struct LocalChartAggregator {
                 subtitle: subtitleKey,
             )
         case .tracks:
-            guard !titleKey.isEmpty, !artistKey.isEmpty else { return nil }
+            guard let key = LocalTrackIdentity.chartKey(title: title, artist: artist) else { return nil }
             return GroupedFields(
-                key: Identity.joined([title, artist]),
+                key: key,
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 subtitle: artist.trimmingCharacters(in: .whitespacesAndNewlines),
             )

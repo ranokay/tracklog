@@ -64,53 +64,37 @@ struct HistoryRow: View {
     let connections: [Connection]
     let feedback: TrackFeedback?
     let feedbackSupport: FeedbackSupport
+    let showsDate: Bool
+    let onOpen: (() -> Void)?
 
     @State private var isHovering = false
     @Environment(\.colorSchemeContrast) private var colorContrast
 
+    init(
+        listen: Listen,
+        droplet: TracklogDroplet,
+        artwork: Data?,
+        deliveries: [Delivery],
+        connections: [Connection],
+        feedback: TrackFeedback?,
+        feedbackSupport: FeedbackSupport,
+        showsDate: Bool = false,
+        onOpen: (() -> Void)? = nil,
+    ) {
+        self.listen = listen
+        self.droplet = droplet
+        self.artwork = artwork
+        self.deliveries = deliveries
+        self.connections = connections
+        self.feedback = feedback
+        self.feedbackSupport = feedbackSupport
+        self.showsDate = showsDate
+        self.onOpen = onOpen
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: DroppySpacing.md) {
-                ArtworkSleeve(
-                    size: 52,
-                    artwork: artwork,
-                    identity: listen.raw.identity,
-                )
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(listen.processed.title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                        .lineLimit(1)
-                    if !listen.processed.artist.isEmpty {
-                        Text(listen.processed.artist)
-                            .font(.subheadline)
-                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                            .lineLimit(1)
-                    }
-                    if !listen.processed.album.isEmpty {
-                        Text(listen.processed.album)
-                            .font(.caption)
-                            .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: DroppySpacing.sm)
-                VStack(alignment: .trailing, spacing: DroppySpacing.xs) {
-                    Text(listen.startedAt.formatted(date: .omitted, time: .shortened))
-                        .font(.caption.weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                    Image(systemName: deliveryGlyph)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(deliveryGlyphColor)
-                        .accessibilityHidden(true)
-                }
-                .accessibilityHidden(true)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(rowLabel)
-            .accessibilityValue(deliveryValue)
-
+            infoArea
             rowMenu
         }
         .padding(.horizontal, DroppySpacing.xl)
@@ -127,9 +111,79 @@ struct HistoryRow: View {
         .contextMenu { rowMenuItems }
     }
 
+    /// The row body is one element with the #26 label and value. When it opens
+    /// track history it is represented as a real button, so VoiceOver gets the
+    /// button trait and a default press action. The Actions menu stays a
+    /// separate target beside it.
+    @ViewBuilder
+    private var infoArea: some View {
+        if let onOpen {
+            Button(action: onOpen) {
+                infoContent
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel(rowLabel)
+            .accessibilityValue(deliveryValue)
+            .accessibilityHint(Text("Shows this track's history"))
+        } else {
+            infoContent
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(rowLabel)
+                .accessibilityValue(deliveryValue)
+        }
+    }
+
+    private var infoContent: some View {
+        HStack(spacing: DroppySpacing.md) {
+            ArtworkSleeve(
+                size: 52,
+                artwork: artwork,
+                identity: listen.raw.identity,
+            )
+            VStack(alignment: .leading, spacing: 1) {
+                Text(listen.processed.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                    .lineLimit(1)
+                if !listen.processed.artist.isEmpty {
+                    Text(listen.processed.artist)
+                        .font(.subheadline)
+                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                        .lineLimit(1)
+                }
+                if !listen.processed.album.isEmpty {
+                    Text(listen.processed.album)
+                        .font(.caption)
+                        .foregroundStyle(AdaptiveColors.notchSurfaceTertiaryText)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: DroppySpacing.sm)
+            VStack(alignment: .trailing, spacing: DroppySpacing.xs) {
+                Text(timeText)
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                Image(systemName: deliveryGlyph)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(deliveryGlyphColor)
+                    .accessibilityHidden(true)
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var timeText: String {
+        if showsDate {
+            listen.startedAt.formatted(date: .abbreviated, time: .shortened)
+        } else {
+            listen.startedAt.formatted(date: .omitted, time: .shortened)
+        }
+    }
+
     private var rowLabel: String {
-        [listen.processed.title, listen.processed.artist, listen.processed.album,
-         listen.startedAt.formatted(date: .omitted, time: .shortened)]
+        [listen.processed.title, listen.processed.artist, listen.processed.album, timeText]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
@@ -163,15 +217,17 @@ struct HistoryRow: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText.opacity(0.9))
                 .frame(width: 24, height: 24)
-                .droppyGlassControlChrome(shape: AnyShape(Circle()), isHovering: isHovering)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(DroppyCircleButtonStyle(size: 24))
         .menuIndicator(.hidden)
         .fixedSize()
+        .frame(width: 28, height: 28)
+        .contentShape(Rectangle())
         .opacity(isHovering ? 1 : 0.01)
         .allowsHitTesting(isHovering)
+        .help("Actions for \(listen.processed.title)")
         .accessibilityLabel("Actions for \(listen.processed.title)")
     }
 
@@ -230,157 +286,5 @@ struct HistoryRow: View {
             }
             return "\(name) — Not delivered · \(reason)"
         }
-    }
-}
-
-// MARK: - Now playing
-
-struct NowPlayingStrip: View {
-    let droplet: TracklogDroplet
-    let sample: MediaSample
-    let status: ScrobbleStatus
-    let isLoved: Bool
-    let canLove: Bool
-
-    var body: some View {
-        VStack(spacing: DroppySpacing.sm) {
-            HStack(spacing: DroppySpacing.md) {
-                ArtworkSleeve(
-                    size: 56,
-                    artwork: droplet.state.nowPlayingArtwork,
-                    identity: droplet.state.nowPlayingArtworkIdentity ?? sample.track.identity,
-                )
-                info
-                Spacer(minLength: DroppySpacing.md)
-                controls
-                overflowMenu
-            }
-            progressLine
-        }
-        .padding(.horizontal, DroppySpacing.xl)
-        .frame(height: 76, alignment: .bottom)
-        .onAppear { TracklogMotion.logReducedPathOnce() }
-    }
-
-    private var info: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: DroppySpacing.xs) {
-                Text(sample.track.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
-                    .lineLimit(1)
-                if !sample.track.artist.isEmpty {
-                    Text("— \(sample.track.artist)")
-                        .font(.subheadline)
-                        .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-                        .lineLimit(1)
-                }
-            }
-            Text(elapsedText)
-                .font(.caption.weight(.medium))
-                .monospacedDigit()
-                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(sample.track.title)
-        .accessibilityValue(elapsedText)
-    }
-
-    private var controls: some View {
-        HStack(spacing: DroppySpacing.xs) {
-            loveButton
-            ListenControls(
-                droplet: droplet,
-                status: status,
-                transition: TracklogMotion.compactContent,
-            )
-        }
-    }
-
-    private var loveButton: some View {
-        Button {
-            droplet.toggleLoveForCurrentTrack()
-        } label: {
-            Image(systemName: isLoved ? "heart.fill" : "heart")
-                .frame(width: 24, height: 24)
-        }
-        .buttonStyle(DroppyCircleButtonStyle(size: 24))
-        .frame(width: 24, height: 24)
-        .contentShape(Rectangle())
-        .disabled(!canLove)
-        .help(loveHelp)
-        .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
-        .accessibilityValue(Text(isLoved ? "Loved" : "Not loved"))
-        .accessibilityHint(Text(loveHint))
-        .accessibilityAddTraits(isLoved ? .isSelected : [])
-        .transition(TracklogMotion.compactContent)
-    }
-
-    private var overflowMenu: some View {
-        Menu {
-            TracklogMenuItems(
-                droplet: droplet,
-                status: status,
-                scrobblingEnabled: droplet.state.scrobblingEnabled,
-                pausedUntil: droplet.state.pausedUntil,
-                hasTrack: true,
-                includesListenControls: false,
-            )
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.caption.weight(.bold))
-                .frame(width: 24, height: 24)
-        }
-        .menuStyle(.button)
-        .buttonStyle(DroppyCircleButtonStyle(size: 24))
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More")
-        .accessibilityLabel(Text("More"))
-    }
-
-    private var loveHelp: String {
-        guard canLove else {
-            return "Connect a service that supports love"
-        }
-        return isLoved ? "Unlove this track" : "Love this track"
-    }
-
-    private var loveHint: String {
-        canLove ? "" : "Connect a service that supports love."
-    }
-
-    private var elapsedText: String {
-        if status.isCancelled {
-            return trackingCancelledText
-        }
-        let elapsed = time(sample.elapsed)
-        guard sample.track.duration > 0 else { return "\(elapsed) played" }
-        return "\(elapsed) of \(time(sample.track.duration))"
-    }
-
-    private var progress: Double {
-        if sample.track.duration > 0 {
-            return min(1, max(0, sample.elapsed / sample.track.duration))
-        }
-        return status.progress
-    }
-
-    private var progressLine: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(AdaptiveColors.overlayAuto(0.12))
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(AdaptiveColors.notchSurfacePrimaryText.opacity(0.85))
-                    .frame(width: geometry.size.width * progress)
-            }
-        }
-        .frame(height: 3)
-    }
-
-    private func time(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded(.down)))
-        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }

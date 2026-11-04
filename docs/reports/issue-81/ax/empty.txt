@@ -1,0 +1,10 @@
+# AX readout — empty History
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_HISTORY=empty`.
+
+- `AXButton (Jump to date)` 125 × 31.
+- `AXStaticText = "0 listens"`.
+- `AXStaticText = "Nothing played yet"`.
+- `AXStaticText = "Play something to start your history."`.
+- The pinned now-playing strip remains: `AXUnknown (Heart of Glass)` plus
+  Love, Cancel and More buttons. The empty state is read; it is not silent.

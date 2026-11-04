@@ -71,20 +71,48 @@ struct TracklogHistoryContent: View {
     /// The first item at the top edge, tracked so a listen arriving above the
     /// viewport does not move the row the user is reading.
     @State private var topAnchor: HistoryAnchor?
+    /// The row to keep at the top while a newer page is prepended above it.
+    @State private var newerPrependAnchor: HistoryAnchor?
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            if let banner = state.pendingBanner {
-                HistoryBannerView(banner: banner, droplet: droplet, state: state)
+            if let track = state.trackHistory {
+                TracklogTrackHistoryContent(droplet: droplet, state: state, track: track)
+            } else {
+                header
+                if state.historySettingsUnavailable {
+                    HistorySettingsUnavailableBar(state: state)
+                }
+                if let notice = state.historyJumpNotice {
+                    HistoryJumpBar(
+                        notice: notice,
+                        topDate: state.listens.first?.startedAt,
+                        hasNewer: state.historyHasNewer,
+                        onLoadNewer: {
+                            newerPrependAnchor = topAnchor ?? feedItems.first?.id
+                            Task { await droplet.loadNewerHistory() }
+                        },
+                        onNewest: {
+                            Task { await droplet.reloadHistory() }
+                        },
+                    )
+                }
+                if let banner = state.pendingBanner {
+                    HistoryBannerView(banner: banner, droplet: droplet, state: state)
+                }
+                if state.pendingListExpanded, !state.pendingQueue.isEmpty {
+                    PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
+                }
+                content
             }
-            if state.pendingListExpanded, !state.pendingQueue.isEmpty {
-                PendingQueuePanel(queue: state.pendingQueue, droplet: droplet, state: state)
-            }
-            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .task { await droplet.reloadHistory() }
+        .task { await droplet.openHistory() }
+        .onChange(of: state.pendingHistoryJump) { _, date in
+            guard date != nil else { return }
+            Task { await droplet.openHistory() }
+        }
+        .onDisappear { droplet.hideHistory() }
     }
 
     // MARK: Header
@@ -94,7 +122,15 @@ struct TracklogHistoryContent: View {
             Text("History")
                 .font(.system(.title, design: .rounded, weight: .semibold))
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: DroppySpacing.md)
+            Button {
+                droplet.openHistorySettingsPage()
+            } label: {
+                Label("Jump to date", systemImage: "calendar")
+            }
+            .buttonStyle(DroppyQuietButtonStyle(size: .small))
+            .accessibilityLabel(Text("Jump to date"))
             Text(listenCountText(totalCount))
                 .font(.callout.weight(.medium))
                 .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
@@ -185,6 +221,13 @@ struct TracklogHistoryContent: View {
             }
             .scrollPosition(id: $topAnchor, anchor: .top)
             .onChange(of: state.listens) { old, new in
+                if let anchor = newerPrependAnchor {
+                    newerPrependAnchor = nil
+                    if contains(anchor, in: new) {
+                        scroll(to: anchor, proxy: proxy)
+                        return
+                    }
+                }
                 preserveScroll(from: old, to: new, proxy: proxy)
             }
         }
@@ -211,6 +254,7 @@ struct TracklogHistoryContent: View {
                 connections: state.connections,
                 feedback: state.feedback(for: listen.processed.identity),
                 feedbackSupport: state.feedbackSupport,
+                onOpen: { droplet.openTrackHistory(listen) },
             )
         }
     }
@@ -293,8 +337,7 @@ struct TracklogHistoryContent: View {
 
 // MARK: - Feed identity
 
-private enum HistoryAnchor: Hashable {
-    case day(Date)
+private enum HistoryAnchor: Hashable { case day(Date)
     case listen(Int64)
     case footer
 }

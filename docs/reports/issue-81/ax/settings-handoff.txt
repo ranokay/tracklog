@@ -1,0 +1,27 @@
+# AX readout — Settings date entry and History handoff
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=history`,
+Settings pane selected in the harness sidebar.
+
+Settings page:
+
+- `AXHeading (Local history)`.
+- `AXStaticText = "Choose a date and time. Show in History opens the takeover at
+  the first listen from that moment; the takeover itself never asks for typing."`.
+- `AXDateTimeArea (Date and time)` 139.5 × 22.
+- `AXButton (Show in History)` 116.5 × 31, help
+  `Opens History at this date and time.`.
+- No text field appears in the takeover; the picker is the only typed control.
+
+The date field was focused and edited with foreground keystrokes to
+`3/11/2026, 20:00`. Pressing `Show in History` recorded
+`present "history"` in the Activity page. Switching to the Expanded surface
+page showed:
+
+- `AXStaticText = "Showing from 3 Nov 2026 at 21:18"`.
+- `AXButton (Show newer listens)` and `AXButton (Newest)`.
+- `AXHeading (Tuesday, 3 November 2026, 2 listens)` and the two 3 November
+  rows.
+
+Harness handoff: passed. Real Droppy Playground handoff: not run (installing
+the bundle outside the repository is outside this run's permission).

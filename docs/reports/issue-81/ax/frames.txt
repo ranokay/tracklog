@@ -1,0 +1,26 @@
+# AX frames — History navigation
+
+Measured on the running `TracklogHarness` with Cua Driver
+`get_window_state` `tree_format: "elements"`. Frames are window-global
+points at 1320 × 940.
+
+| Control | State | Frame |
+| --- | --- | --- |
+| `Jump to date` | normal feed, empty, jump | 125 × 31 |
+| History row body (`Heart of Glass, Blondie, Parallel Lines, 18:42`) | normal feed | 831 × 52, at x 628..1459 |
+| `Actions for Heart of Glass` (`AXMenuButton`) | normal feed | 28 × 28, at x 1459..1487 |
+| `Back to History` | track history | 85 × 31 |
+| `Show newer listens` | jumped window | 138 × 31 |
+| `Newest` | jumped window | quiet button, 31 pt high |
+| `Date and time` (`AXDateTimeArea`) | Settings History page | 139.5 × 22 |
+| `Show in History` | Settings History page | 116.5 × 31 |
+
+The row body ends exactly where the Actions menu begins; the two press areas
+do not overlap. The Actions menu is above the 24 × 24 minimum and uses the
+same `DroppyCircleButtonStyle(size: 24)` chrome as the pinned-strip overflow.
+The row body is 52 pt high inside the 68 pt row.
+
+The harness shot page (2360 × 3800) is narrower than the laid-out surface, so
+the raw PNGs clip the right-most content; the window capture
+(`harness-window.png`) shows the full 1320 pt window. This is the same
+viewport limit recorded for issue #80, not layout overflow.

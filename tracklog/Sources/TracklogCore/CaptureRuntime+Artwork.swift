@@ -102,6 +102,7 @@ extension CaptureRuntime {
 
         state.nowPlayingArtwork = artwork.data
         state.artworkByHash[artwork.hash] = artwork.data
+        knownArtworkHashes[identity] = artwork.hash
         if persisted {
             updateVisibleListens(for: identity, with: artwork.hash)
         }
@@ -110,6 +111,7 @@ extension CaptureRuntime {
     private func applyArtwork(_ data: Data, hash: String, identity: String) {
         state.nowPlayingArtwork = data
         state.artworkByHash[hash] = data
+        knownArtworkHashes[identity] = hash
         updateVisibleListens(for: identity, with: hash)
     }
 
@@ -118,6 +120,35 @@ extension CaptureRuntime {
         // older cover keeps it, matching the store's update rule.
         state.listens = state.listens.map { listen in
             guard listen.raw.identity == identity, listen.artworkHash == nil else { return listen }
+            return listen.withArtworkHash(hash)
+        }
+        if var track = state.trackHistory {
+            track.listens = track.listens.map { listen in
+                guard listen.raw.identity == identity, listen.artworkHash == nil else { return listen }
+                return listen.withArtworkHash(hash)
+            }
+            state.trackHistory = track
+        }
+    }
+
+    /// A page read can start before a cover is attached and finish after it.
+    /// Applying that stale page must not drop the hash the artwork task wrote
+    /// into the visible rows while the read was suspended. The store's
+    /// artwork mapping is one cover per track identity, so a known hash from
+    /// any loaded row fills a nil hash in the incoming page for that track.
+    func fillingKnownArtwork(_ listens: [Listen]) -> [Listen] {
+        var known = knownArtworkHashes
+        for listen in state.listens + (state.trackHistory?.listens ?? []) {
+            guard let hash = listen.artworkHash else { continue }
+            if known[listen.raw.identity] == nil {
+                known[listen.raw.identity] = hash
+            }
+        }
+        guard !known.isEmpty else { return listens }
+        return listens.map { listen in
+            guard listen.artworkHash == nil,
+                  let hash = known[listen.raw.identity]
+            else { return listen }
             return listen.withArtworkHash(hash)
         }
     }

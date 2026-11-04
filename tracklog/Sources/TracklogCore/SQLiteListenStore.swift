@@ -203,7 +203,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
         }
     }
 
-    private func readListens(_ statement: OpaquePointer, handle: OpaquePointer) throws -> [Listen] {
+    func readListens(_ statement: OpaquePointer, handle: OpaquePointer) throws -> [Listen] {
         var listens: [Listen] = []
         while true {
             switch sqlite3_step(statement) {
@@ -220,32 +220,42 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
     /// Reads a listen from the columns starting at `offset`, so a query can
     /// put delivery columns in front of it.
     func readListen(_ statement: OpaquePointer, offset: Int32) -> Listen {
+        Self.readListenRow(statement, offset: offset)
+    }
+
+    /// The one row mapping behind every listen query, shared by the writer
+    /// actor and the dedicated read connection.
+    static func readListenRow(_ statement: OpaquePointer, offset: Int32) -> Listen {
         Listen(
             id: sqlite3_column_int64(statement, offset),
             raw: ListenMetadata(
-                title: text(statement, offset + 1),
-                artist: text(statement, offset + 2),
-                album: text(statement, offset + 3),
-                albumArtist: text(statement, offset + 4),
+                title: listenText(statement, offset + 1),
+                artist: listenText(statement, offset + 2),
+                album: listenText(statement, offset + 3),
+                albumArtist: listenText(statement, offset + 4),
             ),
             processed: ListenMetadata(
-                title: text(statement, offset + 5),
-                artist: text(statement, offset + 6),
-                album: text(statement, offset + 7),
-                albumArtist: text(statement, offset + 8),
+                title: listenText(statement, offset + 5),
+                artist: listenText(statement, offset + 6),
+                album: listenText(statement, offset + 7),
+                albumArtist: listenText(statement, offset + 8),
             ),
-            bundleID: text(statement, offset + 9),
+            bundleID: listenText(statement, offset + 9),
             duration: sqlite3_column_double(statement, offset + 10),
             playedDuration: sqlite3_column_double(statement, offset + 11),
             startedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, offset + 12)),
             capturedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, offset + 13)),
             artworkHash: sqlite3_column_type(statement, offset + 14) == SQLITE_NULL
                 ? nil
-                : text(statement, offset + 14),
+                : listenText(statement, offset + 14),
         )
     }
 
     func text(_ statement: OpaquePointer, _ index: Int32) -> String {
+        Self.listenText(statement, index)
+    }
+
+    static func listenText(_ statement: OpaquePointer, _ index: Int32) -> String {
         sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
     }
 

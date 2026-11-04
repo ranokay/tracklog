@@ -1,0 +1,46 @@
+# AX readout — row press, actions menu and track history
+
+Fixture: `TRACKLOG_DEMO_STATE=playing` (normal History, pending banner
+expanded). The expanded surface page was opened from the harness sidebar.
+
+## Feed row
+
+- `AXButton` label `Heart of Glass, Blondie, Parallel Lines, 18:42`, value
+  `delivered to ListenBrainz`, help `Shows this track's history`, frame
+  831 × 52, actions `AXPress`, `AXShowMenu`, `AXScrollToVisible`.
+- Sibling `AXMenuButton` `Actions for Heart of Glass`, frame 28 × 28,
+  actions `AXPress`, `AXShowMenu`, `AXScrollToVisible`.
+- Right-clicking the row opened the same row menu on the outer container:
+  `Deliveries` (`ListenBrainz — Delivered`), `Feedback` (`Unlove`, `Hate`),
+  `Block`, `Copy metadata`. The row still read as one `AXButton`.
+- The track-history row (`AXUnknown`, inert, label/value) has the same
+  context menu; right-clicking it opened the same items. Its Actions menu is
+  the separate 28 × 28 button.
+- Day header: `AXHeading` = `Wednesday, 4 November 2026, 4 listens`.
+- Row and menu are separate elements and their frames meet at x 1459 with no
+  overlap.
+
+Pressing the row (`AXPress`) opened track history:
+
+- `AXButton (Back to History)` 85 × 31.
+- `AXStaticText = "1 listen"` at the time of the press (the normal fixture's
+  stored `Heart of Glass` rows; the demo source may add a capture while the
+  harness is open).
+- `AXHeading (Heart of Glass)`.
+- `AXStaticText = "Blondie — Parallel Lines"`.
+- `AXStaticText = "First listened 4 November 2026"`.
+- Row `AXUnknown` label
+  `Heart of Glass, Blondie, Parallel Lines, 4 Nov 2026 at 18:42`, value
+  `delivered to ListenBrainz` — one inert element, as the track page is not
+  itself a navigation target.
+- Pressing `Back to History` returned to the feed (`Jump to date` and the
+  day feed present again).
+
+The track fixture (`TRACKLOG_HARNESS_HISTORY=track`) read:
+
+- `AXStaticText = "75 listens"`.
+- `AXHeading (Heart of Glass)`, `Blondie — Parallel Lines`,
+  `First listened 19 October 2026`.
+- Rows `Heart of Glass, Blondie, Parallel Lines, 4 Nov 2026 at 18:42` with
+  delivery values; later rows show `3 Nov 2026 at 20:15` etc.
+- `Actions for Heart of Glass` remains 28 × 28 beside each row.

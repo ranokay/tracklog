@@ -1,0 +1,45 @@
+# Cover race — evidence
+
+Cause: `reloadVisibleHistory` read a page with `artwork_hash` nil and then
+awaited `count`, `hasOlderListen` and `hasNewerListen`. If `attachArtwork` and
+`updateVisibleListens` filled the visible row during those awaits,
+`applyHistoryPage` replaced it with the stale nil row. When the artwork task
+had already filled its one row (or the captured row was not on the page yet),
+nothing filled it again that session. The failure is a lost update, not a slow
+write; the 10-second wait and `.serialized` only masked it.
+
+Deterministic test: `CaptureArtworkTests.aStalePageCannotEraseAKnownCover`.
+A real SQLite store is wrapped so its page reads strip the artwork hash. The
+test reloads and appends while the state already knows the cover.
+
+Before the fix (observed, then fixed):
+
+```text
+✘ Test aStalePageCannotEraseAKnownCover() recorded an issue at CaptureArtworkTests.swift:155:9: Expectation failed: runtime.state.listens.first?.artworkHash == hash
+✘ Test aStalePageCannotEraseAKnownCover() recorded an issue at CaptureArtworkTests.swift:160:9: Expectation failed: runtime.state.listens.last?.artworkHash == hash
+✘ Test aStalePageCannotEraseAKnownCover() failed after 0.013 seconds with 2 issues.
+```
+
+After the fix: the runtime records resolved covers by raw track identity in
+`knownArtworkHashes` and `fillingKnownArtwork` merges them into `applyHistoryPage`,
+`loadMoreHistory`, `loadNewerHistory` and both track-history page assignments.
+The test passes, and `CaptureArtworkTests` has no widened wait and no
+`.serialized` trait.
+
+Ten consecutive full runs after the fix:
+
+```text
+run 1 exit 0 627 tests in 96 suites
+run 2 exit 0 627 tests in 96 suites
+run 3 exit 0 627 tests in 96 suites
+run 4 exit 0 627 tests in 96 suites
+run 5 exit 0 627 tests in 96 suites
+run 6 exit 0 627 tests in 96 suites
+run 7 exit 0 627 tests in 96 suites
+run 8 exit 0 627 tests in 96 suites
+run 9 exit 0 627 tests in 96 suites
+run 10 exit 0 627 tests in 96 suites
+```
+
+The gate on `4e8f55e` also passed: receipt
+`/Users/ranokay/.local/state/agent-tools/gates/20261104T063610Z-989a5d085c8a.json`.

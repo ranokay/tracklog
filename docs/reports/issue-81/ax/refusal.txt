@@ -1,0 +1,17 @@
+# AX readout — Jump to date refused by the harness
+
+Fixture: `TRACKLOG_DEMO_STATE=playing` (normal History), Expanded surface page.
+
+- Pressing `AXButton (Jump to date)` (125 × 31) calls
+  `host.workspace.openSettingsPage("history", title: "History")`.
+- The harness workspace service refuses that call. The takeover stays up and
+  shows:
+  - `AXStaticText = "Settings could not be opened here. Open Tracklog's
+    History settings to choose a date."`.
+  - `AXButton (Dismiss)`.
+- The takeover stays up. The Settings date path, not this button, carries
+  the one-shot jump; the handoff readout shows that request retained through
+  the harness page rebuild and applied once.
+- The refusal is not a silent no-op and the feed remains usable.
+- In the real host, `openSettingsPage` is expected to succeed and dismiss the
+  takeover; that host result was not observed and is recorded as not passed.

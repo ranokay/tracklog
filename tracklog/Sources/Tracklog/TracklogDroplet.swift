@@ -136,6 +136,8 @@ public final class TracklogDroplet: NSObject, Droplet {
                 if ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "charts"
                     || HarnessChartFixture.selected != nil {
                     state.setTakeoverSection(.charts)
+                } else {
+                    await HarnessHistoryDemo.show(on: runtime)
                 }
                 // The HUD page renders nothing until the droplet presents, so
                 // the shot needs one deterministic card. It goes through the
@@ -266,11 +268,21 @@ public final class TracklogDroplet: NSObject, Droplet {
 
     /// Opens one of the droplet's own Settings pages. Any History takeover is
     /// dismissed first: Settings is the only typed surface, and it must not
-    /// sit underneath the takeover.
+    /// sit underneath the takeover. A page that must explain a host refusal
+    /// keeps the takeover up until the host has accepted the page.
     @discardableResult
-    func openSettingsPage(_ id: String, title: String) -> Bool {
-        dismissTakeoverForSettings()
+    func openSettingsPage(
+        _ id: String,
+        title: String,
+        dismissOnRefusal: Bool = true,
+    ) -> Bool {
         guard let host else { return false }
+        if !dismissOnRefusal {
+            guard host.workspace.openSettingsPage(id, title: title) else { return false }
+            dismissTakeoverForSettings()
+            return true
+        }
+        dismissTakeoverForSettings()
         return host.workspace.openSettingsPage(id, title: title)
     }
 
@@ -280,31 +292,15 @@ public final class TracklogDroplet: NSObject, Droplet {
         if expandingPending {
             state.setPendingListExpanded(true)
         }
+        // Re-presenting the mounted surface tears its view down and would
+        // discard a jump applied just before. If History is already the
+        // current presentation, its own change observers pick the request up.
+        if host.notchSurface.expandedState.current?.surfaceID == tracklogHistorySurfaceID {
+            return
+        }
         host.notchSurface.presentExpandedSurface(
             ExpandedSurfacePresentationRequest(surfaceID: tracklogHistorySurfaceID),
         )
-    }
-
-    // MARK: - History
-
-    func reloadHistory() async {
-        await runtime?.reloadHistory()
-    }
-
-    func loadMoreHistory() async {
-        await runtime?.loadMoreHistory()
-    }
-
-    func artworkData(for listen: Listen) -> Data? {
-        guard let hash = listen.artworkHash else { return nil }
-        return state.artworkByHash[hash]
-    }
-
-    func copyMetadata(for listen: Listen) {
-        guard let host else { return }
-        if !host.workspace.copyToPasteboard(listen.processed.copyText) {
-            host.log.notice("Copy metadata was refused")
-        }
     }
 
     // MARK: - Media

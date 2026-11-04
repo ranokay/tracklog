@@ -99,6 +99,21 @@ public final class TracklogAppState: ObservableObject {
     /// Total listens per local day, keyed by the day's start. A day that spans
     /// a page boundary still reports its whole count.
     @Published public internal(set) var historyDayCounts: [Date: Int] = [:]
+    /// Whether the loaded History window starts away from the newest row.
+    @Published public internal(set) var historyHasNewer = false
+    /// Set while a date jump is being read, so another surface instance
+    /// mounting at the same moment cannot reset the feed underneath it.
+    @Published public internal(set) var historyJumpInFlight = false
+    /// The one date-jump notice above the feed.
+    @Published public internal(set) var historyJumpNotice: HistoryJumpNotice?
+    /// A one-shot date jump requested from Settings. Presentation refusal
+    /// leaves it pending; applying it consumes it; deactivation clears it.
+    @Published public internal(set) var pendingHistoryJump: Date?
+    /// Set when the host refused to open the History settings page, so the
+    /// takeover can say so instead of appearing to do nothing.
+    @Published public internal(set) var historySettingsUnavailable = false
+    /// One track's paged local history, or nil when History shows the feed.
+    @Published public internal(set) var trackHistory: TrackHistory?
     @Published public internal(set) var listenCount = 0
     @Published public internal(set) var lastListen: Listen?
     /// The current track's cover, ready for the widget and now-playing strip.
@@ -178,6 +193,21 @@ public final class TracklogAppState: ObservableObject {
 
     public func setTakeoverSection(_ section: TakeoverSection) {
         takeoverSection = section
+    }
+
+    /// Queues one date jump. The runtime consumes it when it applies, so a
+    /// refused presentation leaves it for the next open.
+    public func requestHistoryJump(_ date: Date) {
+        pendingHistoryJump = date
+    }
+
+    public func consumeHistoryJump(_ date: Date) {
+        guard pendingHistoryJump == date else { return }
+        pendingHistoryJump = nil
+    }
+
+    public func setHistorySettingsUnavailable(_ unavailable: Bool) {
+        historySettingsUnavailable = unavailable
     }
 
     public func togglePendingList() {
