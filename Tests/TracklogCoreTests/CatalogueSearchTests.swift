@@ -36,17 +36,11 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         let store = try SQLiteListenStore(url: database.url)
         let clock = FakeClock(base)
         let credentials = MemoryCredentialStore()
-        var adapters: [any ServiceAdapter] = [
+        let adapters: [any ServiceAdapter] = [
             LastFMAdapter(transport: transport, appCredentials: appCredentials),
+            StubAdapter(kind: .libreFM, identity: ServiceIdentity(name: "libre")),
+            StubAdapter(kind: .listenBrainz, identity: ServiceIdentity(name: "listener")),
         ]
-        switch current {
-        case .libreFM:
-            adapters.append(StubAdapter(kind: .libreFM, identity: ServiceIdentity(name: "libre")))
-        case .listenBrainz:
-            adapters.append(StubAdapter(kind: .listenBrainz, identity: ServiceIdentity(name: "listener")))
-        case .lastFM, .none:
-            break
-        }
         let runtime = CaptureRuntime(
             clock: clock,
             source: ReplayedNowPlaying(),
@@ -75,8 +69,8 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         )
     }
 
-    private func standardTransport() -> CatalogueTransport {
-        CatalogueTransport { parameters in
+    private func standardTransport(failures: [String: Int] = [:]) -> CatalogueTransport {
+        CatalogueTransport(failures: failures) { parameters in
             switch parameters["method"] {
             case "artist.search":
                 artistSearchResponse(oneArtist("Blondie"))
@@ -181,6 +175,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(harness.search.group(.albums)?.phase == .ready)
         #expect(harness.search.group(.tracks)?.phase == .ready)
         #expect(harness.search.appCredentialProblem == .invalidKey)
+        #expect(harness.runtime.state.lastFMAppCredentialProblem == nil)
     }
 
     // MARK: - Request bounds
@@ -251,6 +246,24 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         harness.clock.advance(to: harness.clock.now.addingTimeInterval(0.2))
         #expect(await waitSettled(harness))
         #expect(await transport.requestCount() == 4)
+    }
+
+    @Test func theSameQuerySendsNewRequestsEveryTime() async throws {
+        let transport = standardTransport()
+        let harness = try await makeHarness(transport: transport, timeout: 1)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
+        #expect(await waitSettled(harness))
+        let firstCount = await transport.requestCount()
+        #expect(firstCount == 4)
+
+        model.updateQuery("blo")
+        #expect(await catalogueWaitUntil { harness.clock.sleeperCount > 0 })
+        harness.clock.advance(to: harness.clock.now.addingTimeInterval(0.3))
+        #expect(await waitSettled(harness))
+
+        #expect(await transport.requestCount() == firstCount * 2)
     }
 
     // MARK: - Cancellation
@@ -346,6 +359,63 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(harness.search.groups.allSatisfy { $0.phase == .idle })
     }
 
+    @Test func duplicateEntriesAreDeduplicatedBeforeTheLimit() async throws {
+        let transport = CatalogueTransport { parameters in
+            switch parameters["method"] {
+            case "artist.search":
+                return artistSearchResponse(
+                    Array(
+                        repeating: (
+                            name: "Heart Artist",
+                            url: "https://www.last.fm/music/Heart+Artist",
+                        ),
+                        count: 10,
+                    ),
+                )
+            case "album.search":
+                return albumSearchResponse(oneAlbum("Parallel Lines", artist: "Blondie"))
+            case "track.search":
+                return trackSearchResponse(oneTrack("Heart of Glass", artist: "Blondie"))
+            default:
+                let page = Int(parameters["page"] ?? "1") ?? 1
+                if page == 1 {
+                    var entries = Array(
+                        repeating: (
+                            title: "Heart 1",
+                            artist: "Blondie",
+                            url: String?.none,
+                        ),
+                        count: 9,
+                    )
+                    entries.append((title: "Other 1", artist: "Blondie", url: nil))
+                    return lovedTracksResponse(entries, page: 1, totalPages: 2)
+                }
+                return lovedTracksResponse(
+                    [(title: "Heart 2", artist: "Blondie", url: nil)],
+                    page: 2,
+                    totalPages: 2,
+                )
+            }
+        }
+        let harness = try await makeHarness(transport: transport, timeout: 1)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "heart")
+        #expect(await waitSettled(harness))
+
+        let artists = try #require(harness.search.group(.artists))
+        #expect(artists.phase == .ready)
+        #expect(artists.rows.count == 1)
+        #expect(artists.rows.map(\.id) == [artists.rows[0].id])
+
+        let loved = try #require(harness.search.group(.loved))
+        #expect(loved.phase == .ready)
+        #expect(loved.rows.count == 2)
+        #expect(Set(loved.rows.map(\.id)).count == 2)
+        let lovedRequests = await transport.parameters().filter { $0["method"] == "user.getlovedtracks" }
+        #expect(lovedRequests.compactMap { $0["page"] } == ["1", "2"])
+    }
+
     // MARK: - Group isolation and timeouts
 
     @Test func oneGroupFailureLeavesTheOtherGroupsIntact() async throws {
@@ -371,6 +441,25 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(harness.search.group(.albums)?.phase == .ready)
         #expect(harness.search.group(.tracks)?.phase == .ready)
         #expect(harness.search.group(.loved)?.phase == .empty)
+    }
+
+    @Test func tryAgainReadsAFailedGroupAndReplacesTheFailure() async throws {
+        let transport = standardTransport(failures: ["artist.search": 1])
+        let harness = try await makeHarness(transport: transport, timeout: 1)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
+        #expect(await waitSettled(harness))
+        #expect(harness.search.group(.artists)?.phase == .failed(.offline))
+
+        model.retry()
+        #expect(await waitSettled(harness))
+
+        let artists = try #require(harness.search.group(.artists))
+        #expect(artists.phase == .ready)
+        #expect(artists.rows.count == 1)
+        let artistRequests = await transport.parameters().filter { $0["method"] == "artist.search" }
+        #expect(artistRequests.count == 2)
     }
 
     @Test func aTimedOutGroupFailsWithoutHoldingTheOthers() async throws {
@@ -513,6 +602,57 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
 
         let methods = await transport.methods()
         #expect(!methods.contains("user.getlovedtracks"))
+    }
+
+    @Test func aConnectionChangeRestartsTheQueryAndDropsTheOldLovedReply() async throws {
+        let transport = CatalogueTransport(
+            hold: { $0["method"] == "user.getlovedtracks" },
+            handler: { parameters in
+                switch parameters["method"] {
+                case "artist.search":
+                    artistSearchResponse(oneArtist("Blondie"))
+                case "album.search":
+                    albumSearchResponse(oneAlbum("Parallel Lines", artist: "Blondie"))
+                case "track.search":
+                    trackSearchResponse(oneTrack("Heart of Glass", artist: "Blondie"))
+                default:
+                    lovedTracksResponse(
+                        [(title: "Heart of Glass", artist: "Blondie", url: nil)],
+                        page: 1,
+                        totalPages: 1,
+                    )
+                }
+            },
+        )
+        let harness = try await makeHarness(transport: transport, current: .lastFM, timeout: 30)
+        let listenBrainz = try await harness.runtime.linkVerified(
+            kind: .listenBrainz,
+            credential: "token",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        let lastFM = try #require(harness.runtime.state.connections.first { $0.kind == .lastFM })
+        try await harness.runtime.setCurrentConnection(lastFM.id)
+        let model = try harness.model
+
+        await updateQueryAndAdvanceDebounce(harness.clock, model, "blo")
+        #expect(await transport.waitUntilEntered(1))
+        #expect(harness.search.group(.loved)?.phase == .loading)
+
+        try await harness.runtime.setCurrentConnection(listenBrainz.id)
+        #expect(await catalogueWaitUntil {
+            harness.search.group(.loved)?.phase == .unavailable && !harness.search.isSearching
+        })
+        #expect(harness.search.group(.loved)?.detail?.contains("ListenBrainz") == true)
+
+        await transport.release()
+        await turnMainActor(50)
+        #expect(harness.search.group(.loved)?.phase == .unavailable)
+
+        try await harness.runtime.setCurrentConnection(lastFM.id)
+        #expect(await catalogueWaitUntil {
+            harness.search.group(.loved)?.phase == .ready && !harness.search.isSearching
+        })
+        #expect(harness.search.group(.loved)?.detail?.contains("listener") == true)
     }
 
     // MARK: - Isolation from other service roots

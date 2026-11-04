@@ -11,6 +11,7 @@ actor CatalogueTransport: HTTPTransport {
 
     private let handler: Handler
     private let hold: @Sendable ([String: String]) -> Bool
+    private var failuresRemaining: [String: Int]
     private var released = false
     private var held: [CheckedContinuation<Void, Never>] = []
     private var entered = 0
@@ -20,9 +21,11 @@ actor CatalogueTransport: HTTPTransport {
 
     init(
         hold: @escaping @Sendable ([String: String]) -> Bool = { _ in false },
+        failures: [String: Int] = [:],
         handler: @escaping Handler,
     ) {
         self.hold = hold
+        failuresRemaining = failures
         self.handler = handler
     }
 
@@ -38,6 +41,11 @@ actor CatalogueTransport: HTTPTransport {
             if !released {
                 await withCheckedContinuation { held.append($0) }
             }
+        }
+        if let method = parameters["method"],
+           let remaining = failuresRemaining[method], remaining > 0 {
+            failuresRemaining[method] = remaining - 1
+            throw URLError(.notConnectedToInternet)
         }
         return try handler(parameters)
     }

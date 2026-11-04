@@ -289,7 +289,7 @@ private extension CatalogueSearchReadModel {
         }
         switch result {
         case let .success(page):
-            let rows = Array(page.rows.prefix(resultsPerGroup))
+            let rows = Array(unique(page.rows).prefix(resultsPerGroup))
             return rows.isEmpty ? .empty(detail: nil) : .rows(rows, detail: nil)
         case let .failure(failure):
             return .failed(failure)
@@ -328,6 +328,7 @@ private extension CatalogueSearchReadModel {
                 )
                 pagesRead += 1
                 matches.append(contentsOf: read.rows.filter { matchesQuery($0, query: query) })
+                matches = unique(matches)
                 hasMore = read.hasMore
                 if !hasMore || matches.count >= resultsPerGroup {
                     break
@@ -351,6 +352,11 @@ private extension CatalogueSearchReadModel {
         case let .failure(failure):
             return .failed(failure)
         }
+    }
+
+    nonisolated static func unique(_ rows: [CatalogueRow]) -> [CatalogueRow] {
+        var seen: Set<String> = []
+        return rows.filter { seen.insert($0.id).inserted }
     }
 
     nonisolated static func matchesQuery(_ row: CatalogueRow, query: String) -> Bool {

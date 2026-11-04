@@ -46,6 +46,7 @@ struct TracklogSearchPalette: View {
     @FocusState private var fieldFocused: Bool
     @State private var wasSearching = false
     @State private var userMovedSelection = false
+    @State private var hasAnnouncedAutomaticSelection = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -54,7 +55,7 @@ struct TracklogSearchPalette: View {
                 noticeBar(notice)
                     .padding(.top, DroppySpacing.xs)
             }
-            if state.lastFMNeedsAppCredentialRemedy {
+            if state.lastFMNeedsAppCredentialRemedy || state.catalogueSearch.appCredentialProblem != nil {
                 credentialsBar
                     .padding(.top, DroppySpacing.xs)
             }
@@ -78,7 +79,9 @@ struct TracklogSearchPalette: View {
         }
         .onChange(of: model.query) { _, value in
             model.notice = nil
+            model.selectedID = nil
             userMovedSelection = false
+            hasAnnouncedAutomaticSelection = false
             droplet.paletteQueryChanged(value)
         }
         .onChange(of: state.catalogueSearch.isSearching) { _, searching in
@@ -86,8 +89,7 @@ struct TracklogSearchPalette: View {
                 announce("Searching the Last.fm catalogue.")
             } else if !searching, wasSearching, state.catalogueSearch.hasSearched {
                 announce(summary(of: state.catalogueSearch))
-                ensureSelection(preferRow: true)
-                announceSelection()
+                ensureSelection()
             }
             wasSearching = searching
         }
@@ -207,11 +209,17 @@ struct TracklogSearchPalette: View {
     }
 
     private var credentialTitle: String {
-        state.lastFMAppCredentialProblem?.title ?? "Last.fm app credentials are missing"
+        if let problem = state.catalogueSearch.appCredentialProblem {
+            return problem.title
+        }
+        return state.lastFMAppCredentialProblem?.title ?? "Last.fm app credentials are missing"
     }
 
     private var credentialDetail: String {
-        state.lastFMAppCredentialProblem?.detail
+        if let problem = state.catalogueSearch.appCredentialProblem {
+            return problem.detail
+        }
+        return state.lastFMAppCredentialProblem?.detail
             ?? "Search needs your own Last.fm API key and shared secret. Save them in Settings before searching."
     }
 
@@ -587,6 +595,7 @@ struct TracklogSearchPalette: View {
         let current = items.firstIndex { $0.id == model.selectedID } ?? (delta > 0 ? -1 : 0)
         let next = min(max(current + delta, 0), items.count - 1)
         userMovedSelection = true
+        hasAnnouncedAutomaticSelection = true
         model.selectedID = items[next].id
         announce(announcement(for: items[next]))
     }
@@ -610,27 +619,17 @@ struct TracklogSearchPalette: View {
         switch item {
         case let .group(kind):
             toggleGroup(kind)
+            fieldFocused = true
         case let .showMore(kind):
             expand(kind)
+            fieldFocused = true
         case let .row(row):
-            let outcome = droplet.playPaletteRow(row)
-            handle(outcome)
+            droplet.playPaletteRow(row)
         }
-        fieldFocused = true
     }
 
     private func openLastFM(_ row: CatalogueRow) {
-        let outcome = droplet.openLastFMPageFromPalette(row)
-        handle(outcome)
-        fieldFocused = true
-    }
-
-    private func handle(_ outcome: PlaybackOutcome) {
-        if case .opened = outcome {
-            close()
-            return
-        }
-        model.notice = outcome.failureMessage
+        droplet.openLastFMPageFromPalette(row)
     }
 
     private func escape() {
@@ -643,20 +642,20 @@ struct TracklogSearchPalette: View {
         }
     }
 
-    private func ensureSelection(preferRow: Bool = false) {
+    private func ensureSelection() {
         let items = visibleItems
-        if preferRow, !userMovedSelection, let first = firstRow(in: items) {
-            model.selectedID = first.id
-            return
-        }
         if let selected = model.selectedID, items.contains(where: { $0.id == selected }) {
             return
         }
-        if preferRow, let first = firstRow(in: items) {
-            model.selectedID = first.id
+        guard !userMovedSelection, let first = firstRow(in: items) else {
+            model.selectedID = nil
             return
         }
-        model.selectedID = items.first?.id
+        model.selectedID = first.id
+        if !hasAnnouncedAutomaticSelection {
+            hasAnnouncedAutomaticSelection = true
+            announce(announcement(for: first))
+        }
     }
 
     private func firstRow(in items: [SearchPaletteItem]) -> SearchPaletteItem? {
@@ -692,11 +691,6 @@ struct TracklogSearchPalette: View {
         }
         announce("Showing all \(kind.title.lowercased()).")
         fieldFocused = true
-    }
-
-    private func announceSelection() {
-        guard let item = visibleItems.first(where: { $0.id == model.selectedID }) else { return }
-        announce(announcement(for: item))
     }
 
     private func announcement(for item: SearchPaletteItem) -> String {

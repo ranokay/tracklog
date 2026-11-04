@@ -48,12 +48,27 @@ extension TracklogDroplet {
         )
     }
 
-    func playPaletteRow(_ row: CatalogueRow) -> PlaybackOutcome {
-        searchPlaybackAction.performPrimary(row)
+    /// The panel closes and hands the foreground back before the URL opens, so
+    /// the browser lands in front. A refused open or a missing page reopens
+    /// the same search session with the inline notice.
+    func playPaletteRow(_ row: CatalogueRow) {
+        searchPaletteController.close(endingSearch: false)
+        finishPaletteAction(searchPlaybackAction.performPrimary(row))
     }
 
-    func openLastFMPageFromPalette(_ row: CatalogueRow) -> PlaybackOutcome {
-        searchPlaybackAction.openLastFMPage(row)
+    func openLastFMPageFromPalette(_ row: CatalogueRow) {
+        searchPaletteController.close(endingSearch: false)
+        finishPaletteAction(searchPlaybackAction.openLastFMPage(row))
+    }
+
+    private func finishPaletteAction(_ outcome: PlaybackOutcome) {
+        switch outcome {
+        case .opened, .openedSettings:
+            runtime?.catalogueSearch?.endSession()
+        case .noPage, .noQuery, .refused, .refusedPage, .settingsRefused:
+            guard let message = outcome.failureMessage else { return }
+            searchPaletteController.open(reusingSession: true, notice: message)
+        }
     }
 
     /// The Play action on the existing surfaces. With no template the Search

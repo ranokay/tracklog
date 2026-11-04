@@ -2,7 +2,7 @@
 
 - Base: `aa6bdeb257b24dd94b33b8a5f8295be5affff908` (`feat: build history navigation (#112)`)
 - Branch: `feat/catalogue-search-85`
-- Code head: `1df390c8189f8e7e67051a59bd27795c12eb86fb` (the gate receipt below is for this head; later commits are documentation and evidence only)
+- Code head: the commit for the F1–F5 fixes (the gate receipt is added in the follow-up evidence commit).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 9 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -11,10 +11,10 @@
 The owner confirmed the palette and result interactions in [#85 comment 6625541675](https://github.com/ranokay/tracklog/issues/85#issuecomment-6625541675). This implementation follows that contract:
 
 - **Playback URL schemes.** Only `http` and `https` are rendered and opened. Every play goes through `host.workspace.open`; `NSWorkspace` is never used to bypass the host. The Settings page refuses any other scheme.
-- **One surface at a time.** Opening the palette from the takeover dismisses the takeover first, using the same `dismissTakeoverForSettings` path Settings uses. Opening Settings from the palette closes the palette first. A second summon closes the panel. Clicking outside closes it. One `close(endingSearch:)` funnel removes the key monitor and observers, ends the search session, calls `DroppyPanelActivation.finish()`, orders the panel out and clears the controller; `deactivate()` uses the same funnel.
+- **One surface at a time.** Opening the palette from the takeover dismisses the takeover first, using the same `dismissTakeoverForSettings` path Settings uses. Opening Settings from the palette closes the palette first. A second summon closes the panel. Clicking outside closes it. One `close(endingSearch:)` funnel removes the key monitor and observers, ends the search session, calls `DroppyPanelActivation.finish()`, orders the panel out and clears the controller; `deactivate()` uses the same funnel. Row actions close the panel with `endingSearch: false` **before** `host.workspace.open`; a successful open ends the session, a refusal or missing page reopens the same session with the inline notice. The code-read order is in `ax/play-order.txt`; the real foreground result is not run.
 - **Opening paths.** A search button in the takeover's section bar, an item in the shelf overflow menu (palette opener only), and a rebindable `global-shortcuts` shortcut with no default chord. The panel is a droplet-owned 680 × 560 `NSPanel` clamped to the screen's visible frame, on `DroppyPanelSurface`, activated with `DroppyPanelActivation`. The `launcher` capability is not used.
-- **Loved results.** The Loved group filters the current connection's loved tracks when that connection is Last.fm, reading at most 5 pages of 200 per query. The group is labelled with the account (`Loved by <account>`) and says `first 1,000 checked` only when more pages remained. Otherwise it explains why the group is unavailable. It never appears as an empty group, and a user connection is not needed for catalogue reads.
-- **Keyboard and groups.** Groups are Artists, Albums, Tracks and Loved, five rows visible, collapsible, each with a Show more row. ↑/↓ move through group headers, result rows and Show more rows; Return toggles a header, expands Show more, or runs the primary action on a row. Esc clears the text first and closes only when the text is empty. The search field keeps focus; selection is announced. Collapsed and expanded state resets on every open.
+- **Loved results.** The Loved group filters the current connection's loved tracks when that connection is Last.fm, reading at most 5 pages of 200 per query. The group is labelled with the account (`Loved by <account>`) and says `first 1,000 checked` only when more pages remained. Otherwise it explains why the group is unavailable. It never appears as an empty group, and a user connection is not needed for catalogue reads. Each group deduplicates rows by id before counting or applying the limit of 10, including loved rows across pages; duplicates do not use up result slots. A rejected app pair shows the banner from the search problem without writing the persisted app-credential problem.
+- **Keyboard and groups.** Groups are Artists, Albums, Tracks and Loved, five rows visible, collapsible, each with a Show more row. Automatic selection is always a result row: the first row as soon as any group has one, unless the user has moved in this query. Headers and Show more rows are reachable only through ↑/↓; Return toggles a header, expands Show more, or runs the primary action on a row. With no rows the selection is nil and Return does nothing. Esc clears the text first and closes only when the text is empty. The search field keeps focus; the first automatic row selection and later moves are announced. Collapsed and expanded state resets on every open.
 - **Primary action.** Search and play when a template is set, otherwise the row's Last.fm page. Command-Return always opens Last.fm. A row with no valid service page offers no Last.fm action and reports that inline.
 - **Query lifecycle.** 300 ms debounce, at least 2 characters, one request per search group, at most four groups in flight, 10 results per group, a 15-second group deadline. Each group fails separately. A new query invalidates the old generation; late replies cannot replace current results. Closing or deactivating stops all owned work; nothing is cached.
 - **Template.** `{query}` exactly once, only in the path, query or fragment, never in the host or userinfo; an http/https URL with a host; no userinfo; RFC 3986 unreserved encoding (a space is `%20`); substitution is one pass, so a literal `{query}` in typed text stays data. No default is shipped.
@@ -59,15 +59,19 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | `missingAppCredentialsShowTheSettingsRemedyWithoutARequest` | Every group fails with `.appCredentials(.missing)`, `needsSettings`, no request at all. |
 | `rejectedAppCredentialsNameTheProblemAndLeaveOtherGroupsAlone` | Code 10 fails only Artists; other groups stay ready; the app-key remedy is named. |
 | `fourGroupsRunAtOnceWithTenResultsAndBoundedPages` | Four groups in flight, 10 result limit, loved page size 200, 15-second default asserted. |
+| `duplicateEntriesAreDeduplicatedBeforeTheLimit` | Ten duplicate service entries become one row; nine duplicate loved matches on page 1 do not stop the second page, and the published group has unique ids. |
 | `theDebounceWaitsThreeHundredMillisecondsAndRequiresTwoCharacters` | One character sends nothing; the second waits 300 ms; no request before the clock advance. |
+| `theSameQuerySendsNewRequestsEveryTime` | A repeat of the same text sends a second complete set of group requests; there is no cache. |
 | `aNewQueryCancelsTheOldAndIgnoresLateReplies` | Held old query; new query settles; late old replies never replace it. |
 | `closingAndDeactivatingStopOwnedWork` | End session and deactivate leave idle groups, no results after released requests. |
 | `oneGroupFailureLeavesTheOtherGroupsIntact` | A transport failure fails only Artists. |
+| `tryAgainReadsAFailedGroupAndReplacesTheFailure` | Try again reads the failed group again and replaces the failure with rows. |
 | `aTimedOutGroupFailsWithoutHoldingTheOthers` | A held group times out while the others finish; the race returns without waiting for the held request. |
 | `lovedReadsAtMostFivePagesAndSaysWhenTheLimitWasReached` | Five pages of 200, ten matching rows, account detail and `first 1,000 checked`. |
 | `lovedReportsTheLimitEvenWithFewerThanTenMatches` | Five pages with only one match each still say `first 1,000 checked`; the cap is decided by pages read, not by reaching ten rows. |
 | `lovedStopsWhenTheLastPageIsReached` | Two pages, no limit text. |
 | `lovedExplainsWhenTheCurrentConnectionIsNotLastFM` | ListenBrainz current: unavailable explanation, no loved request. |
+| `aConnectionChangeRestartsTheQueryAndDropsTheOldLovedReply` | Last.fm to ListenBrainz and back; the held old loved reply never replaces the unavailable/account-aware state; the label and explanation update. |
 | `lastFMRequestsKeepTheirEndpointAndSessionKeyForLibreFMAndListenBrainz` | Endpoint and no `sk` under both other current connections. |
 | `aHeldSearchDoesNotBlockCaptureOrDelivery` | Held search; a listen persists and its delivery reaches delivered before the search is released. |
 | `aSetTemplatePlaysTheEncodedRowQuery`, `withoutATemplateThePaletteRowOpensItsLastFMPage`, `withoutATemplateTheStandalonePlayActionOpensSearchSettings` | Both primary behaviours and the Settings remedy. |
@@ -80,7 +84,7 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | settings export tests | Old export without the template still decodes; a template round-trips; runtime export carries the saved value. |
 | `savingPublishesAndPersistsOnlyAValidTemplate` | Valid save publishes/persists; invalid save changes nothing. |
 
-Full suite: **672 tests in 102 suites**, exit `0`.
+Full suite: **676 tests in 102 suites**, exit `0`.
 
 ## Gate
 
@@ -90,16 +94,12 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `1df390c8189f8e7e67051a59bd27795c12eb86fb`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T095446Z-fd81afedfe6b.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T095446Z-fd81afedfe6b.log`
-  - Duration: 1082.8 seconds.
-  - `git_before` and `git_after` both report head `1df390c…`, empty porcelain status and the same tracked-content hash.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 306 files.
-- `swift test --package-path Tests`: 672 tests in 102 suites; 51 media tests in 7 suites.
+- Result and receipt: the final gate runs at the F1–F5 code head; its receipt and exit code are recorded in the follow-up evidence commit.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean.
+- `swift test --package-path Tests`: 676 tests in 102 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
-- New harness states: `search-refusal` and `search-settings`; every existing expanded surface now shows the section-bar search button.
+- New harness states: `search-refusal` and `search-settings`; `loved-held` is an interactive fixture for the early-Return walk.
 - Artifacts: `docs/reports/issue-85/search-settings.png`, `search-refusal.png`, `search-settings.json` and `search-refusal.json` under `docs/reports/issue-85/reports/`; the gate's charts surface is `charts-search-button.png`.
 
 ## Native observations
@@ -113,19 +113,21 @@ All palette evidence is from the running `TracklogHarness`; the panel is a separ
 | Empty | `empty` | Each group says `No artists/albums/tracks match this search`; `palette-empty.png` |
 | Failed group | `failed` | Artists failed with `The Last.fm catalogue could not be reached.` and Try again; other groups ready; `palette-failed-group.png` |
 | Missing credentials | `credentials-missing` | Banner names the missing pair, Open Settings; every group fails with the Settings remedy; no request; `palette-credentials-missing.png` |
-| Rejected credentials | `credentials-rejected` | Banner `Last.fm rejected the app key`; group failures name the same; `palette-credentials-rejected.png` |
+| Rejected credentials | `credentials-rejected` | Banner `Last.fm rejected the app key` comes from the search failure; no persisted problem is written; group failures name the same; `palette-credentials-rejected.png` |
 | Long names | `long-names` | Titles truncate with an ellipsis; AX labels keep the full text; `palette-long-names.png` |
 | Non-Latin text | `cjk` | Japanese query, artists, albums and tracks render; `palette-cjk.png` |
 | Loved unavailable | `loved-unavailable` | `Loved results come from a Last.fm account. The current connection is ListenBrainz; choose a Last.fm connection in Charts.`; `palette-loved-unavailable.png` |
 | Loved limit | `loved-limit` | `Loved by listener · first 1,000 checked`, ten rows; `palette-loved-limit-loved.png` |
-| Failed launch | `failed-launch` with `TRACKLOG_HARNESS_OPEN_REFUSED=1` | Primary action refused; inline `Search and play could not be opened. Check the URL template in Search settings.`; `palette-failed-launch.png` |
+| Failed launch | `failed-launch` with `TRACKLOG_HARNESS_OPEN_REFUSED=1` | Panel closes, primary action refused, same session reopens with `Search and play could not be opened. Check the URL template in Search settings.`; `palette-failed-launch.png` |
+| Held Loved + early Return | `loved-held` with `TRACKLOG_HARNESS_OPEN_REFUSED=1` | First row auto-selected while Loved is loading; Return acts on the row (not the Artists header); the panel reopens with the notice and Artists stays expanded; `palette-loved-held-return.png` |
 | Takeover refusal bar | `TRACKLOG_HARNESS_PALETTE=refusal` | Gate shot `search-refusal`; `Search and play could not be opened. Check the URL template in Search settings.` with Dismiss. |
 | Search Settings | `TRACKLOG_HARNESS_SETTINGS_PAGE=search` | Gate shot `search-settings`; URL template field, Save/Remove and the rules. |
 
 Keyboard walk in the running harness:
 
-- Field focused on open; Up/Down moved the highlight from Blondie through Blondie cover band while the field kept its caret and text.
-- Return on Show more artists expanded the group to all ten; the selection moved to the first newly visible row. Return on the Artists header collapsed it; the header AX value changed to `Collapsed`.
+- On open with results, the first row is selected automatically and announced; the field keeps its caret and text.
+- With Loved held loading, Return while only Artists/Albums/Tracks are ready acts on the selected row, not the Artists header; the panel reopens with the launch notice and Artists stays `Expanded` (`palette-loved-held-return.png`).
+- Down from the first row reaches Show more artists; Return expands to ten and moves to the first new row. Up from the first row reaches the Artists header; Return collapses it and the AX value changes to `Collapsed`.
 - Esc with `blo` in the field cleared the text, kept the panel open and showed the empty prompt. Esc again closed the panel.
 - A foreground click on the harness window (outside the panel) closed the panel.
 
@@ -163,7 +165,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Searc
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 672 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
+| Composition tests | Run | 676 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
 | Harness output | Run | Gate `search-refusal`, `search-settings`, existing expanded-surface states; interactive palette states and screenshots. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Shortcut in Droppy's Shortcuts page | **Not run** | The shortcut is registered with `defaultShortcut: nil`; the real host page was not opened. |

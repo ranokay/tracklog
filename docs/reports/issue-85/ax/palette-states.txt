@@ -32,10 +32,13 @@ TRACKLOG_HARNESS_PALETTE=<fixture>`.
 
 ## Rejected credentials (`credentials-rejected`)
 
+- The state comes only from the search failure; the fixture no longer writes
+  the persisted app-credential problem.
 - `AXButton` label `Last.fm rejected the app key`, value
   `Last.fm did not accept the app key in use. Save a working pair on the
   Last.fm app credentials page.`, action `Open Settings`.
-- Group failures name `Last.fm rejected the app key`.
+- Group header value `Expanded. Failed. Last.fm rejected the app key`; each
+  group has Settings and Try again.
 
 ## Long names (`long-names`)
 
@@ -61,12 +64,19 @@ TRACKLOG_HARNESS_PALETTE=<fixture>`.
 
 - Visible header text `Loved by listener · first 1,000 checked`.
 - Ten rows built from five 200-row pages; the sixth page never requested.
+- The composition test `lovedReportsTheLimitEvenWithFewerThanTenMatches`
+  covers five pages with one match each: the note still appears because the
+  cap is pages read, not ten rows.
 
-## Failed launch (`failed-launch` with `TRACKLOG_HARNESS_OPEN_REFUSED=1`)
+## Failed launch (`failed-launch` and `loved-held` with
+`TRACKLOG_HARNESS_OPEN_REFUSED=1`)
 
+- The primary action closes the panel, the harness opener refuses, and the
+  panel reopens with the same session and the notice.
 - `AXStaticText` `Search and play could not be opened. Check the URL template
   in Search settings.` and `AXButton` `Dismiss`.
-- Selection stayed on the first row; the panel remained open.
+- The first row was the selected row; Artists stayed `Expanded. 10 results`.
+  `loved-held` additionally shows Loved still loading.
 
 Screenshots: `palette-loading.png`, `palette-empty.png`,
 `palette-failed-group.png`, `palette-credentials-missing.png`,

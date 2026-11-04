@@ -14,6 +14,7 @@ enum HarnessPaletteFixture: String, CaseIterable {
     case cjk
     case lovedUnavailable = "loved-unavailable"
     case lovedLimit = "loved-limit"
+    case lovedHeld = "loved-held"
     case failedLaunch = "failed-launch"
     case refusal
 
@@ -39,7 +40,7 @@ enum HarnessPaletteFixture: String, CaseIterable {
     }
 
     var usesPlaybackTemplate: Bool {
-        self == .normal || self == .longNames || self == .cjk || self == .failedLaunch
+        self == .normal || self == .longNames || self == .cjk || self == .failedLaunch || self == .lovedHeld
     }
 
     /// Every fixture but the missing-credentials one pretends a pair is saved,
@@ -58,15 +59,12 @@ enum HarnessPaletteDemo {
             )
             return
         }
-        if fixture == .credentialsRejected {
-            droplet.runtime?.noteLastFMAppCredentialProblem(.invalidKey)
-        }
         droplet.openSearchPalette()
         droplet.searchPaletteController.model.query = fixture.query
         droplet.paletteQueryChanged(fixture.query)
-        guard fixture == .failedLaunch else { return }
+        guard fixture == .failedLaunch || fixture == .lovedHeld else { return }
 
-        try? await Task.sleep(for: .seconds(1.2))
+        try? await Task.sleep(for: .seconds(fixture == .failedLaunch ? 1.2 : 1.0))
         droplet.searchPaletteController.model.onActivate?()
     }
 }
@@ -113,6 +111,9 @@ struct HarnessDemoCatalogue: CatalogueSearching {
         case .credentialsRejected:
             throw ServiceFailure.appCredentialAuth(.invalidKey)
         case .failed:
+            return CataloguePage(rows: [], hasMore: false)
+        case .lovedHeld:
+            try await Task.sleep(for: .seconds(600))
             return CataloguePage(rows: [], hasMore: false)
         case .longNames:
             return CataloguePage(rows: longRows(.loved), hasMore: false)
