@@ -343,6 +343,88 @@ struct EntityImageCompositionTests {
                 "a deactivated activation load publishes nothing")
     }
 
+    @Test func removingAnAlbumOverrideRestoresTheServiceImage() async throws {
+        let composition = try await entityComposition { request in
+            if formParameters(request)["method"] == "album.getInfo" {
+                return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
+            }
+            if request.url.path.hasSuffix("album.jpg") {
+                return entityImageResponse(try? testImageData(red: 0.4, green: 0.3, blue: 0.8))
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        _ = try await composition.store.insert(
+            entityListen(
+                title: "Dreaming",
+                artist: "Blondie",
+                album: "Eat to the Beat",
+                start: historyBase,
+            ),
+        )
+        try await linkLastFM(composition)
+        let album = try albumRequest("Eat to the Beat", artist: "Blondie")
+        await composition.runtime.openEntityDetail(album)
+        #expect(await waitForEntityImage(composition.state, source: .service))
+        #expect(await composition.transport.requests(pathEndingWith: "album.jpg").count == 1)
+
+        let overrideBytes = try image(red: 0.9)
+        try await composition.runtime.saveImageOverride(
+            kind: .album,
+            key: album.key,
+            title: album.title,
+            subtitle: album.subtitle,
+            data: overrideBytes,
+        )
+        #expect(composition.state.entityDetail?.imageSource == .override)
+
+        try await composition.runtime.removeImageOverride(kind: .album, key: album.key)
+        #expect(await waitForEntityImage(composition.state, source: .service))
+        #expect(await composition.transport.requests(pathEndingWith: "album.jpg").count == 1,
+                "the service image already downloaded is restored without a new request")
+    }
+
+    @Test func removingAnAlbumOverrideStartsTheServiceImageThatArrivedUnderIt() async throws {
+        let composition = try await entityComposition { request in
+            if formParameters(request)["method"] == "album.getInfo" {
+                return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
+            }
+            if request.url.path.hasSuffix("album.jpg") {
+                return entityImageResponse(try? testImageData(red: 0.4, green: 0.3, blue: 0.8))
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        _ = try await composition.store.insert(
+            entityListen(
+                title: "Dreaming",
+                artist: "Blondie",
+                album: "Eat to the Beat",
+                start: historyBase,
+            ),
+        )
+        try await linkLastFM(composition)
+        let album = try albumRequest("Eat to the Beat", artist: "Blondie")
+        // The override is already in place when the page opens, so the
+        // service image is never fetched while it is up.
+        let overrideBytes = try image(red: 0.9)
+        try await composition.runtime.saveImageOverride(
+            kind: .album,
+            key: album.key,
+            title: album.title,
+            subtitle: album.subtitle,
+            data: overrideBytes,
+        )
+        await composition.runtime.openEntityDetail(album)
+        #expect(composition.state.entityDetail?.imageSource == .override)
+        #expect(await composition.transport.requests(pathEndingWith: "album.jpg").isEmpty,
+                "the override is above the service image")
+
+        try await composition.runtime.removeImageOverride(kind: .album, key: album.key)
+        #expect(await waitForEntityImage(composition.state, source: .service),
+                "removing the override reaches the service image")
+        #expect(await composition.transport.requests(pathEndingWith: "album.jpg").count == 1,
+                "the released album page downloads the service image once")
+    }
+
     @Test func anOversizedSelectionIsRefusedBeforeItEntersTheStore() async throws {
         let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
         try await linkLastFM(composition)

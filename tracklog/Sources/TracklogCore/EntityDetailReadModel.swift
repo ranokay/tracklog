@@ -467,7 +467,10 @@ public final class EntityDetailReadModel {
     }
 
     /// The album `getInfo` image is fetched only when precedence actually
-    /// reaches it: no override, no captured cover, and the local read done.
+    /// reaches it: no override, no captured cover, the local read done and no
+    /// copy already downloaded. A downloaded copy is kept when a higher
+    /// source takes over, so removing the override restores it without a
+    /// second request.
     private func maybeStartServiceImage() {
         guard let detail = state.entityDetail,
               detail.request.kind == .album,
@@ -477,12 +480,7 @@ public final class EntityDetailReadModel {
               serviceImageData == nil,
               case let .facts(facts) = detail.service,
               let url = facts.artworkURL
-        else {
-            serviceImageTask?.cancel()
-            serviceImageTask = nil
-            serviceImageData = nil
-            return
-        }
+        else { return }
         startServiceImage(url, token: serviceGeneration)
     }
 
@@ -681,16 +679,21 @@ public final class EntityDetailReadModel {
         else { return }
         overridePresent = false
         overrideData = nil
-        approximateData = nil
+        // The released page falls back to the next source in its own
+        // precedence: the artist lookup restarts, and the album restores a
+        // captured cover or the service image it already downloaded, or
+        // starts the service image if the override was up when it arrived.
         var next = detail
         next.overrideHash = nil
         next.overrideIsUnreadable = false
-        next.imageSource = .neutral
-        next.imageData = nil
         state.entityDetail = next
-        recomputeImage()
         if kind == .artist {
+            approximateData = nil
+            recomputeImage()
             startArtistImageIfNeeded(detail.request, token: generation)
+        } else {
+            maybeStartServiceImage()
+            recomputeImage()
         }
     }
 

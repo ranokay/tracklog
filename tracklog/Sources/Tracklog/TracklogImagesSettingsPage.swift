@@ -77,7 +77,7 @@ struct TracklogImagesSettingsPage: View {
                     settingsSectionHeader("Saved images")
                     Text(
                         "Every artist and album image you chose. Removing one restores "
-                            + "the captured cover or the neutral sleeve.",
+                            + "the page's next available image, or the neutral sleeve.",
                     )
                     .font(.body)
                     .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
