@@ -1,0 +1,25 @@
+# Failed refresh on a saved chart
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=failed-saved TRACKLOG_HARNESS_SECTION=charts`.
+Connection: Last.fm · listener. Selection: artists, Week.
+
+Before Refresh:
+
+- `AXStaticText "Offline · showing saved charts"`
+- `AXStaticText "Saved 2 hr ago · Last.fm · listener, Rolling 7 days, artists"`
+- `AXStaticText "Saved 2 hr ago"`
+- `AXButton "Try again"`
+- `AXUnknown (Rank 1, Blondie, 42 plays)`
+
+Action: `AXPress` on `AXButton "Refresh charts"` (value `Saved 2 hr ago`;
+frame 24×24).
+
+After Refresh:
+
+- The notice remained `Offline · showing saved charts`.
+- The saved-age detail remained `Saved 2 hr ago · Last.fm · listener, Rolling 7 days, artists`.
+- `AXStaticText "Saved 2 hr ago"` remained; the age was not replaced with `Saved just now`.
+- `AXUnknown (Rank 1, Blondie, 42 plays)` remained.
+- `AXButton "Try again"` remained.
+
+The refresh press did not overwrite good cached data or mark it freshly saved.

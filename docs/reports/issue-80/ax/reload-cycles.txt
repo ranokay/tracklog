@@ -1,0 +1,28 @@
+# Repeated harness Reload on a loading chart
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=loading TRACKLOG_HARNESS_SECTION=charts`.
+The harness playback strip showed `Heart of Glass — Blondie`.
+
+1. Opened `Expanded surface`, then pressed `AXButton "Reload"` three times.
+2. Immediately after the third reload:
+   - `AXHeading "Charts"` in all three surface copies
+   - `AXButton = "First load" (Refresh charts)`
+   - `AXBusyIndicator (Loading charts)`
+   - `AXStaticText "Loading top artists…"`
+   - `AXStaticText "Reading Last.fm · listener. Your listening keeps recording."`
+   - The playing strip remained visible.
+   - No rows were shown before the delayed response.
+3. After waiting past the fixture's 30-second delay:
+   - `AXUnknown (Rank 1, Blondie, 42 plays)` appeared in all three copies.
+   - `AXStaticText "Saved just now"` and the Refresh button value updated.
+   - No mixed rows or stale source appeared.
+4. `Activity` page: the visible host-call list contained HUD present/dismiss
+   calls; a search for `error` and `Tracklog activated` returned no matching
+   AX text. The harness chrome showed `Active`.
+5. Interactive harness mode has no `report.json`. The corresponding
+   fixture-backed gate run `charts-loading` reports `problems: []`,
+   `activation.active=true`, `activation.error=null` in
+   `docs/reports/issue-80/reports/charts-loading.json`.
+
+No activation error, late early publish or visible report problem was observed
+in the interactive run.

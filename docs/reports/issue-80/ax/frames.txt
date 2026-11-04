@@ -1,0 +1,16 @@
+# AX frames on the chart surface
+
+From `get_window_state` with `tree_format: "elements"` on the running
+`TracklogHarness`, Expanded surface, service fixture:
+
+- Refresh: `AXButton "Refresh charts"`, frame `24 × 24` pt
+  (x 1463, y 485.5; same control in all three surface copies).
+- Chart-type choice: `AXButton "Artists"`, frame `63.5 × 31` pt.
+- Period choice: `AXButton "Week"`, frame `63.5 × 31` pt.
+- Ranked row: `AXUnknown "Rank 1, Blondie, 42 plays"`, frame `606 × 52` pt,
+  `value_description` `Last.fm · listener, Rolling 7 days`.
+- Local row: `AXUnknown "Rank 1, Blondie, 2 listens"`, frame `606 × 52` pt,
+  `value_description` `On this Mac, This week`.
+
+Every icon-only chart control measured at least 24×24 pt; the smallest is the
+Refresh button at exactly 24×24. Labelled choice controls are 31 pt high.

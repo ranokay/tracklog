@@ -1,0 +1,26 @@
+# Source switching: Service ↔ On this Mac
+
+Fixture: `charts-normal`, playing, Last.fm · listener. The list type was
+Tracks. Each step pressed the named source button and read the heading, source
+note and first row.
+
+1. Service, Week:
+   - Heading `Top 50 tracks · Rolling 7 days`
+   - Note `Last.fm · listener`
+   - `Rank 1, Heart of Glass, Blondie, 22 plays` /
+     value `Last.fm · listener, Rolling 7 days`
+2. `On this Mac`:
+   - Heading `Top 50 tracks · This week`
+   - Note `On this Mac · Local history only`
+   - Rows changed to local history:
+     `Rank 1, Heart of Glass, Blondie, 2 listens`,
+     `Rank 2, Blue Monday, New Order, 1 listen`, …
+   - First row value `On this Mac, This week`
+3. `Service`:
+   - Heading `Top 50 tracks · Rolling 7 days`
+   - Note `Last.fm · listener`
+   - First row returned to `Rank 1, Heart of Glass, Blondie, 22 plays` /
+     `Last.fm · listener, Rolling 7 days`
+
+No service row remained visible under the local source, and no local row
+remained visible after switching back to Service.
