@@ -71,13 +71,14 @@ The suite uses the real `LastFMAdapter`/`LastFMClient` over a controlled routing
 | `aSetTemplatePlaysTheEncodedRowQuery`, `withoutATemplateThePaletteRowOpensItsLastFMPage`, `withoutATemplateTheStandalonePlayActionOpensSearchSettings` | Both primary behaviours and the Settings remedy. |
 | `aRefusedLaunchIsReportedAndNotSwallowed`, `aRefusedSettingsHandoffIsReported` | The controlled opener reports refused launches and refused Settings handoffs. |
 | `aRowWithoutAValidPageOffersNoLastFMAction` | No Last.fm action for a row whose service URL is invalid. |
+| `schemelessAndHTTPLinksBecomeHTTPS`, `otherSchemesHostlessAndUserInfoValuesAreRejected` | Service links normalise to https; other schemes, hostless values and userinfo are rejected. |
 | `aQueryIsEncodedWithRFC3986UnreservedCharacters`, `substitutionIsOnePassSoTypedPlaceholderTextStaysData` | Encoding and one-pass substitution. |
 | template validation tests | Exactly one placeholder; http/https; host; no userinfo; placeholder only in path/query/fragment; unparseable template. |
 | palette key routing tests | Marked-text pass-through for Return, arrows and Esc; plain and Command-Return. |
 | settings export tests | Old export without the template still decodes; a template round-trips; runtime export carries the saved value. |
 | `savingPublishesAndPersistsOnlyAValidTemplate` | Valid save publishes/persists; invalid save changes nothing. |
 
-Full suite: **667 tests in 101 suites**, exit `0`.
+Full suite: **670 tests in 102 suites**, exit `0`.
 
 ## Gate
 
@@ -89,7 +90,7 @@ Command:
 
 - Result and receipt: to be filled from the gate run at the final head.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 305 files.
-- `swift test --package-path Tests`: 667 tests in 101 suites.
+- `swift test --package-path Tests`: 670 tests in 102 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `search-refusal` and `search-settings`; every existing expanded surface now shows the section-bar search button.
@@ -151,7 +152,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Searc
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 667 tests / 101 suites; controlled transport, real adapter requests, SQLite and opener spies. |
+| Composition tests | Run | 670 tests / 102 suites; controlled transport, real adapter requests, SQLite and opener spies. |
 | Harness output | Run | Gate `search-refusal`, `search-settings`, existing expanded-surface states; interactive palette states and screenshots. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
 | Shortcut in Droppy's Shortcuts page | **Not run** | The shortcut is registered with `defaultShortcut: nil`; the real host page was not opened. |
