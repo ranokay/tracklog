@@ -9,7 +9,7 @@
 - State: the owner agreed this contract in the implementation run before any
   code changed. Implementation, tests, harness evidence and the receipt-backed
   gate are complete. The gate ran at code head
-  `d379ad1a6e4acf1599c3aecac2a7f250dc20d437`; later commits add this report and
+  `5334992eaf7a9ea7207927484d7a1760bc4db694`; later commits add this report and
   evidence only.
 
 ## Contract
@@ -241,10 +241,10 @@ Command:
 ```
 
 - Result: exit `0`, frozen gate `true`, clean before and after, at head
-  `d379ad1a6e4acf1599c3aecac2a7f250dc20d437`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T090934Z-7785f10c72fc.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T090934Z-7785f10c72fc.log`
-  - Duration: 1046.9 seconds.
+  `5334992eaf7a9ea7207927484d7a1760bc4db694`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092821Z-e3c99d5e1d76.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092821Z-e3c99d5e1d76.log`
+  - Duration: 1050.0 seconds.
   - The commits after this code head are documentation and evidence only; the
     source and test tree the gate checked is unchanged.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint
