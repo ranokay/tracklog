@@ -130,7 +130,7 @@ same title and artist on a different album.
 
 Inline, pinned bar in History:
 
-- Title: `Delete "<title>"?`
+- Title: `Delete “<title>”?`
 - Body: `This listen will be removed from this Mac's history.`
 - Service lines from the live delivery rows, including the in-flight warning
   for any waiting or retrying delivery.
