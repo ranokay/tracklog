@@ -419,6 +419,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         }
     }
 
+    /// Equal counts order by normalized key, with sequential ranks and a stable spelling.
     @Test func equalCountTieBreakUsesNormalizedKeyAndSequentialRanks() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -462,6 +463,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         #expect(stored.contains { $0.processed.artist == "Alpha" })
     }
 
+    /// All-blank album data is its own state, and the range total still counts it.
     @Test func albumMissingMetadataIsItsOwnStateWithAnExactTotal() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -511,6 +513,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         #expect(state.chartState.phase != .empty)
     }
 
+    /// The sign-in remedy must not claim saved charts when none exist.
     @Test func signInFailureCopyMatchesWhetherSavedChartsExist() {
         let withoutSaved = ChartCopy.signInFailureMessage(
             source: "Last.fm · listener",

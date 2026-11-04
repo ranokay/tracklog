@@ -2012,6 +2012,7 @@ struct ChartCacheTests {
         #expect(stats.last?.url.path.contains("/user/listener/artists") == true)
     }
 
+    /// A failing chart transport must not stop local capture, delivery or History.
     @Test func failingChartTransportLeavesCaptureDeliveryAndHistoryCurrent() async throws {
         let now = chartDate(2026, 10, 31, 12)
         for kind in [ServiceKind.lastFM, .listenBrainz] {
@@ -2092,6 +2093,7 @@ struct ChartCacheTests {
         }
     }
 
+    /// Repeated runtime deactivation must leave no late chart or capture work.
     @Test func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -2108,10 +2110,26 @@ struct ChartCacheTests {
             state: state,
             selection: chartSelection(source: .service, period: .week, now: now, calendar: calendarBox.calendar),
             calendarBox: calendarBox,
+            scrobblingEnabled: true,
         )
         let store = try SQLiteListenStore(url: database.url)
         await runtime.start()
         _ = try await runtime.link(kind: .listenBrainz, credential: "token")
+
+        await runtime.ingest(MediaSample(
+            track: Track(
+                title: "Cycle Baseline",
+                artist: "Blondie",
+                album: "Parallel Lines",
+                duration: 30,
+                bundleID: "com.apple.Music",
+            ),
+            elapsed: 0,
+            playbackRate: 1,
+            isPlaying: true,
+            timestamp: now,
+        ))
+        #expect(state.nowPlaying?.track.title == "Cycle Baseline")
 
         await gate.startHolding()
         for cycle in 0 ..< 3 {
