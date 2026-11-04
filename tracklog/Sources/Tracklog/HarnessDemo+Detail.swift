@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import AppKit
 import Foundation
 import TracklogCore
@@ -16,6 +17,9 @@ enum HarnessDetailFixture: String {
     case override
     case corruptOverride = "corrupt-override"
     case longNames = "long-names"
+    case historyJumpBack = "history-jump-back"
+    case lovedBack = "loved-back"
+    case trackDelete = "track-delete"
 
     static var selected: HarnessDetailFixture? {
         let raw = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_DETAIL"] ?? ""
@@ -25,7 +29,8 @@ enum HarnessDetailFixture: String {
     var linksLastFM: Bool {
         switch self {
         case .artist, .album, .track, .artistApproximate, .artistAmbiguous,
-             .override, .corruptOverride, .longNames, .albumServiceImage:
+             .override, .corruptOverride, .longNames, .albumServiceImage,
+             .historyJumpBack, .lovedBack, .trackDelete:
             true
         case .artistNoConnection, .albumListenBrainz:
             false
@@ -68,6 +73,15 @@ enum HarnessDetailDemo {
         guard let request = request(for: fixture) else { return }
         await runtime.loadImageOverrides()
         await runtime.openEntityDetail(request)
+        if fixture == .historyJumpBack || fixture == .lovedBack {
+            await runtime.backEntityDetail()
+            return
+        }
+        if fixture == .trackDelete,
+           let listen = runtime.state.listens.first(where: { $0.processed.title == "Heart of Glass" }) {
+            runtime.state.requestDeleteListen(listen)
+            return
+        }
         if fixture == .override,
            ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"] == "images" {
             // The gate's Images page shot shows the picker beginning of the
@@ -101,6 +115,14 @@ enum HarnessDetailDemo {
             )
         case .longNames:
             EntityRequest.artist(name: HarnessDemo.longTrack.artist)
+        case .historyJumpBack:
+            EntityRequest.artist(name: "Blondie")
+        case .lovedBack, .trackDelete:
+            EntityRequest.track(
+                title: "Heart of Glass",
+                artist: "Blondie",
+                album: "Parallel Lines",
+            )
         }
     }
 
@@ -145,6 +167,20 @@ enum HarnessDetailDemo {
 
     private static func insertOverride(on droplet: TracklogDroplet, corrupt: Bool) async {
         guard let store = droplet.harnessStore else { return }
+        if corrupt, let artwork = HarnessDemoData.makeArtwork(
+            HarnessDemoData.DemoColor(red: 0.86, green: 0.34, blue: 0.18),
+        ), let blondie = LocalArtistIdentity.key(name: "Blondie") {
+            await store.seedImageOverride(
+                ImageOverride(
+                    kind: .artist,
+                    key: blondie,
+                    title: "Blondie",
+                    artworkHash: artwork.hash,
+                    updatedAt: Date(),
+                ),
+                artwork: artwork,
+            )
+        }
         let key = LocalArtistIdentity.key(name: corrupt ? "Talking Heads" : "Blondie") ?? ""
         let hash: String
         var artwork: StoredArtwork?

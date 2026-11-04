@@ -34,9 +34,10 @@ public final class EntityDetailReadModel {
     private var localTask: Task<Void, Never>?
     private var serviceTask: Task<Void, Never>?
     private var imageTask: Task<Void, Never>?
-    private var loadMoreTask: Task<Void, Never>?
     private var loadMoreSequence = 0
     private var serviceImageTask: Task<Void, Never>?
+    private var activationLoadTask: Task<Void, Never>?
+    private var pruneTask: Task<Void, Never>?
     private var lastConnectionKey = "none"
 
     /// How many pages Back can reach. Exposed so a composition test can prove
@@ -46,6 +47,7 @@ public final class EntityDetailReadModel {
     }
 
     /// Candidates for the current page, resolved in one precedence function.
+    private var overridePresent = false
     private var overrideData: Data?
     private var approximateData: Data?
     private var capturedData: Data?
@@ -88,10 +90,10 @@ public final class EntityDetailReadModel {
         guard !isActive else { return }
         isActive = true
         lastConnectionKey = Self.connectionKey(state.currentConnection)
-        Task { [weak self] in
+        activationLoadTask = Task { [weak self] in
             await self?.loadOverrides()
         }
-        Task { [weak self] in
+        pruneTask = Task { [weak self] in
             guard let self else { return }
             do {
                 try await store.pruneExpiredArtistImageCache(now: clock.now)
@@ -104,6 +106,10 @@ public final class EntityDetailReadModel {
     public func deactivate() {
         guard isActive else { return }
         isActive = false
+        activationLoadTask?.cancel()
+        activationLoadTask = nil
+        pruneTask?.cancel()
+        pruneTask = nil
         cancelAll()
         generation += 1
         stack = []
@@ -119,7 +125,10 @@ public final class EntityDetailReadModel {
         cancelAll()
         stack = []
         state.entityDetail = nil
-        state.imageOverrideDraft = nil
+        // A pending image draft survives a detail close: Change image… opens
+        // Settings by dismissing the takeover, and the Images page must still
+        // know which entity it is replacing. The draft is cleared when that
+        // page finishes or the droplet deactivates.
         clearCandidates()
     }
 
@@ -173,8 +182,20 @@ public final class EntityDetailReadModel {
     }
 
     public func reload() async {
-        guard let request = stack.last else { return }
-        await loadPage(request)
+        guard isActive, let request = stack.last, state.entityDetail != nil else { return }
+        generation += 1
+        let token = generation
+        localTask?.cancel()
+        localTask = nil
+        if var detail = state.entityDetail, var track = detail.track {
+            track.isLoading = true
+            detail.track = track
+            state.entityDetail = detail
+        }
+        // A reload is the same page, not a new one: keep its rows and its
+        // service section while the fresh local read runs.
+        startLocal(request, token: token, preservingRows: true)
+        await localTask?.value
     }
 
     /// A connection change clears only the service section. The local section
@@ -221,7 +242,7 @@ public final class EntityDetailReadModel {
         }
         state.entityDetail = opening
 
-        startLocal(request, token: token)
+        startLocal(request, token: token, preservingRows: false)
         startService()
         await loadOverride(for: request, token: token)
         // The local section is the page's primary content; wait for it so a
@@ -232,7 +253,7 @@ public final class EntityDetailReadModel {
     }
 
     // swiftlint:disable:next cyclomatic_complexity
-    private func startLocal(_ request: EntityRequest, token: Int) {
+    private func startLocal(_ request: EntityRequest, token: Int, preservingRows: Bool) {
         let store = store
         let historyStore = historyStore
         let pageSize = historyPageSize
@@ -268,6 +289,7 @@ public final class EntityDetailReadModel {
                 recomputeImage()
 
                 if request.kind == .track, let historyStore {
+                    let hasRows = !(state.entityDetail?.track?.listens.isEmpty ?? true)
                     let page = try await historyStore.trackHistoryPage(
                         matching: request.key,
                         limit: pageSize,
@@ -277,10 +299,27 @@ public final class EntityDetailReadModel {
                     let filled = fillingKnownArtwork(page)
                     var next = state.entityDetail
                     if var track = next?.track {
-                        track.listens = filled
+                        if preservingRows, hasRows {
+                            // Refresh the top and keep every loaded older page.
+                            var rows = track.listens
+                            var known = Set(rows.compactMap(\.id))
+                            for listen in filled where listen.id.map({ !known.contains($0) }) ?? false {
+                                known.insert(listen.id ?? 0)
+                                rows.append(listen)
+                            }
+                            rows.sort { lhs, rhs in
+                                if lhs.startedAt != rhs.startedAt {
+                                    return lhs.startedAt > rhs.startedAt
+                                }
+                                return (lhs.id ?? 0) > (rhs.id ?? 0)
+                            }
+                            track.listens = rows
+                        } else {
+                            track.listens = filled
+                        }
                         track.isLoading = false
                         track.failure = nil
-                        track.hasMore = local.count > filled.count
+                        track.hasMore = local.count > track.listens.count
                         next?.track = track
                     }
                     next?.isLoadingLocal = false
@@ -433,8 +472,9 @@ public final class EntityDetailReadModel {
         guard let detail = state.entityDetail,
               detail.request.kind == .album,
               !detail.isLoadingLocal,
-              overrideData == nil,
+              !overridePresent,
               capturedData == nil,
+              serviceImageData == nil,
               case let .facts(facts) = detail.service,
               let url = facts.artworkURL
         else {
@@ -507,7 +547,7 @@ public final class EntityDetailReadModel {
     // swiftlint:disable:next cyclomatic_complexity
     private func startArtistImageIfNeeded(_ request: EntityRequest, token: Int) {
         guard state.artistImageLookupsEnabled,
-              overrideData == nil,
+              !overridePresent,
               let imageSearch,
               let imageLoader
         else { return }
@@ -639,6 +679,7 @@ public final class EntityDetailReadModel {
               detail.request.kind == kind,
               detail.request.key == key
         else { return }
+        overridePresent = false
         overrideData = nil
         approximateData = nil
         var next = detail
@@ -686,6 +727,7 @@ public final class EntityDetailReadModel {
               detail.request.kind == override.kind,
               detail.request.key == override.key
         else { return }
+        overridePresent = true
         overrideData = data
         approximateData = nil
         var next = detail
@@ -699,36 +741,52 @@ public final class EntityDetailReadModel {
 
     private func loadOverride(for request: EntityRequest, token: Int) async {
         guard request.kind.supportsImageOverride else { return }
-        if let override = state.imageOverrides.first(where: {
+        guard let override = state.imageOverrides.first(where: {
             $0.kind == request.kind && $0.key == request.key
-        }) {
-            guard isCurrent(token) else { return }
-            var detail = state.entityDetail
-            detail?.overrideHash = override.artworkHash
-            let data = await artworkData(for: override.artworkHash)
-            guard isCurrent(token) else { return }
-            if let data, ArtworkNormalizer.isReadable(data) {
-                overrideData = data
-                detail?.overrideIsUnreadable = false
-            } else {
-                detail?.overrideIsUnreadable = true
+        }) else {
+            overridePresent = false
+            if request.kind == .artist {
+                startArtistImageIfNeeded(request, token: token)
             }
+            return
+        }
+        overridePresent = true
+        if var detail = state.entityDetail {
+            detail.overrideHash = override.artworkHash
             state.entityDetail = detail
-            recomputeImage()
         }
-        if request.kind == .artist, overrideData == nil {
-            startArtistImageIfNeeded(request, token: token)
+        let data = await artworkData(for: override.artworkHash)
+        guard isCurrent(token), var current = state.entityDetail else { return }
+        if let data, ArtworkNormalizer.isReadable(data) {
+            overrideData = data
+            current.overrideIsUnreadable = false
+        } else {
+            // An override that exists but cannot be read owns the outcome:
+            // decision 10 says neutral, not the next source, and no Apple
+            // lookup may run while the user's override is in place.
+            overrideData = nil
+            current.overrideIsUnreadable = true
         }
+        state.entityDetail = current
+        recomputeImage()
     }
 
     private func recomputeImage() {
         guard var detail = state.entityDetail else { return }
-        switch detail.request.kind {
-        case .artist:
+        if overridePresent {
             if let overrideData {
                 detail.imageData = overrideData
                 detail.imageSource = .override
-            } else if let approximateData {
+            } else {
+                detail.imageData = nil
+                detail.imageSource = .neutral
+            }
+            state.entityDetail = detail
+            return
+        }
+        switch detail.request.kind {
+        case .artist:
+            if let approximateData {
                 detail.imageData = approximateData
                 detail.imageSource = .approximate
             } else {
@@ -736,10 +794,7 @@ public final class EntityDetailReadModel {
                 detail.imageSource = .neutral
             }
         case .album:
-            if let overrideData {
-                detail.imageData = overrideData
-                detail.imageSource = .override
-            } else if let capturedData {
+            if let capturedData {
                 detail.imageData = capturedData
                 detail.imageSource = .captured
             } else if let serviceImageData {
@@ -820,13 +875,12 @@ public final class EntityDetailReadModel {
         serviceTask = nil
         imageTask?.cancel()
         imageTask = nil
-        loadMoreTask?.cancel()
-        loadMoreTask = nil
         serviceImageTask?.cancel()
         serviceImageTask = nil
     }
 
     private func clearCandidates() {
+        overridePresent = false
         overrideData = nil
         approximateData = nil
         capturedData = nil

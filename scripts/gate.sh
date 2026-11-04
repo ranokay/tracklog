@@ -152,12 +152,20 @@ run_detail_shots() {
 # ListenBrainz MBID link, the approximate artist image, an explicit override,
 # an unreadable stored copy and long metadata.
 for fixture in artist artist-approximate artist-no-connection album album-service-image track \
-    album-listenbrainz override corrupt-override long-names; do
+    album-listenbrainz override corrupt-override long-names track-delete; do
     run_detail_shots "$fixture"
 done
 
+echo "==> surface shots: history-jump-back"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=history-jump-back TRACKLOG_HARNESS_HISTORY=jump droppykit run -- --shots ./shots/history-jump-back --report ./shots/history-jump-back/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/history-jump-back/report.json tracklog/shots/history-jump-back
+
+echo "==> surface shots: loved-detail-back"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=loved-back TRACKLOG_HARNESS_SECTION=loved TRACKLOG_HARNESS_LOVED=normal droppykit run -- --shots ./shots/loved-detail-back --report ./shots/loved-detail-back/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/loved-detail-back/report.json tracklog/shots/loved-detail-back
+
 echo "==> surface shots: images-settings"
-(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=override TRACKLOG_HARNESS_SETTINGS_PAGE=images droppykit run -- --shots ./shots/images-settings --report ./shots/images-settings/report.json --shot-height 1900)
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=corrupt-override TRACKLOG_HARNESS_SETTINGS_PAGE=images droppykit run -- --shots ./shots/images-settings --report ./shots/images-settings/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/images-settings/report.json tracklog/shots/images-settings
 
 echo "==> surface shots: charts-override"

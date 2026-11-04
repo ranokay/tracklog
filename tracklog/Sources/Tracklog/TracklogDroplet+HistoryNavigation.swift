@@ -238,29 +238,26 @@ extension TracklogDroplet {
 
         Task { [weak self] in
             guard let self else { return }
-            do {
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-                guard size > 0, size <= ImageOverridePolicy.maximumSourceBytes else {
-                    throw ImageOverrideError.tooLarge
+            // Reading up to 20 MiB must not run on the main actor with capture.
+            let result = await Task.detached(priority: .userInitiated) {
+                ImageOverrideFileReader.read(url)
+            }.value
+            switch result {
+            case let .success(data):
+                do {
+                    try await runtime?.saveSelectedImageOverride(data)
+                    state.setImageOverrideError(nil)
+                } catch {
+                    state.setImageOverrideError(
+                        (error as? LocalizedError)?.errorDescription
+                            ?? "That image could not be read. Choose another image.",
+                    )
+                    host.log.notice("Choosing an image failed")
                 }
-                let accessing = url.startAccessingSecurityScopedResource()
-                defer {
-                    if accessing {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                }
-                let data = try Data(contentsOf: url)
-                guard data.count <= ImageOverridePolicy.maximumSourceBytes else {
-                    throw ImageOverrideError.tooLarge
-                }
-                try await runtime?.saveSelectedImageOverride(data)
-                state.setImageOverrideError(nil)
-            } catch {
-                state.setImageOverrideError(
-                    (error as? LocalizedError)?.errorDescription
-                        ?? "That image could not be read. Choose another image.",
-                )
-                host.log.notice("Choosing an image failed")
+            case .failure(.tooLarge):
+                state.setImageOverrideError(ImageOverrideError.tooLarge.errorDescription)
+            case .failure(.unreadable):
+                state.setImageOverrideError(ImageOverrideError.unreadable.errorDescription)
             }
         }
     }

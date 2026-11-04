@@ -306,10 +306,7 @@ struct TracklogChartsView: View {
                     item: item,
                     type: state.chartState.selection.type,
                     unit: unit,
-                    artwork: state.imageOverrideData(
-                        for: item,
-                        type: state.chartState.selection.type,
-                    ) ?? item.artworkHash.flatMap { state.artworkByHash[$0] },
+                    artwork: chartArtwork(item),
                     sourceLabel: sourceLabel,
                     periodLabel: periodLabel,
                     onOpen: {
@@ -333,6 +330,17 @@ struct TracklogChartsView: View {
         }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// An override row owns the sleeve even when its stored copy is missing:
+    /// the result is nil and the neutral sleeve shows. Otherwise the captured
+    /// cover is the row's artwork.
+    private func chartArtwork(_ item: ChartItem) -> Data? {
+        let type = state.chartState.selection.type
+        if state.hasImageOverride(for: item, type: type) {
+            return state.imageOverrideData(for: item, type: type)
+        }
+        return item.artworkHash.flatMap { state.artworkByHash[$0] }
     }
 
     /// Artists search by name; albums and tracks use the artist and the row

@@ -153,6 +153,7 @@ struct EntityImageCompositionTests {
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
+        try await seedEntityHistory(composition.store)
         try await linkLastFM(composition)
         let override = try await saveArtistOverride(composition, data: image())
         try await composition.store.deleteArtworkRowForTest(hash: override.artworkHash)
@@ -173,10 +174,173 @@ struct EntityImageCompositionTests {
         #expect(detail.overrideIsUnreadable)
         #expect(detail.overrideHash == override.artworkHash)
         #expect(detail.canRemoveImage)
+        #expect(detail.imageSource == .neutral, "an unreadable override owns the neutral sleeve")
+        #expect(detail.local.count == 3, "the local section still finishes")
+        #expect(!detail.isLoadingLocal)
+        #expect(await reopened.transport.itunesRequests().isEmpty,
+                "an override means no Apple request, readable or not")
+        #expect(await reopened.transport.requests(pathEndingWith: "artist.jpg").isEmpty)
 
         try await reopened.runtime.removeImageOverride(kind: .artist, key: override.key)
         #expect(try await reopened.store.imageOverrideCount() == 0)
         #expect(try await reopened.store.artwork(for: override.artworkHash) == nil)
+    }
+
+    @Test func anUndecodableOverrideAlsoOwnsTheNeutralSleeve() async throws {
+        let database = try TemporaryDatabase()
+        let composition = try await entityComposition(
+            database: database,
+            handler: artistSearchHandler([
+                ("1012882", "Blondie", "https://images.example/artist.jpg"),
+            ]),
+        )
+        try await linkLastFM(composition)
+        let override = try await saveArtistOverride(composition, data: image())
+        try await composition.store.replaceArtworkDataForTest(
+            hash: override.artworkHash,
+            data: Data("not an image".utf8),
+        )
+        composition.runtime.stop()
+        await composition.store.close()
+
+        let reopened = try await entityComposition(
+            database: database,
+            handler: artistSearchHandler([
+                ("1012882", "Blondie", "https://images.example/artist.jpg"),
+            ]),
+        )
+        try await linkLastFM(reopened)
+        await reopened.runtime.loadImageOverrides()
+        try await reopened.runtime.openEntityDetail(artistRequest())
+        #expect(await waitForUnreadableOverride(reopened.state))
+        #expect(reopened.state.entityDetail?.imageSource == .neutral)
+        #expect(await reopened.transport.itunesRequests().isEmpty)
+    }
+
+    @Test func anUnreadableAlbumOverrideBeatsACapturedCoverAndTheServiceImage() async throws {
+        let database = try TemporaryDatabase()
+        let capturedBytes = try image(red: 0.9)
+        let captured = try #require(ArtworkNormalizer.normalize(capturedBytes))
+        let composition = try await entityComposition(database: database) { request in
+            if formParameters(request)["method"] == "album.getInfo" {
+                return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        let listen = try #require(
+            try await composition.store.insert(
+                entityListen(
+                    title: "Heart of Glass",
+                    artist: "Blondie",
+                    album: "Parallel Lines",
+                    start: historyBase,
+                ),
+            ),
+        )
+        try await composition.store.attachArtwork(captured, toTrack: listen.raw.identity)
+        try await linkLastFM(composition)
+        let album = try albumRequest()
+        try await composition.runtime.saveImageOverride(
+            kind: .album,
+            key: album.key,
+            title: album.title,
+            subtitle: album.subtitle,
+            data: image(blue: 0.8),
+        )
+        let override = try #require(composition.state.imageOverrides.first { $0.kind == .album })
+        try await composition.store.replaceArtworkDataForTest(
+            hash: override.artworkHash,
+            data: Data("not an image".utf8),
+        )
+        composition.runtime.stop()
+        await composition.store.close()
+
+        let reopened = try await entityComposition(database: database) { request in
+            if formParameters(request)["method"] == "album.getInfo" {
+                return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        try await linkLastFM(reopened)
+        await reopened.runtime.loadImageOverrides()
+        try await reopened.runtime.openEntityDetail(albumRequest())
+        #expect(await waitForUnreadableOverride(reopened.state))
+        #expect(reopened.state.entityDetail?.imageSource == .neutral,
+                "the captured cover is below an unreadable override")
+        #expect(await reopened.transport.requests(pathEndingWith: "album.jpg").isEmpty)
+
+        let chartItem = ChartItem(
+            rank: 1,
+            title: "Parallel Lines",
+            subtitle: "Blondie",
+            count: 1,
+            identityKey: "chart",
+        )
+        #expect(reopened.state.hasImageOverride(for: chartItem, type: .albums))
+        #expect(reopened.state.imageOverrideData(for: chartItem, type: .albums) == nil)
+        let paletteRow = CatalogueRow(
+            group: .albums,
+            title: "Parallel Lines",
+            subtitle: "Blondie",
+            playbackQuery: "",
+            pageURL: nil,
+        )
+        #expect(reopened.state.hasImageOverride(for: paletteRow))
+        #expect(reopened.state.imageOverrideData(for: paletteRow) == nil)
+    }
+
+    @Test func theImageFileReaderRefusesEmptyOversizedAndInaccessibleFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tracklog-image-reader-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let empty = directory.appendingPathComponent("empty.png")
+        try Data().write(to: empty)
+        #expect(ImageOverrideFileReader.read(empty) == .failure(.unreadable))
+
+        let oversized = directory.appendingPathComponent("oversized.png")
+        try Data(repeating: 0, count: 32).write(to: oversized)
+        let handle = try FileHandle(forWritingTo: oversized)
+        try handle.truncate(atOffset: UInt64(ImageOverridePolicy.maximumSourceBytes + 1))
+        try handle.close()
+        #expect(ImageOverrideFileReader.read(oversized) == .failure(.tooLarge))
+
+        let inaccessible = directory.appendingPathComponent("missing.png")
+        #expect(ImageOverrideFileReader.read(inaccessible) == .failure(.unreadable))
+
+        let valid = directory.appendingPathComponent("valid.png")
+        try #require(testImageData()).write(to: valid)
+        if case let .failure(error) = ImageOverrideFileReader.read(valid) {
+            Issue.record("a valid image failed: \(error)")
+        }
+    }
+
+    @Test func deactivatingStopsAnInFlightOverrideLoad() async throws {
+        let gate = ChartHoldGate()
+        await gate.startHolding()
+        let database = try TemporaryDatabase()
+        let base = try SQLiteListenStore(url: database.url)
+        let holding = HoldingOverridesStore(base, gate: gate)
+        let state = TracklogAppState()
+        let runtime = CaptureRuntime(
+            state: state,
+            clock: FakeClock(historyBase),
+            source: ReplayedNowPlaying(),
+            store: holding,
+            allowlist: InMemoryAppAllowlist(),
+            credentials: MemoryCredentialStore(),
+            serviceAdapters: [],
+            settings: CaptureSettings(scrobblingEnabled: false),
+        )
+        await runtime.start()
+        #expect(await gate.waitUntilEntered(1), "the activation override read is held")
+
+        runtime.stop()
+        await gate.release()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(state.imageOverrides.isEmpty,
+                "a deactivated activation load publishes nothing")
     }
 
     @Test func anOversizedSelectionIsRefusedBeforeItEntersTheStore() async throws {

@@ -320,7 +320,8 @@ public final class TracklogDroplet: NSObject, Droplet {
         // history edit page needs the same harness route so the interactive
         // edit flow can be inspected there. The date-jump page keeps its
         // documented refusal state.
-        if host.environment.isHarness, id == tracklogHistoryEditPageID {
+        if host.environment.isHarness,
+           id == tracklogHistoryEditPageID || id == tracklogImagesPageID {
             state.setHarnessSettingsPage(id)
             dismissTakeoverForSettings()
             return true

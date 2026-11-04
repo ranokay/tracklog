@@ -20,19 +20,17 @@ struct TracklogTakeover: View {
                 if let refusal = state.searchRefusal {
                     SearchRefusalBar(state: state, message: refusal)
                 }
-                Group {
+                ZStack(alignment: .topLeading) {
+                    sectionContent
+                        .opacity(state.entityDetail == nil ? 1 : 0)
+                        .allowsHitTesting(state.entityDetail == nil)
+                        .accessibilityHidden(state.entityDetail != nil)
                     if let detail = state.entityDetail {
                         TracklogEntityDetailView(
                             droplet: droplet,
                             state: state,
                             detail: detail,
                         )
-                    } else if state.takeoverSection == .charts {
-                        TracklogChartsView(droplet: droplet, state: state)
-                    } else if state.takeoverSection == .loved {
-                        TracklogLovedView(droplet: droplet, state: state)
-                    } else {
-                        TracklogHistoryContent(droplet: droplet, state: state)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,6 +43,17 @@ struct TracklogTakeover: View {
             )
             .animation(TracklogMotion.stateAnimation, value: takeoverKey)
             .onDisappear { droplet.takeoverDidDisappear(presentationID) }
+        }
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        if state.takeoverSection == .charts {
+            TracklogChartsView(droplet: droplet, state: state)
+        } else if state.takeoverSection == .loved {
+            TracklogLovedView(droplet: droplet, state: state)
+        } else {
+            TracklogHistoryContent(droplet: droplet, state: state)
         }
     }
 

@@ -450,10 +450,10 @@ struct TracklogSearchPalette: View {
             activate(.row(row))
         } label: {
             HStack(spacing: DroppySpacing.sm) {
-                if let artwork = state.imageOverrideData(for: row) {
+                if state.hasImageOverride(for: row) {
                     ArtworkSleeve(
                         size: 28,
-                        artwork: artwork,
+                        artwork: state.imageOverrideData(for: row),
                         identity: "\(row.group.rawValue)\u{1F}\(row.title)",
                         isCircular: row.group == .artists,
                     )

@@ -405,6 +405,170 @@ struct EntityDetailCompositionTests {
         #expect(composition.state.entityDetail == nil)
     }
 
+    @Test func aStartedOverrideKeepsItsDraftAfterTheDetailCloses() async throws {
+        let composition = try await entityComposition { _ in
+            entityLastFMArtistInfo()
+        }
+        try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(artistRequest())
+        let request = try artistRequest()
+        composition.runtime.beginImageOverride(request)
+        #expect(composition.state.imageOverrideDraft != nil)
+
+        composition.runtime.closeEntityDetail()
+        #expect(composition.state.imageOverrideDraft?.key == request.key,
+                "Change image… dismisses the takeover, so the draft must survive")
+
+        let bytes = try #require(testImageData(red: 0.2, green: 0.7, blue: 0.3))
+        try await composition.runtime.saveSelectedImageOverride(bytes)
+        #expect(composition.state.imageOverrides.count == 1)
+        #expect(try await composition.store.imageOverrideCount() == 1)
+    }
+
+    @Test func aDeleteOnTheTrackPageKeepsEveryLoadedPage() async throws {
+        let composition = try await entityComposition { request in
+            if formParameters(request)["method"] == "track.getInfo" {
+                return entityLastFMTrackInfo()
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        for index in 0 ..< 120 {
+            _ = try await composition.store.insert(
+                entityListen(
+                    title: "Heart of Glass",
+                    artist: "Blondie",
+                    album: "Parallel Lines",
+                    start: historyBase.addingTimeInterval(Double(index) * 60),
+                ),
+            )
+        }
+        try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(trackRequest())
+        #expect(composition.state.entityDetail?.track?.listens.count == 50)
+        await composition.runtime.loadMoreEntityListens()
+        await composition.runtime.loadMoreEntityListens()
+        let track = try #require(composition.state.entityDetail?.track)
+        #expect(track.listens.count == 120)
+        let laterID = try #require(track.listens[90].id)
+        let victim = try #require(track.listens.first)
+
+        try await composition.runtime.deleteListen(victim)
+
+        let after = try #require(composition.state.entityDetail?.track)
+        #expect(after.listens.count == 119, "rows loaded beyond the first page survive a delete")
+        #expect(after.listens.contains { $0.id == laterID })
+        #expect(after.totalCount == 119)
+    }
+
+    @Test func aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone() async throws {
+        let database = try TemporaryDatabase()
+        let base = try SQLiteListenStore(url: database.url)
+        let failing = FailingEntityDetailStore(base, failures: 0)
+        let composition = try await entityComposition(
+            database: database,
+            existingStore: base,
+            runtimeStore: failing,
+        ) { request in
+            if formParameters(request)["method"] == "track.getInfo" {
+                return entityLastFMTrackInfo()
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        for index in 0 ..< 120 {
+            _ = try await base.insert(
+                entityListen(
+                    title: "Heart of Glass",
+                    artist: "Blondie",
+                    album: "Parallel Lines",
+                    start: historyBase.addingTimeInterval(Double(index) * 60),
+                ),
+            )
+        }
+        try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(trackRequest())
+        await composition.runtime.loadMoreEntityListens()
+        await composition.runtime.loadMoreEntityListens()
+        #expect(await waitForEntityService(composition.state) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        })
+        let service = try #require(composition.state.entityDetail?.service)
+        let rows = try #require(composition.state.entityDetail?.track?.listens)
+        #expect(rows.count == 120)
+
+        await failing.failNextDetailRead()
+        await composition.runtime.reloadEntityDetail()
+
+        let after = try #require(composition.state.entityDetail?.track)
+        #expect(after.listens.count == 120, "a failed re-read keeps the loaded rows")
+        #expect(after.failure != nil, "the failure bar appears beside the rows")
+        #expect(composition.state.entityDetail?.service == service,
+                "a local reload leaves the service section alone")
+    }
+
+    @Test func listenBrainzChartRowsCarryTheirMBIDsForEveryEntity() async throws {
+        let transport = EntityTransport { request in
+            let path = request.url.path
+            let payload = if path.contains("/artists") {
+                """
+                {"payload":{"artists":[{"artist_name":"Blondie",
+                "artist_mbid":"artist-mbid","listen_count":12}]}}
+                """
+            } else if path.contains("/releases") {
+                """
+                {"payload":{"releases":[{"release_name":"Parallel Lines",
+                "release_mbid":"release-mbid","artist_name":"Blondie","listen_count":9}]}}
+                """
+            } else {
+                """
+                {"payload":{"recordings":[{"track_name":"Heart of Glass",
+                "recording_mbid":"recording-mbid","artist_name":"Blondie","listen_count":7}]}}
+                """
+            }
+            return HTTPResponse(statusCode: 200, body: Data(payload.utf8))
+        }
+        let adapter = ListenBrainzAdapter(transport: transport)
+        let connection = Connection(
+            kind: .listenBrainz,
+            endpoint: .listenBrainz,
+            identity: "listener",
+            createdAt: historyBase,
+        )
+
+        let artists = try await adapter.top(
+            .artists, period: .week, connection: connection, credential: "token", limit: 10,
+        )
+        let artistRequest = try #require(EntityRequest.chartItem(artists.items[0], type: .artists))
+        #expect(artistRequest.providerID == "artist-mbid")
+        #expect(EntityServiceCopy.listenBrainzLink(
+            kind: .artist,
+            providerID: artistRequest.providerID,
+        )?.absoluteString == "https://listenbrainz.org/artist/artist-mbid")
+
+        let albums = try await adapter.top(
+            .albums, period: .week, connection: connection, credential: "token", limit: 10,
+        )
+        let albumRequest = try #require(EntityRequest.chartItem(albums.items[0], type: .albums))
+        #expect(albumRequest.providerID == "release-mbid")
+        #expect(EntityServiceCopy.listenBrainzLink(
+            kind: .album,
+            providerID: albumRequest.providerID,
+        )?.absoluteString == "https://listenbrainz.org/release/release-mbid")
+
+        let tracks = try await adapter.top(
+            .tracks, period: .week, connection: connection, credential: "token", limit: 10,
+        )
+        let trackRequest = try #require(EntityRequest.chartItem(tracks.items[0], type: .tracks))
+        #expect(trackRequest.providerID == "recording-mbid")
+        #expect(EntityServiceCopy.listenBrainzLink(
+            kind: .track,
+            providerID: trackRequest.providerID,
+        )?.absoluteString == "https://listenbrainz.org/recording/recording-mbid")
+    }
+
     // MARK: - Service failures
 
     private func openArtistAndWaitForService(

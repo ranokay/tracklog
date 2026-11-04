@@ -60,17 +60,27 @@ public struct EntityRequest: Equatable, Sendable {
         self.album = album
     }
 
-    public static func artist(name: String) -> EntityRequest? {
+    public static func artist(name: String, providerID: String? = nil) -> EntityRequest? {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let key = LocalArtistIdentity.key(name: title) else { return nil }
-        return EntityRequest(kind: .artist, key: key, title: title)
+        return EntityRequest(kind: .artist, key: key, title: title, providerID: providerID)
     }
 
-    public static func album(album: String, artist: String) -> EntityRequest? {
+    public static func album(
+        album: String,
+        artist: String,
+        providerID: String? = nil,
+    ) -> EntityRequest? {
         let title = album.trimmingCharacters(in: .whitespacesAndNewlines)
         let subtitle = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let key = LocalAlbumIdentity.key(album: title, artist: subtitle) else { return nil }
-        return EntityRequest(kind: .album, key: key, title: title, subtitle: subtitle)
+        return EntityRequest(
+            kind: .album,
+            key: key,
+            title: title,
+            subtitle: subtitle,
+            providerID: providerID,
+        )
     }
 
     public static func track(
@@ -117,9 +127,9 @@ public struct EntityRequest: Equatable, Sendable {
     public static func chartItem(_ item: ChartItem, type: ChartType) -> EntityRequest? {
         switch type {
         case .artists:
-            artist(name: item.title)
+            artist(name: item.title, providerID: item.providerID)
         case .albums:
-            album(album: item.title, artist: item.subtitle)
+            album(album: item.title, artist: item.subtitle, providerID: item.providerID)
         case .tracks:
             track(title: item.title, artist: item.subtitle, providerID: item.providerID)
         }

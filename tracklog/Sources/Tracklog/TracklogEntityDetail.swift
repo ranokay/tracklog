@@ -15,6 +15,19 @@ struct TracklogEntityDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            if let pending = state.pendingListenDelete {
+                HistoryDeleteBar(
+                    listen: pending,
+                    deliveries: state.deliveries(for: pending),
+                    connections: state.connections,
+                    isDeleting: state.deletingListen,
+                    failure: state.deleteListenFailure,
+                    onCancel: { droplet.cancelDeleteListen() },
+                    onDelete: {
+                        Task { await droplet.confirmDeleteListen() }
+                    },
+                )
+            }
             if let error = state.imageOverrideError {
                 imageErrorBar(error)
             }

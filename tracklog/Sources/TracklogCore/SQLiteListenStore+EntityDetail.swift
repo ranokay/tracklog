@@ -353,6 +353,21 @@ extension SQLiteListenStore {
         try Self.intValue(database(), "SELECT COUNT(*) FROM artist_image_cache")
     }
 
+    /// Test-only: replace one blob's bytes to prove the neutral-sleeve fallback
+    /// for an override that is present but cannot be decoded.
+    func replaceArtworkDataForTest(hash: String, data: Data) throws {
+        let handle = try database()
+        let statement = try prepare(handle, "UPDATE artwork SET data = ? WHERE hash = ?")
+        defer { sqlite3_finalize(statement) }
+        data.withUnsafeBytes { bytes in
+            _ = sqlite3_bind_blob(statement, 1, bytes.baseAddress, Int32(bytes.count), Self.transient)
+        }
+        try bind(hash, at: 2, in: statement)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw DatabaseError.sqlite(errorMessage(handle))
+        }
+    }
+
     /// Test-only: remove one blob row to prove the neutral-sleeve fallback for
     /// an override whose stored copy vanished.
     func deleteArtworkRowForTest(hash: String) throws {

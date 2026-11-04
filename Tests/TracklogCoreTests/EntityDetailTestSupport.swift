@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 @testable import TracklogCore
 
@@ -184,12 +185,18 @@ func entityComposition(
     ),
     extraAdapters: [any ServiceAdapter] = [],
     listenBrainzAdapter: Bool = false,
+    existingStore: SQLiteListenStore? = nil,
+    runtimeStore: (any ListenStore & EntityDetailStore)? = nil,
     hold: @escaping @Sendable (HTTPRequest) -> Bool = { _ in false },
     timeout: TimeInterval = 0.2,
     handler: @escaping @Sendable (HTTPRequest) throws -> HTTPResponse,
 ) async throws -> EntityTestComposition {
     let database = try database ?? TemporaryDatabase()
-    let store = try SQLiteListenStore(url: database.url)
+    let store: SQLiteListenStore = if let existingStore {
+        existingStore
+    } else {
+        try SQLiteListenStore(url: database.url)
+    }
     let transport = EntityTransport(hold: hold, handler: handler)
     var adapters: [any ServiceAdapter] = [
         LastFMAdapter(transport: transport, appCredentials: appCredentials),
@@ -204,7 +211,7 @@ func entityComposition(
         state: state,
         clock: clock,
         source: ReplayedNowPlaying(),
-        store: store,
+        store: runtimeStore ?? store,
         allowlist: InMemoryAppAllowlist(),
         edits: store,
         blocks: store,
@@ -346,4 +353,217 @@ func seedEntityHistory(_ store: SQLiteListenStore) async throws {
             start: historyBase.addingTimeInterval(1_200),
         ),
     )
+}
+
+// MARK: - Failing and holding store wrappers
+
+/// A real store whose local detail read fails a fixed number of times. Every
+/// other read and write still reaches SQLite.
+actor FailingEntityDetailStore: ListenStore, TrackHistoryStore, EntityDetailStore, ConnectionStore {
+    private let base: SQLiteListenStore
+    private var failuresRemaining: Int
+
+    init(_ base: SQLiteListenStore, failures: Int) {
+        self.base = base
+        failuresRemaining = failures
+    }
+
+    func failNextDetailRead() {
+        failuresRemaining += 1
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await base.insert(listen)
+    }
+
+    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try await base.page(limit: limit, before: cursor)
+    }
+
+    func count() async throws -> Int {
+        try await base.count()
+    }
+
+    func count(in range: Range<Date>) async throws -> Int {
+        try await base.count(in: range)
+    }
+
+    func entityLocalDetail(
+        kind: EntityKind,
+        key: String,
+        topTrackLimit: Int,
+    ) async throws -> EntityLocalDetail {
+        guard failuresRemaining == 0 else {
+            failuresRemaining -= 1
+            throw DatabaseError.sqlite("simulated detail read failure")
+        }
+        return try await base.entityLocalDetail(
+            kind: kind,
+            key: key,
+            topTrackLimit: topTrackLimit,
+        )
+    }
+
+    func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
+        try await base.trackHistorySummary(matching: key)
+    }
+
+    func trackHistoryPage(
+        matching key: String,
+        limit: Int,
+        before cursor: ListenCursor?,
+    ) async throws -> [Listen] {
+        try await base.trackHistoryPage(matching: key, limit: limit, before: cursor)
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
+        try await base.setCurrentConnectionID(id)
+    }
+
+    func imageOverrides() async throws -> [ImageOverride] {
+        try await base.imageOverrides()
+    }
+
+    func imageOverride(kind: EntityKind, key: String) async throws -> ImageOverride? {
+        try await base.imageOverride(kind: kind, key: key)
+    }
+
+    func saveImageOverride(_ override: ImageOverride, artwork: StoredArtwork) async throws {
+        try await base.saveImageOverride(override, artwork: artwork)
+    }
+
+    func removeImageOverride(kind: EntityKind, key: String) async throws {
+        try await base.removeImageOverride(kind: kind, key: key)
+    }
+
+    func artistImageCache(forArtist key: String) async throws -> ArtistImageCacheEntry? {
+        try await base.artistImageCache(forArtist: key)
+    }
+
+    func saveArtistImageCache(
+        _ entry: ArtistImageCacheEntry,
+        artwork: StoredArtwork?,
+    ) async throws {
+        try await base.saveArtistImageCache(entry, artwork: artwork)
+    }
+
+    func pruneExpiredArtistImageCache(now: Date) async throws {
+        try await base.pruneExpiredArtistImageCache(now: now)
+    }
+}
+
+/// A real store whose override list read can be held, to prove deactivation
+/// owns the activation load.
+actor HoldingOverridesStore: ListenStore, TrackHistoryStore, EntityDetailStore, ConnectionStore {
+    private let base: SQLiteListenStore
+    private let gate: ChartHoldGate
+
+    init(_ base: SQLiteListenStore, gate: ChartHoldGate) {
+        self.base = base
+        self.gate = gate
+    }
+
+    func insert(_ listen: Listen) async throws -> Listen? {
+        try await base.insert(listen)
+    }
+
+    func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {
+        try await base.page(limit: limit, before: cursor)
+    }
+
+    func count() async throws -> Int {
+        try await base.count()
+    }
+
+    func count(in range: Range<Date>) async throws -> Int {
+        try await base.count(in: range)
+    }
+
+    func entityLocalDetail(
+        kind: EntityKind,
+        key: String,
+        topTrackLimit: Int,
+    ) async throws -> EntityLocalDetail {
+        try await base.entityLocalDetail(kind: kind, key: key, topTrackLimit: topTrackLimit)
+    }
+
+    func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
+        try await base.trackHistorySummary(matching: key)
+    }
+
+    func trackHistoryPage(
+        matching key: String,
+        limit: Int,
+        before cursor: ListenCursor?,
+    ) async throws -> [Listen] {
+        try await base.trackHistoryPage(matching: key, limit: limit, before: cursor)
+    }
+
+    func connections() async throws -> [Connection] {
+        try await base.connections()
+    }
+
+    func save(_ connection: Connection) async throws -> Connection {
+        try await base.save(connection)
+    }
+
+    func deleteConnection(id: Int64) async throws {
+        try await base.deleteConnection(id: id)
+    }
+
+    func currentConnectionID() async throws -> Int64? {
+        try await base.currentConnectionID()
+    }
+
+    func setCurrentConnectionID(_ id: Int64?) async throws {
+        try await base.setCurrentConnectionID(id)
+    }
+
+    func imageOverrides() async throws -> [ImageOverride] {
+        await gate.enter()
+        return try await base.imageOverrides()
+    }
+
+    func imageOverride(kind: EntityKind, key: String) async throws -> ImageOverride? {
+        try await base.imageOverride(kind: kind, key: key)
+    }
+
+    func saveImageOverride(_ override: ImageOverride, artwork: StoredArtwork) async throws {
+        try await base.saveImageOverride(override, artwork: artwork)
+    }
+
+    func removeImageOverride(kind: EntityKind, key: String) async throws {
+        try await base.removeImageOverride(kind: kind, key: key)
+    }
+
+    func artistImageCache(forArtist key: String) async throws -> ArtistImageCacheEntry? {
+        try await base.artistImageCache(forArtist: key)
+    }
+
+    func saveArtistImageCache(
+        _ entry: ArtistImageCacheEntry,
+        artwork: StoredArtwork?,
+    ) async throws {
+        try await base.saveArtistImageCache(entry, artwork: artwork)
+    }
+
+    func pruneExpiredArtistImageCache(now: Date) async throws {
+        try await base.pruneExpiredArtistImageCache(now: now)
+    }
 }

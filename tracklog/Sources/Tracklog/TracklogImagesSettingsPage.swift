@@ -92,19 +92,39 @@ struct TracklogImagesSettingsPage: View {
                     } else {
                         ForEach(state.imageOverrides) { override in
                             DropletStackedRow(title: override.displayName) {
-                                HStack(spacing: DroppySpacing.md) {
-                                    ArtworkSleeve(
-                                        size: 44,
-                                        artwork: state.artworkByHash[override.artworkHash],
-                                        identity: override.key,
-                                        isCircular: override.kind == .artist,
-                                    )
-                                    Spacer(minLength: DroppySpacing.sm)
-                                    Button("Remove", role: .destructive) {
-                                        droplet.removeImageOverride(override)
+                                let readable = state.isImageOverrideReadable(override)
+                                VStack(alignment: .leading, spacing: DroppySpacing.xs) {
+                                    HStack(spacing: DroppySpacing.md) {
+                                        ArtworkSleeve(
+                                            size: 44,
+                                            artwork: state.artworkByHash[override.artworkHash],
+                                            identity: override.key,
+                                            isCircular: override.kind == .artist,
+                                        )
+                                        Spacer(minLength: DroppySpacing.sm)
+                                        Button("Replace") {
+                                            replace(override)
+                                        }
+                                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                                        .accessibilityLabel(Text("Replace image for \(override.displayName)"))
+                                        Button("Remove", role: .destructive) {
+                                            droplet.removeImageOverride(override)
+                                        }
+                                        .buttonStyle(DroppyQuietButtonStyle(size: .small))
+                                        .accessibilityLabel(Text("Remove image for \(override.displayName)"))
                                     }
-                                    .buttonStyle(DroppyQuietButtonStyle(size: .small))
-                                    .accessibilityLabel(Text("Remove image for \(override.displayName)"))
+                                    if !readable {
+                                        Text("The saved copy could not be read. Replace or remove it.")
+                                            .font(.caption)
+                                            .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .accessibilityLabel(
+                                                Text(
+                                                    "The saved image for \(override.displayName) "
+                                                        + "could not be read. Replace or remove it.",
+                                                ),
+                                            )
+                                    }
                                 }
                             }
                         }
@@ -142,6 +162,19 @@ struct TracklogImagesSettingsPage: View {
             key: draft.key,
         ) else { return nil }
         return state.artworkByHash[override.artworkHash]
+    }
+
+    private func replace(_ override: ImageOverride) {
+        state.setImageOverrideDraft(
+            ImageOverrideDraft(
+                kind: override.kind,
+                key: override.key,
+                title: override.title,
+                subtitle: override.subtitle,
+            ),
+        )
+        state.setImageOverrideError(nil)
+        droplet.chooseImageOverrideFile()
     }
 
     private func remove(_ draft: ImageOverrideDraft) {

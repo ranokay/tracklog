@@ -76,6 +76,19 @@ public extension CaptureRuntime {
         state.listens.removeAll { $0.id == id }
         state.historyCount = max(0, state.historyCount - 1)
         if state.entityDetail?.request.kind == .track {
+            if var detail = state.entityDetail, var track = detail.track {
+                track.listens.removeAll { $0.id == id }
+                track.totalCount = max(0, track.totalCount - 1)
+                detail.track = track
+                detail.local = EntityLocalDetail(
+                    count: max(0, detail.local.count - 1),
+                    firstListenedAt: detail.local.firstListenedAt,
+                    lastListenedAt: detail.local.lastListenedAt,
+                    topTracks: detail.local.topTracks,
+                    capturedArtworkHash: detail.local.capturedArtworkHash,
+                )
+                state.entityDetail = detail
+            }
             await reloadEntityDetail()
         }
         await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
