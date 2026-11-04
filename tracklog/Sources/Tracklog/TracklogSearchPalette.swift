@@ -116,7 +116,6 @@ struct TracklogSearchPalette: View {
                 .foregroundStyle(AdaptiveColors.notchSurfacePrimaryText)
                 .focused($fieldFocused)
                 .accessibilityLabel(Text("Search the Last.fm catalogue"))
-                .onSubmit { activateSelected() }
             if !model.query.isEmpty {
                 Button {
                     model.query = ""

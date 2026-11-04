@@ -1,0 +1,23 @@
+# AX readout — Search palette, keyboard walk
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_PALETTE=normal`.
+The panel was opened and the query `blo` settled to ten artists, ten albums,
+ten tracks and eight loved rows. The field stayed focused throughout.
+
+1. `down × 5`: the selection moved from Blondie to Blondie cover band; no
+   accessibility focus moved out of the field.
+2. `down`, then `return` on `Show more artists`: the group expanded from five
+   to ten rows and the selection moved to the first newly revealed row (Bloc).
+   The Show more row disappeared from the AX tree.
+3. `up × 6`, then `return` on `Artists`: the header changed from
+   `Expanded. 10 results` to `Collapsed`; its ten rows left the AX tree.
+4. `escape` with `blo` in the field: the field value became empty, the panel
+   stayed open, and `Type an artist, album or track name to search the Last.fm
+   catalogue.` appeared.
+5. `escape` again: the panel was removed from the window list.
+6. A foreground click on the harness window closed the panel, confirming the
+   outside-click close path.
+
+The marked-input-method guard is covered by
+`PaletteKeyRouterTests.aMarkedInputMethodTextKeepsEveryPaletteKeyInTheFieldEditor`
+rather than a live IME run.

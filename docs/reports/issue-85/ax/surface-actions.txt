@@ -1,0 +1,37 @@
+# AX readout — Play on existing surfaces
+
+Fixture: `TRACKLOG_DEMO_STATE=playing` (normal History).
+Harness window 1320 × 940; the expanded surface page shows three copies of
+the takeover (Notch, Dynamic Island, Camera Island).
+
+## Search button
+
+- `AXButton` `Search and play`, id `magnifyingglass`, help `Search and play`,
+  actions `AXPress`, in the takeover header beside the section picker.
+
+## History row
+
+- `AXButton` label `Heart of Glass, Blondie, Parallel Lines, 18:42`, value
+  `delivered to ListenBrainz`, help `Shows this track's history`.
+- Actions: `AXPress`, `AXShowMenu`, `AXScrollToVisible`, and a named
+  `search and play` custom action.
+- The row menu (right-click or the separate 28 × 28 `Actions for …` menu)
+  contains `Search and play`, `Block` and `Copy metadata`, plus delivery and
+  feedback sections where they apply.
+- Track-history rows use the same `HistoryRow`; they are inert labelled
+  elements with the same named `search and play` action and the same menu.
+
+## Now-playing strip
+
+- The ellipsis is an `AXMenuButton` `More`; its first item is
+  `Search and play this track`, followed by the shared menu items. The shelf
+  overflow menu has no Play item, only `Search and play…` (the palette
+  opener).
+
+## Summary check
+
+- Palette `Return` on a row uses `SearchPlayback.performPrimary`: play the
+  encoded query when a template is set, otherwise open the row's Last.fm page.
+- The strip and History row Play uses `SearchPlayback.play`: a template opens
+  the search URL; no template opens the Search settings page. A refusal is
+  shown by `SearchRefusalBar` in the takeover, not written only to a log.

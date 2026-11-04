@@ -1,0 +1,29 @@
+# AX readout — Search palette, normal results
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_PALETTE=normal`.
+Window: `Search and play`, 680 × 560 at (560, 119), layer 3.
+Query: `blo`. Field remains focused.
+
+- `AXTextField` label `Search the Last.fm catalogue`, value `blo`, actions
+  `AXShowMenu`, `AXConfirm`.
+- `AXButton` `Clear the search`.
+- `AXButton` `Close search`.
+- `AXStaticText` `Last.fm catalogue`.
+- `AXButton` `Artists`, value `Expanded. 10 results`, help
+  `Return to collapse or expand this group`, actions `AXScrollToVisible`,
+  `AXPress`.
+- `AXButton` `Blondie`, value `Last.fm catalogue`, help
+  `Return searches and plays. Command-Return opens the Last.fm page.`,
+  actions `AXScrollToVisible`, `AXPress`,
+  `Name:Open on Last.fm`.
+- `AXButton` `Bloc Party`, value `Last.fm catalogue`, same actions.
+- `AXButton` `Show more artists`, value `10 results`, help
+  `Return to show every result in this group`.
+- `AXButton` `Albums`, value `Expanded. 10 results`.
+- `AXButton` `Parallel Lines, Blondie`, value `Last.fm catalogue`.
+- `AXButton` `Tracks`, value `Expanded. 10 results`.
+- `AXButton` `Loved`, value `Expanded. 8 results`.
+- `AXStaticText` `Return plays. Command-Return opens Last.fm. Escape clears
+  the text, then closes.`
+
+Screenshot: `docs/reports/issue-85/palette-normal.png`.

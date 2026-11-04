@@ -1,0 +1,75 @@
+# AX readout — Search palette states
+
+Each fixture is `TRACKLOG_DEMO_STATE=playing
+TRACKLOG_HARNESS_PALETTE=<fixture>`.
+
+## Loading (`loading`)
+
+- `AXBusyIndicator` labelled `Last.fm catalogue`.
+- `AXBusyIndicator` and `AXStaticText` `Searching…` in every group.
+
+## Empty (`empty`)
+
+- `No artists match this search.`
+- `No albums match this search.`
+- `No tracks match this search.`
+- `No loved tracks match this search.`
+
+## Failed group (`failed`)
+
+- Artists: `AXStaticText` `The Last.fm catalogue could not be reached.` and
+  `AXButton` `Try again`.
+- Albums, Tracks and Loved stay ready with rows.
+
+## Missing credentials (`credentials-missing`)
+
+- `AXButton` label `Last.fm app credentials are missing`, value
+  `Search needs your own Last.fm API key and shared secret. Save them in
+  Settings before searching.`, action `Open Settings`.
+- Every group: `AXStaticText` `Last.fm app credentials are missing`,
+  `AXButton` `Settings`, `AXButton` `Try again`. No request reached the
+  transport.
+
+## Rejected credentials (`credentials-rejected`)
+
+- `AXButton` label `Last.fm rejected the app key`, value
+  `Last.fm did not accept the app key in use. Save a working pair on the
+  Last.fm app credentials page.`, action `Open Settings`.
+- Group failures name `Last.fm rejected the app key`.
+
+## Long names (`long-names`)
+
+- `AXButton` label carries the full title, for example
+  `The Extremely Long-Named Artist Collective Featuring a Very Long Credit and
+  an Even Longer Guest Appearance (Remastered Anniversary Edition) 1`.
+- The visible row truncates with an ellipsis at one line.
+
+## Non-Latin (`cjk`)
+
+- Field value `宇多田`.
+- Rows `宇多田ヒカル`, `坂本龍一`, `Fantôme, 宇多田ヒカル`,
+  `Flavor of Life, 宇多田ヒカル`.
+
+## Loved unavailable (`loved-unavailable`)
+
+- `Loved` header, `AXStaticText` `Loved results come from a Last.fm account.
+  The current connection is ListenBrainz; choose a Last.fm connection in
+  Charts.`
+- No loved rows and no empty state.
+
+## Loved limit (`loved-limit`)
+
+- Visible header text `Loved by listener · first 1,000 checked`.
+- Ten rows built from five 200-row pages; the sixth page never requested.
+
+## Failed launch (`failed-launch` with `TRACKLOG_HARNESS_OPEN_REFUSED=1`)
+
+- `AXStaticText` `Search and play could not be opened. Check the URL template
+  in Search settings.` and `AXButton` `Dismiss`.
+- Selection stayed on the first row; the panel remained open.
+
+Screenshots: `palette-loading.png`, `palette-empty.png`,
+`palette-failed-group.png`, `palette-credentials-missing.png`,
+`palette-credentials-rejected.png`, `palette-long-names.png`, `palette-cjk.png`,
+`palette-loved-unavailable.png`, `palette-loved-limit-loved.png`,
+`palette-failed-launch.png`.

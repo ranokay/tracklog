@@ -160,7 +160,7 @@ final class TracklogSearchPaletteController {
     private func handle(_ event: NSEvent) -> NSEvent? {
         // While an input method has marked text, every key belongs to the
         // field editor. Return commits the composition and Escape cancels it.
-        let marked = (panel?.fieldEditor(false, for: nil) as? NSTextView)?.hasMarkedText() ?? false
+        let marked = (panel?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
         let action = PaletteKeyRouter.route(
             keyCode: event.keyCode,
             command: event.modifierFlags.contains(.command),
