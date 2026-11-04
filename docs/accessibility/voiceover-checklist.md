@@ -135,8 +135,9 @@ Settings is the only typed surface and must be fully keyboard-operable.
 Checks:
 
 - Root `scrobbling` and the pages `services`, `edits`, `blocks`, `data`,
-  `about`, plus `apps`, `charts`, `history`, `lastfm-credentials`, `add-service` and per-connection
-  pages are reachable.
+  `about`, plus `apps`, `charts`, `history`, `history-edit`,
+  `lastfm-credentials`, `add-service` and per-connection pages are reachable.
+  `history-edit` is contextual: it is opened by a History row's Edit action.
 - Every control is reachable with Tab/Shift-Tab and operable with Space,
   Return or the arrow keys.
 - History holds one `Date and time` picker and `Show in History`. The picker is

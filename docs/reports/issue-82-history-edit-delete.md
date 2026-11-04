@@ -7,8 +7,10 @@
   for local history and leaves qualified remote write-back to its dependent
   tickets.
 - State: the owner agreed this contract in the implementation run before any
-  code changed. Implementation, tests, harness evidence and the gate follow in
-  later commits.
+  code changed. Implementation, tests, harness evidence and the receipt-backed
+  gate are complete. The gate ran at code head
+  `15fc972a3bceaa3b70eef6ee59d3408b1a8fe628`; later commits add this report and
+  evidence only.
 
 ## Contract
 
@@ -148,26 +150,176 @@ Inline, pinned bar in History:
   service-delete tickets cannot reach those remote copies.
 - Shared artwork stays after a delete.
 
-## Implementation plan
+## Implementation
 
 - Migration 11 adds `deleted_listens(dedup_hash PRIMARY KEY, deleted_at)`.
-- `ListenMutationStore` writes an edit (plus an optional rule and local chart
-  cache invalidation) in one immediate transaction, and a delete (tombstone,
-  listen, cascaded deliveries and cache invalidation) in another.
-- The runtime exposes edit and delete, publishes success only after commit,
-  refreshes History, track history, deliveries and local charts, and surfaces
-  validation or storage failure without a success state.
-- History rows gain `Edit listen...` and `Delete listen...`; editing opens a
-  Settings page with four fields and the optional rule; deletion uses the
-  pinned confirmation bar.
-- Tests use real temporary SQLite reopened across restarts, a controlled clock,
-  replayed playback and scripted service transport, covering waiting,
-  retrying, delivered, abandoned and zero-target listens, failures, duplicate
-  protection and concurrent capture.
-- The harness renders the edit page and delete confirmation and the gate
-  checks every report. The native flow is driven through the harness
-  accessibility tree and recorded separately from fixtures.
+  `ListenTombstone.hash(of:)` uses system CryptoKit SHA-256; the readable dedup
+  key is never stored. `ListenMutationStore` edit and delete each run in one
+  immediate SQLite transaction. The edit writes the four processed columns,
+  the optional rule and local chart-cache deletion together. The delete writes
+  the hash tombstone, removes the listen, cascades its delivery rows and clears
+  local chart caches.
+- `insertListenRow` checks the hashed tombstone inside its existing insert
+  transaction, so a deleted play is not reinserted by a restart or feed replay.
+- `CaptureRuntime.editListen` and `deleteListen` publish only after the store
+  commits. They update the loaded feed, close a track view whose key may have
+  moved, reload track history after a delete, reload delivery state, and tell
+  the chart read model to clear its local snapshot. A validation or storage
+  error is thrown to the page or bar with no success state.
+- History rows gain `Edit listen…` and `Delete listen…`. Edit opens the
+  `history-edit` Settings page with Track, Artist, Album, Album artist, an
+  off-by-default `Remember as rule` switch, the per-service consequences and
+  Save/Cancel. Delete uses the pinned inline confirmation bar with the exact
+  live service lines and the in-flight warning.
+- `GLOSSARY.md` now defines Local edit, Remember as rule and Delete tombstone,
+  and the Simple edit entry records the explicit-row-edit exception.
+  `docs/accessibility/voiceover-checklist.md` records the new History menu,
+  confirmation and edit-page requirements.
+- The harness has `history-delete` and `history-edit` states, and the gate
+  checks both reports. The harness's contextual edit route sets its Settings
+  page directly; the date-jump refusal state is unchanged.
+
+### Composition proof
+
+The focused suite is 15 tests in `HistoryMutationTests`, plus the schema-11
+update to `FeedbackStoreTests.migratesFromThePreviousSchemaAndKeepsHistory`.
+The tests use real temporary SQLite files (several reopened after a close),
+`FakeClock`, replayed playback and recording/scripted service adapters.
+
+| Test | Covers |
+| --- | --- |
+| `anEditChangesOnlyTheProcessedValuesAndSurvivesRestart` | processed-only edit; stable raw, id, start, bundle, duration, artwork, dedup; reopen. |
+| `aBlankTitleOrArtistIsRefusedWithoutChangingTheRow` | required fields and no partial write. |
+| `anEditAndDeleteLeaveTrackFeedbackAndSharedArtwork` | feedback keyed by processed identity; no migration; shared artwork survives; deliveries gone after delete. |
+| `aDeletedListenIsNotRecapturedButANewStartIsARepeat` | 64-hex tombstone with no readable title, artist, album or key; same play refused after reopen; new start captured. |
+| `anEditRefreshesHistoryTrackAndChartReads` | History/track key moves; local chart caches cleared; corrected chart reload; track view after delete. |
+| `aWaitingDeliveryKeepsItsStateAndSendsEditedValues` | waiting state, attempts and next attempt preserved; next batch carries edited metadata. |
+| `aRetryingDeliveryKeepsItsBackoffAndSendsEditedValues` | retrying state, attempts, error and next attempt preserved; retry carries edited metadata. |
+| `deliveredAbandonedAndZeroTargetRowsSurviveAnEditAndDisappearOnDelete` | delivered reference and abandoned reason survive an edit; all states disappear locally on delete; no extra service batch. |
+| `oneEditLeavesDifferentMetadataOnDifferentServices` | one delivered copy keeps the original metadata while a waiting target sends the edit. |
+| `aDeleteDuringAnInFlightSendDoesNotRecallIt` | a held send is not recalled; its row is gone and no second batch is sent. |
+| `aCaptureConcurrentWithADeleteKeepsHistoryConsistent` | capture and delete interleave; one row remains, counts agree, one tombstone. |
+| `aStorageFailureLeavesTheRowAndPublishesNoSuccess` | edit and delete throw, `state.failure` is storage, durable and loaded rows remain. |
+| `aRememberedAlbumCorrectionAppliesToFuturePlaysOnThatAlbumOnly` | rule matches all raw fields; replaces only album; existing row untouched; same album corrected; different album not corrected. |
+| `aLocalMutationMakesNoServiceWriteBackRequest` | real ListenBrainz adapter and scripted transport: edit and delete add no request. |
+| `theNoticesNameEveryServiceStateAndTheInFlightLimit` | exact waiting, delivered, abandoned, no-target and in-flight copy. |
+
+### Observable acceptance map (#82)
+
+| # | Evidence |
+| --- | --- |
+| 1 | Contract above; owner agreed before the code commit; report commit `54d02c5` precedes the implementation commit `15fc972`. |
+| 2 | History `Actions` menu has Edit/Delete; `history-edit` Settings page; `history-delete` confirmation; interactive AX walk. |
+| 3 | Immediate transactions; reopened SQLite tests; local chart/track/History refresh; storage-failure test. |
+| 4 | Exact edit-page and delete-bar copy; scripted transport proves no write-back. |
+| 5 | 15 focused tests with real SQLite, controlled clock/playback and scripted transport. |
+| 6 | Receipt-backed gate; interactive native delete and edit runs; AX readouts; separate evidence classes below. |
+| 7 | No Tracklog identity, licence, credential, capability or dependency change; base `aa6bdeb`; unrelated work preserved. |
 
 ## Gate
 
-Pending implementation.
+Command:
+
+```sh
+/Users/ranokay/.agents/tools/run gate_run -- mise run gate
+```
+
+- Result: exit `0`, frozen gate `true`, clean before and after, at head
+  `15fc972a3bceaa3b70eef6ee59d3408b1a8fe628`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T083158Z-498715eb74f2.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T083158Z-498715eb74f2.log`
+  - Duration: 1204.4 seconds.
+  - The commits after this code head are documentation and evidence only; the
+    source and test tree the gate checked is unchanged.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint
+  violations in 294 files.
+- `swift test --package-path Tests`: 642 tests in 97 suites; 51 media tests in
+  7 suites.
+- `droppykit build`: universal droplet, x86_64 + arm64.
+- `droppykit validate`: `Ready to submit`.
+- Every harness report `verdict: ok`, `problems: []`, active activation, every
+  declared surface provided.
+- New shot states: `history-delete`, `history-edit`. Existing History,
+  Charts, shelf, HUD, settings and lock-screen states remain in the gate.
+- Checked fixture reports are in `docs/reports/issue-82/reports/`; selected
+  images are in `docs/reports/issue-82/`.
+
+## Native observations
+
+Interactive harness, normal `TRACKLOG_DEMO_STATE=playing` History, driven via
+Cua Driver AX presses:
+
+- Row menu: `Actions for Heart of Glass` opened the full menu with
+  `Deliveries`, `Feedback`, `History` (`Edit listen…`, `Delete listen…`),
+  `Block` and `Copy metadata`.
+- Delete: `Delete listen…` on `Once in a Lifetime` opened
+  `Delete “Once in a Lifetime”?` with
+  `Retrying for ListenBrainz: that delivery will be discarded. A send already
+  under way may still arrive.` and the Last.fm/local footer. `Cancel` closed
+  the bar. Repeating and pressing `Delete` removed the row, changed the header
+  from `6 listens` to `5 listens`, and removed its pending-queue entry with no
+  service request.
+- Edit: `Edit listen…` on `Heart of Glass` opened the Settings page prefilled
+  with `Heart of Glass`, `Blondie`, `Parallel Lines` and an empty album artist.
+  `Delivered to ListenBrainz: that copy stays.` was the service line. The run
+  set Album to `Parallel Lines (Deluxe)`, turned `Remember as rule` on, and
+  saved. History returned with
+  `Heart of Glass, Blondie, Parallel Lines (Deluxe), 18:42`; the row kept its
+  delivered value and id. The pinned now-playing heart changed from `Loved` to
+  `Not loved`, as the accepted feedback consequence predicts.
+- Fixture shots add the same delete confirmation over a retiring ListenBrainz
+  delivery and the edit page over a delivered row.
+
+Selected evidence:
+
+- `history-delete.png` (cropped first notch panel; the right edge is the same
+  shot-viewport limit recorded for issues #80 and #81),
+  `history-delete-full.png`, `history-edit.png`,
+  `delete-confirmation-interactive.png`, `history-edited.png`.
+- AX readouts: `ax/method.md`, `ax/delete-confirmation.txt`,
+  `ax/edit-page.txt`.
+
+## Accessibility
+
+AX-tree inspection is not audible VoiceOver. The checklist is
+`docs/accessibility/voiceover-checklist.md`.
+
+| Requirement | Result | Method |
+| --- | --- | --- |
+| Row remains one `AXButton` with its #26 label/value | Passed (AX) | `Heart of Glass, Blondie, Parallel Lines (Deluxe), 18:42`, value `delivered to ListenBrainz`. |
+| Actions menu is separate and includes both history actions | Passed (AX) | `Actions for Heart of Glass` 28 × 28; menu items `Edit listen…`, `Delete listen…`. |
+| Delete confirmation is read in order | Passed (AX) | Heading, removal sentence, waiting/in-flight line, footer, then separate buttons. |
+| Cancel is explicit and does not mutate | Passed (interactive) | `Cancel` removed the bar; row and pending delivery stayed. |
+| Delete is explicit and destructive | Passed (interactive) | `Delete` removed the row and its delivery; no default Return binding. |
+| Escape closes the confirmation | Implemented, not exercised | `keyboardShortcut(.cancelAction)` on Cancel; no Escape key was sent in the AX walk. |
+| Edit page fields are labelled and prefilled | Passed (AX) | Track/Artist/Album/Album artist values above. |
+| Remember as rule is off by default and operable | Passed (AX + interactive) | CheckBox value `0`, then toggled on before Save. |
+| Save is disabled until a change | Passed (AX) | Save exposed without an enabled action before the field changed. |
+| Failed save keeps the page | Passed (test) | `aStorageFailureLeavesTheRowAndPublishesNoSuccess`; not forced interactively. |
+| 24-point targets | Passed (style) | `DroppyQuietButtonStyle(size: .small)` and the 28 × 28 menu; no new icon-only target. |
+| Full keyboard walk | Not run | AX presses and Return only; no Tab/Shift-Tab walk. |
+| Audible VoiceOver | Not passed / blocked | No microphone audio and no accessibility-setting change; AX labels only. |
+| Real Playground host load | Not passed | No installation outside the repository. |
+
+## Evidence classes and limits
+
+| Class | Result | Evidence |
+| --- | --- | --- |
+| Composition tests | Run | 642 tests / 97 suites; 15 focused mutation tests. These do not prove UI or runtime behaviour. |
+| Harness output | Run | `history-delete` and `history-edit`; every report `problems: []`; selected images above. |
+| Interactive harness AX | Run | Actions menu, cancel/confirm delete, edit-and-save walk; AX readouts above. |
+| Real host load | **Not passed** | The droplet was not installed in Droppy Playground; no changes outside the repository. |
+| Live service qualification | **Not passed** | No live credentials or production writes. The scripted transport proves zero write-back requests for edit/delete. |
+| Audible VoiceOver | **Not passed / blocked** | AX-tree inspection only. |
+
+No version bump, Store submission, credential change, capability change or
+dependency was added. The database schema moved to 11 with the one migration
+above. `droplet.json`, licensing and Tracklog branding are unchanged. Tests
+remain in the sibling `Tests` package.
+
+## Questions for the owner
+
+None. The five contract items, the hashed tombstone, the in-flight warning and
+the remember-as-rule option C were agreed before implementation; the accepted
+consequences are recorded above.
+
