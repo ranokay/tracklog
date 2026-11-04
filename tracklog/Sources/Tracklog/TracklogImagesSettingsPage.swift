@@ -33,7 +33,7 @@ struct TracklogImagesSettingsPage: View {
                                 )
                                 VStack(alignment: .leading, spacing: DroppySpacing.xs) {
                                     Button("Choose image…") {
-                                        droplet.chooseImageOverrideFile()
+                                        droplet.chooseImageOverrideFile(for: draft)
                                     }
                                     .buttonStyle(DroppyAccentButtonStyle(size: .small))
                                     if state.imageOverride(
@@ -168,16 +168,15 @@ struct TracklogImagesSettingsPage: View {
     }
 
     private func replace(_ override: ImageOverride) {
-        state.setImageOverrideDraft(
-            ImageOverrideDraft(
-                kind: override.kind,
-                key: override.key,
-                title: override.title,
-                subtitle: override.subtitle,
-            ),
+        let draft = ImageOverrideDraft(
+            kind: override.kind,
+            key: override.key,
+            title: override.title,
+            subtitle: override.subtitle,
         )
+        state.setImageOverrideDraft(draft)
         state.setImageOverrideError(nil)
-        droplet.chooseImageOverrideFile()
+        droplet.chooseImageOverrideFile(for: draft)
     }
 
     private func remove(_ draft: ImageOverrideDraft) {

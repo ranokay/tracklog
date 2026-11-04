@@ -222,8 +222,15 @@ extension TracklogDroplet {
     /// The Images page's file picker. The data is read before it reaches the
     /// store; a selection over the input limit never enters memory, and a
     /// failed decode leaves any existing override untouched.
-    func chooseImageOverrideFile() {
+    ///
+    /// The entity is captured before the panel runs. `runModal` blocks the app,
+    /// but the off-main file read does not: the page can leave (clearing the
+    /// draft) or the user can start Replace on another row while the bytes are
+    /// read. The save is addressed to the captured entity, and only a draft
+    /// that still names it is consumed.
+    func chooseImageOverrideFile(for draft: ImageOverrideDraft) {
         guard imageOverridePanel == nil, let host else { return }
+        let chosen = draft
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
@@ -245,8 +252,18 @@ extension TracklogDroplet {
             }.value
             switch result {
             case let .success(data):
+                guard let runtime else {
+                    state.setImageOverrideError("The image could not be saved. Tracklog is not active.")
+                    return
+                }
                 do {
-                    try await runtime?.saveSelectedImageOverride(data)
+                    try await runtime.saveImageOverride(
+                        kind: chosen.kind,
+                        key: chosen.key,
+                        title: chosen.title,
+                        subtitle: chosen.subtitle,
+                        data: data,
+                    )
                     state.setImageOverrideError(nil)
                 } catch {
                     state.setImageOverrideError(

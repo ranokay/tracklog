@@ -640,7 +640,11 @@ public final class EntityDetailReadModel {
     // MARK: - Override actions
 
     /// Re-encodes the choice off the main actor, stores the copy and updates
-    /// every surface that shows the override.
+    /// every surface that shows the override. The entity is an argument, not
+    /// the pending draft: the file read can outlive the page or a Replace on
+    /// another row, and the save must still target the entity the user chose
+    /// the file for. A draft that still names that entity is consumed; a
+    /// draft for another entity is left for that page.
     public func saveOverride(
         kind: EntityKind,
         key: String,
@@ -668,6 +672,10 @@ public final class EntityDetailReadModel {
         try await store.saveImageOverride(override, artwork: stored)
         await loadOverrides()
         applySucceeded(override: override, data: stored.data)
+        if state.imageOverrideDraft?.kind == kind,
+           state.imageOverrideDraft?.key == key {
+            state.imageOverrideDraft = nil
+        }
     }
 
     public func removeOverride(kind: EntityKind, key: String) async throws {
@@ -694,29 +702,6 @@ public final class EntityDetailReadModel {
         } else {
             maybeStartServiceImage()
             recomputeImage()
-        }
-    }
-
-    /// The Images page picks a file and hands the bytes here. A failed decode
-    /// leaves any existing override untouched. The chosen entity is captured
-    /// before the first suspension, so the page leaving the screen and
-    /// clearing its draft mid-save cannot lose the save.
-    public func selectOverrideImage(_ data: Data) async throws {
-        guard let draft = state.imageOverrideDraft else {
-            throw ImageOverrideError.noSelection
-        }
-        try await saveOverride(
-            kind: draft.kind,
-            key: draft.key,
-            title: draft.title,
-            subtitle: draft.subtitle,
-            data: data,
-        )
-        // A page that stayed up starts from the saved list, not an old draft.
-        // A newer draft belongs to another entity and is left alone.
-        if state.imageOverrideDraft?.kind == draft.kind,
-           state.imageOverrideDraft?.key == draft.key {
-            state.imageOverrideDraft = nil
         }
     }
 

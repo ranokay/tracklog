@@ -420,7 +420,13 @@ struct EntityDetailCompositionTests {
                 "Change image… dismisses the takeover, so the draft must survive")
 
         let bytes = try #require(testImageData(red: 0.2, green: 0.7, blue: 0.3))
-        try await composition.runtime.saveSelectedImageOverride(bytes)
+        try await composition.runtime.saveImageOverride(
+            kind: request.kind,
+            key: request.key,
+            title: request.title,
+            subtitle: request.subtitle,
+            data: bytes,
+        )
         #expect(composition.state.imageOverrides.count == 1)
         #expect(try await composition.store.imageOverrideCount() == 1)
     }

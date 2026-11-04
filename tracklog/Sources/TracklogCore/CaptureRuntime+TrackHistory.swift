@@ -67,13 +67,6 @@ public extension CaptureRuntime {
         )
     }
 
-    func saveSelectedImageOverride(_ data: Data) async throws {
-        guard let entityDetail else {
-            throw ImageOverrideError.noSelection
-        }
-        try await entityDetail.selectOverrideImage(data)
-    }
-
     func removeImageOverride(kind: EntityKind, key: String) async throws {
         guard let entityDetail else {
             throw ImageOverrideError.noSelection

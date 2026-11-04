@@ -425,16 +425,75 @@ struct EntityImageCompositionTests {
                 "the released album page downloads the service image once")
     }
 
-    @Test func aSuccessfulSaveClearsTheDraft() async throws {
+    @Test func aSuccessfulSaveClearsItsOwnDraft() async throws {
         let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
         let request = try artistRequest()
         composition.runtime.beginImageOverride(request)
         #expect(composition.state.imageOverrideDraft?.key == request.key)
-        try await composition.runtime.saveSelectedImageOverride(image())
+        let bytes = try image()
+
+        try await composition.runtime.saveImageOverride(
+            kind: request.kind,
+            key: request.key,
+            title: request.title,
+            subtitle: request.subtitle,
+            data: bytes,
+        )
+
         #expect(composition.state.imageOverrideDraft == nil)
     }
 
-    @Test func theImagesPageLeavingClearsTheDraftWithoutLosingAnInFlightSave() async throws {
+    /// The picker captures the entity before the panel runs. The page leaving
+    /// during the off-main read clears the draft, but the save that follows
+    /// still targets the entity the file was chosen for.
+    @Test func anExplicitSaveSurvivesTheDraftBeingClearedFirst() async throws {
+        let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
+        let request = try artistRequest()
+        composition.runtime.beginImageOverride(request)
+        composition.runtime.clearImageOverrideDraft()
+        #expect(composition.state.imageOverrideDraft == nil)
+        let bytes = try image(red: 0.9)
+
+        try await composition.runtime.saveImageOverride(
+            kind: request.kind,
+            key: request.key,
+            title: request.title,
+            subtitle: request.subtitle,
+            data: bytes,
+        )
+
+        #expect(try await composition.store.imageOverride(kind: .artist, key: request.key) != nil,
+                "the captured entity receives the file without a draft")
+        #expect(composition.state.imageOverrideDraft == nil)
+    }
+
+    /// The user can start Replace on another row while the first file is
+    /// read. The save still targets the chosen entity, and the other entity's
+    /// draft is left for its own save.
+    @Test func anExplicitSaveTargetsItsOwnEntityAndLeavesAnotherDraft() async throws {
+        let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
+        let chosen = try artistRequest("Blondie")
+        let other = try artistRequest("Talking Heads")
+        composition.runtime.beginImageOverride(chosen)
+        composition.runtime.beginImageOverride(other)
+        let bytes = try image(red: 0.9)
+
+        try await composition.runtime.saveImageOverride(
+            kind: chosen.kind,
+            key: chosen.key,
+            title: chosen.title,
+            subtitle: chosen.subtitle,
+            data: bytes,
+        )
+
+        #expect(try await composition.store.imageOverride(kind: .artist, key: chosen.key) != nil)
+        #expect(try await composition.store.imageOverride(kind: .artist, key: other.key) == nil,
+                "the chosen file is not saved over the other entity")
+        #expect(composition.state.imageOverrideDraft?.key == other.key,
+                "another entity's draft is left alone")
+    }
+
+    @Test func anExplicitSaveSurvivesTheDraftChangingDuringTheStoreWrite() async throws {
         let database = try TemporaryDatabase()
         let base = try SQLiteListenStore(url: database.url)
         let saveGate = ChartHoldGate()
@@ -448,25 +507,30 @@ struct EntityImageCompositionTests {
             existingStore: base,
             runtimeStore: store,
         ) { _ in entityLastFMArtistInfo() }
-        let request = try artistRequest()
-        composition.runtime.beginImageOverride(request)
-        #expect(composition.state.imageOverrideDraft?.key == request.key)
+        let chosen = try artistRequest("Blondie")
+        let other = try artistRequest("Talking Heads")
+        let bytes = try image()
 
         await saveGate.startHolding()
-        let save = Task { try await composition.runtime.saveSelectedImageOverride(image()) }
+        let save = Task {
+            try await composition.runtime.saveImageOverride(
+                kind: chosen.kind,
+                key: chosen.key,
+                title: chosen.title,
+                subtitle: chosen.subtitle,
+                data: bytes,
+            )
+        }
         #expect(await saveGate.waitUntilEntered(1), "the save is in flight")
 
-        // The Images page leaves the screen while the chosen bytes are being
-        // stored; its draft is cleared, but the save that already read it
-        // still completes.
-        composition.runtime.clearImageOverrideDraft()
-        #expect(composition.state.imageOverrideDraft == nil)
+        // The Images page moves on while the chosen bytes are being stored.
+        composition.runtime.beginImageOverride(other)
         await saveGate.release()
         try await save.value
 
-        #expect(composition.state.imageOverrideDraft == nil)
-        #expect(try await base.imageOverrideCount() == 1)
-        #expect(composition.state.imageOverrides.count == 1)
+        #expect(try await base.imageOverride(kind: .artist, key: chosen.key) != nil)
+        #expect(try await base.imageOverride(kind: .artist, key: other.key) == nil)
+        #expect(composition.state.imageOverrideDraft?.key == other.key)
     }
 
     @Test func anOversizedSelectionIsRefusedBeforeItEntersTheStore() async throws {
