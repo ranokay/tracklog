@@ -1,0 +1,26 @@
+Scratch install proof (not the real Playground path)
+=====================================================
+
+Layout created under the repository's ignored .scratch directory:
+
+  .scratch/playground-install-proof/Droplets/tracklog/
+    Container/sub/keep.txt
+    Tracklog.droplet/Contents/old/stale.txt
+
+Command used (the owner replaces DEST with the real Playground path):
+
+  DEST=".scratch/playground-install-proof/Droplets/tracklog"
+  rm -rf "$DEST/Tracklog.droplet"
+  cp -R tracklog/.build/Tracklog.droplet "$DEST/Tracklog.droplet"
+
+Observed:
+
+  diff -r tracklog/.build/Tracklog.droplet \
+          .scratch/playground-install-proof/Droplets/tracklog/Tracklog.droplet
+  diff exit: 0
+
+  Container kept:
+  .scratch/playground-install-proof/Droplets/tracklog/Container/sub/keep.txt
+
+The sibling Container directory was not touched; the bundle contents are an
+exact copy of the built droplet.

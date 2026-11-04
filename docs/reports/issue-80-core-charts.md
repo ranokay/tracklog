@@ -1,9 +1,9 @@
 # Issue #80 Core charts — worker report
 
 - Base: `c0bcd20c6bd5778ba648e0207283531ce50dc71d` (`feat: build ListenBrainz charts (#110)`)
-- Gate head: `8c9229e58949242366795a7962b011c85863f7f0` (`fix: keep chart sign-in remedy accurate`)
+- Gate head: `dc89e13287da35ed283038682e6782d8766cbd80` (`fix: meet chart takeover target sizes`)
 - Branch: `feat/core-charts-80`
-- State: committed locally, not pushed. This report commit adds documentation and evidence only.
+- State: committed locally, not pushed. Review fixes F1–F3 are included; this report commit adds documentation and evidence only.
 - Scope: CH-01, the accepted CH-02 subset, supported CH-07 totals and CH-08 refresh. Part of #76; it does not close #76 or #77 and makes no Store or milestone-complete claim.
 
 ## Contract reconciliation
@@ -65,9 +65,9 @@ Command on the gate head:
 ```
 
 - Exit `0`, frozen gate `true`, clean before and after.
-- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T014619Z-60bcd71c9002.json`
-- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T014619Z-60bcd71c9002.log`
-- Duration: 728.8 seconds.
+- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T023053Z-0e25911237d5.json`
+- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T023053Z-0e25911237d5.log`
+- Duration: 709.8 seconds.
 
 | Command | Observed |
 | --- | --- |
@@ -106,10 +106,55 @@ Selected images are in `docs/reports/issue-80/`; each chart image is the notch p
 | `charts-feed-unavailable` | feed-unavailable | absent (no now-playing) |
 
 - Increase Contrast draws row separators; Reduce Motion produced `Tracklog motion: reduced crossfade 0.16s` in the gate log (copied to `docs/reports/issue-80/reduced-motion.log`).
-- ListeningBrainz shows `Returned span … · data ends … · statistics updated …` in the completed week. All time shows `12,345 Last.fm · account total`, `Saved just now`; total-failure keeps the ranked rows and shows `Account total unavailable`.
+- ListenBrainz shows `Returned span … · data ends … · statistics updated …` in the completed week. All time shows `12,345 Last.fm · account total`, `Saved just now`; total-failure keeps the ranked rows and shows `Account total unavailable`.
 - Local shows `6 local listens` and `Custom`; local-empty shows `0` with `No listens in this range`; local-missing-metadata shows `No album details in this range` with `2 listens are still included in the range total`.
 - Libre.fm: `Libre.fm has no charts API. Showing this Mac's history.` No connection: `No connection selected` with `Use local history` and `Open Services settings`.
 - Rate-limited-saved keeps saved rows and age with `Rate limited · showing saved charts`; app-credentials and needs-sign-in show distinct remedies; the needs-sign-in no-saved copy was corrected to `Sign in again in Settings, or use this Mac's local history.`
+
+### Harness shot viewport (F2)
+
+The raw `--shots` pages are 2360 × 3800 px (1180 × 1900 pt). The expanded
+surface content is 898 × 557 (AXStaticText). The shot page is narrower than the
+laid-out surface, so every raw chart PNG clips the surface's right edge: the
+Refresh control and the third overflow dot sit at the page boundary, and the
+panel's right rounded corner is outside the page. This is the harness shot
+viewport, not layout overflow:
+
+- Window: 1320 × 940 at global origin (240, 87), right edge x 1560.
+- Surface content: 898 × 557.
+- Right-most controls: Refresh and More x 1463..1487; Cancel x 1427..1451;
+  Love x 1399..1423; connection popup x 1279..1487.
+- All right-most controls end at least 73 pt before the window's right edge,
+  and the connection popup is inside the 898 pt content.
+
+`docs/reports/issue-80/ax/harness-window.png` is a native 2640 × 1880 window
+capture showing the full panel right edge, the Refresh control and the
+overflow circle. DroppyKit's harness has no width option (`--shot-height`
+only), so the raw shot limit is recorded rather than worked around. The
+committed chart images are notch-panel crops of the raw shots and inherit the
+same right-edge clip.
+
+### Round-1 findings
+
+- **F1 fixed.** The section picker was 21 pt (`controlSize(.small)`), the
+  connection menu 15 pt, and the playing/states overflow menu 20 × 14 pt; the
+  Love control was disabled in the harness because its Last.fm adapter did not
+  declare love support. The picker is now `.regular` (24 pt), the connection
+  switcher is a native menu-style `Picker` (208 × 28), both overflow menus use
+  `DroppyCircleButtonStyle(size: 24)` (24 × 24), and the harness adapter
+  declares love support. Every chart takeover control is listed with its
+  measured frame in `ax/frames.txt`; the affected normal, loading, failed,
+  failed-saved, paused, off, long-names and needs-sign-in shots were
+  re-inspected.
+- **F2 resolved as a harness viewport limit.** See the section above; the
+  window capture shows the full right edge. No production layout change was
+  needed.
+- **F3 fixed.** The owner install command now replaces the bundle directory
+  with `rm -rf` + `cp -R` and leaves the sibling `Container` untouched; the
+  scratch proof is in `docs/reports/issue-80/install-proof.txt` (`diff -r`
+  exit 0 and `Container/sub/keep.txt` preserved). The VoiceOver commands use
+  the real fixture value `local`, and the `ListeningBrainz` typo is corrected
+  to `ListenBrainz`.
 
 ## Interactive harness walk
 
@@ -117,7 +162,7 @@ Readouts are committed under `docs/reports/issue-80/ax/`; the method and evidenc
 
 - Service fixture (`charts-normal`, playing, Last.fm · listener): 15 AX presses covering artists, albums and tracks across Week, Month, Year and All time; every heading expectation matched. Row labels and values include `Rank 1, Blondie, 42 plays` / `Last.fm · listener, Rolling 7 days`; 8 rows per type.
 - Local mode, reached by `On this Mac`: 18 AX presses covering all three types across Today, Week, Month, Year and All time; every heading expectation matched. Local rows read `Rank 1, Blondie, 2 listens` / `On this Mac, This week`; the observed total was `7 local listens` after the harness playback source added one listen.
-- Source switching: Service → On this Mac → Service replaced both rows and source notes; no service row remained under local, and no local row remained after switching back.
+- Source switching: Service → On this Mac → Service replaced both rows and source notes; no service row remained under local, and no local row remained after switching back. The connection popup was also opened, switched to `No connection` (source note `No connection selected`) and back to `Last.fm · listener`; the selection took effect each time.
 - Failed-saved refresh: pressing Refresh kept `Offline · showing saved charts`, `Saved 2 hr ago`, the saved detail and the ranked rows; the saved age was not replaced with `Saved just now`.
 - Repeated Reload on `charts-loading`: three Reload presses, then `AXBusyIndicator (Loading charts)` and `First load` with the playing strip; after the 30-second fixture delay the rows appeared as `Rank 1, Blondie, 42 plays` with `Saved just now`. No early obsolete publish was observed. The Activity page contained no `error` or `Tracklog activated` text and the harness chrome showed `Active`. Interactive mode has no `report.json`; the equivalent gate report `reports/charts-loading.json` is `problems: []`.
 - Custom: pressing `Custom` produced no AX change — the harness refuses the host Settings call. This is harness wiring only; the real host handoff is not passed.
@@ -129,8 +174,8 @@ The checklist used is `docs/accessibility/voiceover-checklist.md`. AX-tree inspe
 | Requirement | Result | State and method |
 | --- | --- | --- |
 | Rank, item, count and source speech | Passed (AX) | Service and local rows: label `Rank 1, … , 42 plays`; value `Last.fm · listener, Rolling 7 days` or `On this Mac, This week`. |
-| Selected controls expose state | Passed (AX) | Type, source and period buttons expose `Selected` / `Not selected`; the section is a radio group; the connection menu exposes `Last.fm, listener`. |
-| 24-point targets | Passed (AX) | Refresh 24×24; chart-type and period choices 63.5×31; ranked rows 606×52. |
+| Selected controls expose state | Passed (AX) | Type, source and period buttons expose `Selected` / `Not selected`; the section is a radio group; the connection popup exposes label `Current connection` and value `Last.fm · listener`. |
+| 24-point targets | Passed (AX) | Every interactive chart control measured: section `History` 85×24 and `Charts` 84×24; connection popup 208×28 and its `No connection` item 220×24; source/type/period choices 31 high (including `Today` and `Custom`); Refresh 24×24; failure `Try again` 78.5×31, `Open Services settings` 161×31, `Use local history` 122.5×31; notice `Try again` 78.5×31; playing-strip Love 24×24, Cancel 24×24, More 24×24; paused `Resume` 71×31 and More 24×24; off `Turn on` 69×31 and More 24×24. Details in `ax/frames.txt`. |
 | Reduce Motion | Passed (configured path) | Gate run with `TRACKLOG_HARNESS_REDUCE_MOTION=1`; log `Tracklog motion: reduced crossfade 0.16s`; `AccessibilityMotionTests` asserts < 0.2 s. No frame timing measured. |
 | Increase Contrast | Passed (rendered) | `charts-contrast` shot shows row separators; production reads the real contrast environment, the harness override only reaches the same path. |
 | Distinct empty/not-ready/failure copy | Passed (rendered) | Separate shots for empty, not-ready, failed, failed-saved, rate-limited-saved, app-credentials, needs-sign-in, no-connection and Libre fallback. |
@@ -163,14 +208,16 @@ No version bump, Store submission, credential change, capability change or depen
 
 1. **Real Playground load and Custom handoff.** Run:
    ```sh
-   cp tracklog/.build/Tracklog.droplet "$HOME/Library/Application Support/Droppy Playground/Droplets/tracklog/Tracklog.droplet"
+   DEST="$HOME/Library/Application Support/Droppy Playground/Droplets/tracklog"
+   rm -rf "$DEST/Tracklog.droplet"
+   cp -R tracklog/.build/Tracklog.droplet "$DEST/Tracklog.droplet"
    open -a "Droppy Playground"
    ```
-   Confirm the Store row reports the bundle loaded, open Charts, press Custom, and confirm the takeover dismisses and the Charts Settings page opens. This was outside the repository/permission limit.
+   This replaces only the bundle directory; the sibling `Container` directory is left untouched. The replacement was proven against a scratch Playground layout under the ignored `.scratch` path: `diff -r` printed nothing and exited 0, and `Container/sub/keep.txt` survived (`docs/reports/issue-80/install-proof.txt`). Confirm the Store row reports the bundle loaded, open Charts, press Custom, and confirm the takeover dismisses and the Charts Settings page opens. This was outside the repository/permission limit.
 2. **Live service smoke.** In Playground with the owner's test accounts, link Last.fm, ListenBrainz and Libre.fm, play one test track past the minimum duration, and confirm Last.fm recent tracks, ListenBrainz listens and Libre.fm scrobbles. No live credentials or production writes were used here.
 3. **Audible VoiceOver.** With VoiceOver enabled by the owner, run the Charts states and follow `docs/accessibility/voiceover-checklist.md`. For example:
    ```sh
    cd tracklog
    TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal TRACKLOG_HARNESS_SECTION=charts droppykit run
    ```
-   Then repeat with `charts-local` and `failed-saved`. This run did not change an OS accessibility setting or approve a prompt.
+   Then repeat with `TRACKLOG_HARNESS_CHARTS=local` and `TRACKLOG_HARNESS_CHARTS=failed-saved` (the fixture value is `local`; `charts-local` is only the shot directory name). This run did not change an OS accessibility setting or approve a prompt.

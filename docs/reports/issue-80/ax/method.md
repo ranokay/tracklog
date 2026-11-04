@@ -1,10 +1,12 @@
 # Interactive harness AX walk — method
 
-- Date: 2026-11-04, 03:40–03:50 local time.
+- Date: 2026-11-04, 03:40–04:35 local time.
 - App: `/Users/ranokay/.t3/worktrees/tracklog/t3-f84360fe/tracklog/.build/TracklogHarness.app`
   (`TracklogHarness`, window `Tracklog — DroppyKit harness`).
 - Fixtures: `TRACKLOG_HARNESS_CHARTS=normal` (playing), `failed-saved` (playing),
   and `loading` (playing), each with `TRACKLOG_HARNESS_SECTION=charts`.
+  The round-1 control frames in `frames.txt` were re-measured after the fixes
+  on the same app at about 04:30–04:35, including paused, off and local states.
 - Method: the running harness window was shown in the **Expanded surface**
   page and driven with Cua Driver background AX presses (`AXPress` on
   `AXButton` elements by role/name); observations are AX-tree reads from the
