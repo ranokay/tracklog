@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import TracklogCore
 
-@Suite("Chart service reads")
+@Suite("Chart service reads", .serialized)
 @MainActor
 struct ChartServiceTests {
     private let utc = TimeZone(identifier: "UTC")!
