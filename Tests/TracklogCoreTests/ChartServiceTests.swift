@@ -130,6 +130,12 @@ struct ChartServiceTests {
         let periodEnd = chartDate(2026, 10, 27)
         let updated = chartDate(2026, 10, 28, 6)
         let transport = ChartHTTPTransport { request in
+            let bounds: (from: Date, end: Date) = switch chartQueryValue("range", in: request) {
+            case "month": (chartDate(2026, 9, 1), chartDate(2026, 10, 1))
+            case "year": (chartDate(2025, 1, 1), chartDate(2026, 1, 1))
+            case "all_time": (chartDate(2002, 1, 1), chartDate(2026, 10, 28))
+            default: (from, periodEnd)
+            }
             if chartListenBrainzPath(request).hasSuffix("validate-token") {
                 return listenBrainzValidResponse()
             }
@@ -143,8 +149,8 @@ struct ChartServiceTests {
                         ("Blondie", "", 42, "artist-mbid"),
                         ("Missing MBID", "", 7, ""),
                     ],
-                    from: from,
-                    end: periodEnd,
+                    from: bounds.from,
+                    end: bounds.end,
                     lastUpdated: updated,
                 )
             }
@@ -152,8 +158,8 @@ struct ChartServiceTests {
                 return listenBrainzStatsResponse(
                     type: .albums,
                     rows: [("Parallel Lines", "Blondie", 30, "release-mbid")],
-                    from: from,
-                    end: periodEnd,
+                    from: bounds.from,
+                    end: bounds.end,
                     lastUpdated: updated,
                 )
             }
@@ -161,8 +167,8 @@ struct ChartServiceTests {
                 return listenBrainzStatsResponse(
                     type: .tracks,
                     rows: [("Heart of Glass", "Blondie", 20, "recording-mbid")],
-                    from: from,
-                    end: periodEnd,
+                    from: bounds.from,
+                    end: bounds.end,
                     lastUpdated: updated,
                 )
             }
@@ -213,12 +219,19 @@ struct ChartServiceTests {
         #expect(chartQueryValue("count", in: statsRequest) == "50")
         #expect(chartQueryValue("offset", in: statsRequest) == "0")
 
-        for (period, value) in [(ChartPeriod.month, "month"), (.year, "year"), (.allTime, "all_time")] {
+        let expectedBounds: [(ChartPeriod, String, Date, Date)] = [
+            (.month, "month", chartDate(2026, 9, 1), chartDate(2026, 10, 1)),
+            (.year, "year", chartDate(2025, 1, 1), chartDate(2026, 1, 1)),
+            (.allTime, "all_time", chartDate(2002, 1, 1), chartDate(2026, 10, 28)),
+        ]
+        for (period, value, expectedFrom, expectedEnd) in expectedBounds {
             await runtime.charts?.selectPeriod(period)
             let request = try #require(
                 await transport.recordedRequests.last { chartListenBrainzPath($0).contains("/stats/user/") },
             )
             #expect(chartQueryValue("range", in: request) == value)
+            #expect(state.chartState.snapshot?.returnedRange?.start == expectedFrom)
+            #expect(state.chartState.snapshot?.returnedRange?.end == expectedEnd)
         }
         #expect(state.chartState.totals == .account(ChartAccountTotal(
             value: 9_876,
