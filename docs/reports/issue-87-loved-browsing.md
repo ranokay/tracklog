@@ -2,7 +2,7 @@
 
 - Base: started from `8fb73ff7db105c817cb65c54100886e84f57d0b5` (`feat: build catalogue search and search-and-play (#85)`).
 - Branch: `feat/loved-list-current-connection`
-- Code head: `60d925a363c54651475dc98b4f9be65029df75a7` (the gate receipt below is for this head; later commits are documentation and evidence only).
+- Code head: `d5bef8412b597d67459c3c2e3dfaf898cafc5f99` (the gate receipt below is for this head; later commits are documentation and evidence only).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 11 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -44,9 +44,9 @@ No persistent cache. The takeover's third section, `Loved`, reads the current co
 Core:
 
 - `LovedBrowsing.swift`: cursor, row/page types, reader port, unsupported error, failure/phase/state, copy, and normalized title+artist matching for a row whose service does not supply an album.
-- `LovedReadModel.swift`: lifecycle, generation/connection-scope/mutation-revision guards, idempotent show, first read (up to three pages when every entry lacks metadata), load-more, refresh-with-rows, in-flight revocation on removal, page-omission accounting, the retry-deadline wake, eligibility publication and feedback reconciliation.
+- `LovedReadModel.swift`: lifecycle, generation/connection-scope/mutation-revision guards, idempotent show, first read (up to three pages when every entry lacks metadata), load-more, refresh-with-rows, in-flight revocation on removal, page-omission accounting that is built locally and replaced only on publication, the retry-deadline wake, eligibility publication and feedback reconciliation.
 - `LastFMSearch.swift`, `LastFMPayloads.swift` (unchanged payload shape), `LibreFMAdapter.swift`, `ListenBrainzLoved.swift`: real readers for the three services.
-- `Feedback.swift`, `SQLiteListenStore+Feedback.swift`, `DeliveryOutbox+Feedback.swift`, `CaptureRuntime+Feedback.swift`: `serviceRow(connectionID:reference:)`, the source-scoped reference hand-off, the normalized title+artist feedback lookup that clears every album-bearing local identity, `applyFeedback`'s success list, `unloveLovedRow` with the pressed row id, the non-blocking reconciliation call, and the Loved seam.
+- `Feedback.swift`, `SQLiteListenStore+Feedback.swift`, `DeliveryOutbox+Feedback.swift`, `CaptureRuntime+Feedback.swift`: `serviceRow(connectionID:reference:)`, the source-scoped reference hand-off, the normalized title+artist feedback lookup that clears every album-bearing local identity, `applyFeedback`'s success list, `unloveLovedRow` with the pressed row id, the non-blocking reconciliation call, and the Loved seam. `FeedbackIdentity` uses the one `Identity` normalization rather than a second copy.
 - `CaptureRuntime.swift`, `CaptureRuntime+Lifecycle.swift`, `CaptureRuntime+Connections.swift`, `TracklogAppState.swift`, `ChartModel.swift`: model ownership, activation/deactivation, connection notifications, `lovedState`, `TakeoverSection.loved`.
 
 Droplet:
@@ -88,6 +88,8 @@ The suite uses real `LastFMAdapter`/`LibreFMAdapter`/`ListenBrainzAdapter` over 
 | `hidingCancelsTheRateLimitWake` | Hiding cancels the deadline wake; no late state publishes. |
 | `aRejectedFirstReadNamesTheCredential` | A first-read 401 publishes the exact `rejected the saved credential` copy. |
 | `aLoveReReadDoesNotHoldTheFeedbackChain` | A held love re-read does not block a following unlove from reaching the service; the held read cannot restore the row. |
+| `aRefreshReplacesTheCountedOmittedPages` | Two pages with one omitted item each read 2, a refresh replaces the count with page 1's 1, and the next load-more returns it to 2. |
+| `aDiscardedRefreshKeepsTheCountedOmittedPages` | A refresh held across an unlove is discarded; the existing omitted count and counted-page set are unchanged, so the following page re-read cannot inflate or drop the count. |
 | `needsSignInSendsNoReadAndOffersNoUnlove` | Stored needs-sign-in: zero requests, needs-sign-in phase, no action. |
 | `aPausedConnectionStillReadsButOffersNoUnlove` | Paused still lists, action disabled with the pause reason. |
 | `missingCredentialSendsNoRead` | No request; credential-missing phase. |
@@ -100,7 +102,7 @@ The suite uses real `LastFMAdapter`/`LibreFMAdapter`/`ListenBrainzAdapter` over 
 | `anUnsupportedCustomRootShowsAnUnavailableState` | A custom ListenBrainz root answering 404 is unavailable with the Open Services remedy and no action. |
 | `switchingConnectionDropsRowsAndIgnoresTheLateReply` | A held Last.fm reply is released after switching to ListenBrainz; only the new account's row can publish. |
 
-Full suite: **734 tests in 104 suites**, plus **51 media tests in 7 suites**, exit `0`.
+Full suite: **736 tests in 104 suites**, plus **51 media tests in 7 suites**, exit `0`.
 
 ## Gate
 
@@ -110,13 +112,13 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `60d925a363c54651475dc98b4f9be65029df75a7`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T144747Z-bb98ff17f954.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T144747Z-bb98ff17f954.log`
-  - Duration: 1341.2 seconds.
-  - `git_before` and `git_after` both report head `60d925a…`, empty porcelain status and the same tracked-content hash.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `d5bef8412b597d67459c3c2e3dfaf898cafc5f99`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T152312Z-cdfa6a3e75f2.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T152312Z-cdfa6a3e75f2.log`
+  - Duration: 1355.7 seconds.
+  - `git_before` and `git_after` both report head `d5bef84…`, empty porcelain status and the same tracked-content hash.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 321 files.
-- `swift test --package-path Tests`: 734 tests in 104 suites; 51 media tests in 7 suites.
+- `swift test --package-path Tests`: 736 tests in 104 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `loved-normal`, `loved-loading`, `loved-empty`, `loved-failed`, `loved-unsupported`, `loved-app-credentials`, `loved-long-names`, `loved-no-connection`, `loved-needs-sign-in`, `loved-credential-rejected`, `loved-paused`, `loved-action-failure`, `loved-refresh-failure`, `loved-rate-limited`, `loved-metadata-unavailable`.
@@ -181,7 +183,7 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Loved
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 734 tests / 104 suites; controlled transport, real adapters, temporary SQLite, fake clock and HUD probe. |
+| Composition tests | Run | 736 tests / 104 suites; controlled transport, real adapters, temporary SQLite, fake clock and HUD probe. |
 | Harness output | Run | Fifteen Loved gate shots, the interactive unlove and dismissed-notice screenshots, and the AX readouts. |
 | Live service shape | Run (public, unauthenticated) | Libre.fm and ListenBrainz shape checks; no account names or rows retained. No authenticated Last.fm/Libre.fm/ListenBrainz smoke, because the run has no user credentials. |
 | Real host load | **Not run** | Installing into Droppy Playground writes outside this worktree; not permitted in this run. |
