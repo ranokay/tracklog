@@ -302,6 +302,7 @@ public final class LovedReadModel {
         var omitted = 0
         var nextCursor: LovedCursor?
         var lastPage: Int?
+        var countedPages: Set<Int> = []
         var reads = 0
 
         while let pageCursor = cursor, reads < Self.maximumInitialReads {
@@ -321,7 +322,7 @@ public final class LovedReadModel {
             case let .page(page):
                 rows = Self.merged(rows, page.rows)
                 if case let .page(number) = pageCursor {
-                    countedOmittedPages.insert(number)
+                    countedPages.insert(number)
                     lastPage = number
                 }
                 omitted += page.omitted
@@ -345,6 +346,9 @@ public final class LovedReadModel {
 
         self.nextCursor = nextCursor
         lastLoadedPage = lastPage
+        // Only a published read replaces the counted pages. A discarded reply
+        // must not change what a later load-more treats as already counted.
+        countedOmittedPages = countedPages
         cancelRetryDeadline()
         var next = LovedViewState()
         next.sourceLabel = LovedCopy.sourceLabel(request.connection)

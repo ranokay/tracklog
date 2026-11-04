@@ -1330,6 +1330,113 @@ struct LovedBrowsingTests {
         #expect(reads.compactMap { formParameters($0)["page"] }.last == "2")
     }
 
+    @Test func aRefreshReplacesTheCountedOmittedPages() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            guard let page = formParameters(request)["page"] else {
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+            switch page {
+            case "1":
+                return lovedLastFMResponse(
+                    [LovedLastFMRow("Example Track One")],
+                    page: 1,
+                    totalPages: 3,
+                    omitted: 1,
+                )
+            default:
+                return lovedLastFMResponse(
+                    [LovedLastFMRow("Example Track Two")],
+                    page: 2,
+                    totalPages: 3,
+                    omitted: 1,
+                )
+            }
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+        #expect(runtime.state.lovedState.rows.count == 2)
+
+        await runtime.loved?.refresh()
+        #expect(runtime.state.lovedState.omitted == 1)
+        #expect(runtime.state.lovedState.rows.count == 1)
+
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+        #expect(runtime.state.lovedState.rows.count == 2)
+    }
+
+    @Test func aDiscardedRefreshKeepsTheCountedOmittedPages() async throws {
+        let database = try TemporaryDatabase()
+        let counter = LovedCounter()
+        let transport = LovedTransport(
+            hold: { request in
+                guard lovedLastFMMethod(request) == "user.getlovedtracks" else { return false }
+                return counter.next() == 3
+            },
+            handler: { request in
+                guard let page = formParameters(request)["page"] else {
+                    return HTTPResponse(statusCode: 404, body: Data())
+                }
+                switch page {
+                case "1":
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track One")],
+                        page: 1,
+                        totalPages: 3,
+                        omitted: 1,
+                    )
+                default:
+                    return lovedLastFMResponse(
+                        [LovedLastFMRow("Example Track Two")],
+                        page: 2,
+                        totalPages: 3,
+                        omitted: 1,
+                    )
+                }
+            },
+        )
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        let connection = try await runtime.linkVerified(
+            kind: .lastFM,
+            credential: "session-key",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+
+        let refresh = Task { await runtime.loved?.refresh() }
+        #expect(await transport.waitUntilEntered())
+        let first = try #require(runtime.state.lovedState.rows.first)
+        runtime.loved?.feedbackSucceeded(.unlove, track: first.track, connections: [connection])
+        #expect(runtime.state.lovedState.omitted == 2)
+        await transport.release()
+        await refresh.value
+        await turnMainActor()
+        #expect(runtime.state.lovedState.omitted == 2)
+
+        await runtime.loved?.loadMore()
+        #expect(runtime.state.lovedState.omitted == 2)
+    }
+
     @Test func reReadingAPageLeavesOmittedUnchanged() async throws {
         let database = try TemporaryDatabase()
         let pageTwo = LovedPageCounter()

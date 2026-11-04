@@ -122,14 +122,16 @@ public protocol FeedbackStore: Sendable {
 }
 
 /// The normalized title-and-artist part of a feedback identity. Title and
-/// artist are the only fields a service-read row can know reliably.
+/// artist are the only fields a service-read row can know reliably. The
+/// normalization is the one `Identity` implementation, so a future identity
+/// change cannot silently stop a row unlove from clearing local feedback.
 public enum FeedbackIdentity {
     public static func normalize(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        Identity.normalized(value)
     }
 
     public static func trackPrefix(title: String, artist: String) -> String {
-        [normalize(title), normalize(artist)].joined(separator: "\u{1F}") + "\u{1F}"
+        Identity.joined([title, artist]) + "\u{1F}"
     }
 
     public static func matches(_ identity: String, title: String, artist: String) -> Bool {
