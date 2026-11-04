@@ -1,7 +1,7 @@
 # Issue #80 Core charts — worker report
 
 - Base: `c0bcd20c6bd5778ba648e0207283531ce50dc71d` (`feat: build ListenBrainz charts (#110)`)
-- Gate head: `8fc562c5115845258cd86d19274c245fb312238f` (`fix: signal the chart connection menu`)
+- Gate head: `98717b96a0fcd7c536c7a5e5865d25e112ccfbe5` (`test: guard post-stop capture in chart lifecycle test`)
 - Branch: `feat/core-charts-80`
 - State: committed locally, not pushed. Review fixes F1–F4 are included; this report commit adds documentation and evidence only.
 - Scope: CH-01, the accepted CH-02 subset, supported CH-07 totals and CH-08 refresh. Part of #76; it does not close #76 or #77 and makes no Store or milestone-complete claim.
@@ -65,9 +65,9 @@ Command on the gate head:
 ```
 
 - Exit `0`, frozen gate `true`, clean before and after.
-- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T025433Z-adf0b9cb298b.json`
-- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T025433Z-adf0b9cb298b.log`
-- Duration: 714.4 seconds.
+- Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T033501Z-022f28814a05.json`
+- Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T033501Z-022f28814a05.log`
+- Duration: 731.7 seconds.
 
 | Command | Observed |
 | --- | --- |
@@ -150,12 +150,14 @@ same right-edge clip.
 - **F2 resolved as a harness viewport limit.** See the section above; the
   window capture shows the full right edge. No production layout change was
   needed.
-- **F3 fixed.** The owner install command now replaces the bundle directory
-  with `rm -rf` + `cp -R` and leaves the sibling `Container` untouched; the
-  scratch proof is in `docs/reports/issue-80/install-proof.txt` (`diff -r`
-  exit 0 and `Container/sub/keep.txt` preserved). The VoiceOver commands use
-  the real fixture value `local`, and the `ListeningBrainz` typo is corrected
-  to `ListenBrainz`.
+- **F3 fixed.** The owner install command verifies the build, stages a
+  complete copy, and only then replaces the bundle; a missing build or failed
+  copy leaves the installed bundle in place. The sibling `Container` is
+  untouched. The staged replacement was proven against a scratch Playground
+  layout: `diff -r` exit 0 and `Container/sub/keep.txt` preserved
+  (`docs/reports/issue-80/install-proof.txt`). The VoiceOver commands use the
+  real fixture value `local`, and the `ListeningBrainz` typo is corrected to
+  `ListenBrainz`.
 - **F4 fixed.** The connection switcher again visibly signals a menu: the
   menu-style `Picker` carries a visible, accessibility-hidden
   `chevron.up.chevron.down` overlay inside its 208 pt container; the popup is
@@ -221,11 +223,19 @@ No version bump, Store submission, credential change, capability change or depen
 1. **Real Playground load and Custom handoff.** Run:
    ```sh
    DEST="$HOME/Library/Application Support/Droppy Playground/Droplets/tracklog"
+   STAGING="$DEST/Tracklog.droplet.new"
+   if [ ! -d tracklog/.build/Tracklog.droplet ]; then
+       echo "Tracklog.droplet is missing; run droppykit build first" >&2
+       exit 1
+   fi
+   mkdir -p "$DEST"
+   rm -rf "$STAGING"
+   cp -R tracklog/.build/Tracklog.droplet "$STAGING"
    rm -rf "$DEST/Tracklog.droplet"
-   cp -R tracklog/.build/Tracklog.droplet "$DEST/Tracklog.droplet"
+   mv "$STAGING" "$DEST/Tracklog.droplet"
    open -a "Droppy Playground"
    ```
-   This replaces only the bundle directory; the sibling `Container` directory is left untouched. The replacement was proven against a scratch Playground layout under the ignored `.scratch` path: `diff -r` printed nothing and exited 0, and `Container/sub/keep.txt` survived (`docs/reports/issue-80/install-proof.txt`). Confirm the Store row reports the bundle loaded, open Charts, press Custom, and confirm the takeover dismisses and the Charts Settings page opens. This was outside the repository/permission limit.
+   This verifies the build first, stages a complete copy, and only then replaces the bundle; a missing build or failed copy leaves the installed bundle in place. The sibling `Container` directory is untouched. The staged replacement was proven against a scratch Playground layout under the ignored `.scratch` path: `diff -r` printed nothing and exited 0, and `Container/sub/keep.txt` survived (`docs/reports/issue-80/install-proof.txt`). Confirm the Store row reports the bundle loaded, open Charts, press Custom, and confirm the takeover dismisses and the Charts Settings page opens. This was outside the repository/permission limit.
 2. **Live service smoke.** In Playground with the owner's test accounts, link Last.fm, ListenBrainz and Libre.fm, play one test track past the minimum duration, and confirm Last.fm recent tracks, ListenBrainz listens and Libre.fm scrobbles. No live credentials or production writes were used here.
 3. **Audible VoiceOver.** With VoiceOver enabled by the owner, run the Charts states and follow `docs/accessibility/voiceover-checklist.md`. For example:
    ```sh

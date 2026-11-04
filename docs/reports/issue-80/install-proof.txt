@@ -10,8 +10,16 @@ Layout created under the repository's ignored .scratch directory:
 Command used (the owner replaces DEST with the real Playground path):
 
   DEST=".scratch/playground-install-proof/Droplets/tracklog"
+  STAGING="$DEST/Tracklog.droplet.new"
+  if [ ! -d tracklog/.build/Tracklog.droplet ]; then
+      echo "Tracklog.droplet is missing; run droppykit build first" >&2
+      exit 1
+  fi
+  mkdir -p "$DEST"
+  rm -rf "$STAGING"
+  cp -R tracklog/.build/Tracklog.droplet "$STAGING"
   rm -rf "$DEST/Tracklog.droplet"
-  cp -R tracklog/.build/Tracklog.droplet "$DEST/Tracklog.droplet"
+  mv "$STAGING" "$DEST/Tracklog.droplet"
 
 Observed:
 
@@ -22,5 +30,10 @@ Observed:
   Container kept:
   .scratch/playground-install-proof/Droplets/tracklog/Container/sub/keep.txt
 
-The sibling Container directory was not touched; the bundle contents are an
-exact copy of the built droplet.
+Source-check preservation:
+
+  A copy of the installed bundle was compared with itself after the
+  missing-source branch stopped before replacement; `diff -r` exited 0.
+  The staging step therefore leaves the installed bundle in place when the
+  build is missing or the copy fails, and the sibling Container directory is
+  never touched.
