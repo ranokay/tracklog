@@ -8,6 +8,13 @@ extension TracklogDroplet {
         let store = HarnessDemoStore(fixture: HarnessHistoryFixture.selected)
         let credentials = MemoryCredentialStore()
         let demoState = HarnessDemoState.selected
+        let paletteFixture = HarnessPaletteFixture.selected
+        let harnessAppCredentials = paletteFixture?.configuresAppCredentials == true
+            ? LastFMAppCredentials(
+                apiKey: "harness-api-key",
+                sharedSecret: "harness-shared-secret",
+            )
+            : .compiled
         let chartSelection = HarnessChartFixture.selected?.selection
             ?? ChartSelection.initial(now: Date(), calendar: ChartCalendar.current)
         return CaptureRuntime(
@@ -24,6 +31,10 @@ extension TracklogDroplet {
                 HarnessDemoLastFMAdapter(),
                 HarnessDemoLibreFMAdapter(),
             ],
+            catalogueClients: [
+                HarnessDemoCatalogue(fixture: paletteFixture ?? .normal),
+            ],
+            compiledLastFMAppCredentials: harnessAppCredentials,
             hud: hud,
             settings: CaptureSettings(
                 scrobblingEnabled: demoState.scrobblingEnabled,
@@ -31,9 +42,14 @@ extension TracklogDroplet {
             ),
             chartSelection: chartSelection,
             chartCalendar: { ChartCalendar.current },
+            playbackTemplate: paletteFixture?.usesPlaybackTemplate == true
+                ? SearchTemplate.parseOrNil("https://music.example/search?q={query}")
+                : nil,
+            catalogueSearchTimeout: 600,
         )
     }
 
+    // swiftlint:disable:next function_body_length
     func makeProductionRuntime(
         host: DropletHost,
         transport: URLSessionTransport,
@@ -65,6 +81,9 @@ extension TracklogDroplet {
         let chartSelection = host.preferences.value(
             forKey: "chartSelection",
             default: ChartSelection.standard,
+        )
+        let playbackTemplate = SearchTemplate.parseOrNil(
+            host.preferences.value(forKey: "playbackTemplate", default: ""),
         )
         return CaptureRuntime.open(
             state: state,
@@ -117,6 +136,10 @@ extension TracklogDroplet {
                 host.preferences.setValue(selection, forKey: "chartSelection")
             },
             chartCalendar: { ChartCalendar.current },
+            playbackTemplate: playbackTemplate,
+            persistPlaybackTemplate: { template in
+                host.preferences.setValue(template ?? "", forKey: "playbackTemplate")
+            },
         )
     }
 

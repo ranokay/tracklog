@@ -36,6 +36,7 @@ mkdir -p tracklog/shots
 rm -rf tracklog/shots/playing tracklog/shots/paused tracklog/shots/off tracklog/shots/feed-unavailable tracklog/shots/charts
 rm -rf tracklog/shots/charts-*
 rm -rf tracklog/shots/history-*
+rm -rf tracklog/shots/search-*
 rm -f tracklog/shots/report.json tracklog/shots/*.png
 
 # The main report keeps the documented path and the playing state. Each extra
@@ -108,6 +109,14 @@ python3 scripts/check_shot_report.py tracklog/shots/history-edit/report.json tra
 echo "==> surface shots: history-settings"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=history droppykit run -- --shots ./shots/history-settings --report ./shots/history-settings/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/history-settings/report.json tracklog/shots/history-settings
+
+echo "==> surface shots: search-refusal"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_PALETTE=refusal droppykit run -- --shots ./shots/search-refusal --report ./shots/search-refusal/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/search-refusal/report.json tracklog/shots/search-refusal
+
+echo "==> surface shots: search-settings"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SETTINGS_PAGE=search droppykit run -- --shots ./shots/search-settings --report ./shots/search-settings/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/search-settings/report.json tracklog/shots/search-settings
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

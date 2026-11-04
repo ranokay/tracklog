@@ -88,6 +88,13 @@ struct NowPlayingStrip: View {
 
     private var overflowMenu: some View {
         Menu {
+            Button("Search and play this track") {
+                droplet.searchAndPlay(
+                    title: sample.track.title,
+                    artist: sample.track.artist,
+                )
+            }
+            Divider()
             TracklogMenuItems(
                 droplet: droplet,
                 status: status,

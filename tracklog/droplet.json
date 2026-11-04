@@ -10,7 +10,7 @@
     "minAPI": "1.19.0"
   },
   "minAppVersion": "15.3.0",
-  "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "hud", "network-client"],
+  "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "global-shortcuts", "hud", "network-client"],
   "surfaces": [
     "shelf-widget",
     "expanded-surface",

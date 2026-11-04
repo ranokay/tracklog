@@ -32,6 +32,7 @@ extension CaptureRuntime {
         evaluateSignInHUD()
         scheduleStuckEvaluation()
         charts?.connectionsChanged()
+        catalogueSearch?.connectionsChanged()
     }
 }
 

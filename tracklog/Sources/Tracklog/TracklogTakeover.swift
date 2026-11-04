@@ -16,6 +16,9 @@ struct TracklogTakeover: View {
                     state: state,
                     width: proxy.size.width,
                 )
+                if let refusal = state.searchRefusal {
+                    SearchRefusalBar(state: state, message: refusal)
+                }
                 Group {
                     if state.takeoverSection == .charts {
                         TracklogChartsView(droplet: droplet, state: state)
@@ -68,9 +71,21 @@ struct TakeoverHeader: View {
 
             Spacer(minLength: DroppySpacing.md)
 
+            Button {
+                droplet.openSearchPalette()
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(DroppyCircleButtonStyle(size: 24))
+            .help("Search and play")
+            .accessibilityLabel(Text("Search and play"))
+
             if state.takeoverSection == .charts {
                 connectionSwitcher
                     .frame(width: 208, alignment: .trailing)
+                    .padding(.leading, DroppySpacing.sm)
             }
         }
         .padding(.leading, DroppySpacing.xl)

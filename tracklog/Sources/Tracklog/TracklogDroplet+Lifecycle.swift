@@ -19,6 +19,8 @@ public extension TracklogDroplet {
     }
 
     func deactivate() {
+        searchPaletteController.close()
+        state.setSearchRefusal(nil)
         exportOperationID = nil
         exportTask?.cancel()
         exportTask = nil
