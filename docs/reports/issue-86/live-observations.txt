@@ -79,3 +79,97 @@ F11, palette keys:
   `open https://music.example/search?q=Blondie`.
 - Command-Return was attempted; the Activity log kept only the Option-Return
   open line, so a Last.fm open was not observed. Do not claim it passed live.
+
+Third pass (review round 2)
+
+Environment: TracklogHarness built from 8c68562 with `droppykit run`, one
+fresh launch per fixture, driven with Cua Driver background AX actions.
+The harness Activity page is the host-call log.
+
+F1, a real file through the picker (DONE):
+- Launch: TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=artist.
+- Expanded surface -> Blondie artist detail -> Change image...
+- Settings pane showed "Chosen image" / "Blondie" / "Choose image..." /
+  "Remove image". The draft survived the takeover dismissal.
+- Choose image... opened NSOpenPanel "Choose an artist or album image"
+  (window 21492, 880x448, layer 8) in the TracklogHarness process.
+- The panel was driven through its own controls: sidebar "Pictures", then
+  the file list row "tracklog-issue86-panel-choice.png" (PNG image,
+  162 KB, created at ~/Pictures, outside the repository). AXOpen on that
+  row closed the panel with OK.
+- The save completed: the page showed "Saved images" / "Blondie" with
+  "Replace image for Blondie" and "Remove image for Blondie", and the
+  "Chosen image" section was gone (successful-save clear).
+- Reopened Blondie from the History row menu "Open artist": the detail
+  showed the heading Blondie, the local count, "Change image..." and
+  "Remove" (the override-owned detail), and the chosen magenta image.
+  The header is visual; the screenshot
+  docs/reports/issue-86/live-f1-detail-override.png was sampled for the
+  chosen PNG's flat colour: 4,533 matching pixels with the dominant
+  cluster in the header sleeve region (about 80x80 pt). The neutral
+  sleeve fixture has no pixel of that colour. The textual proof is the
+  Remove action and the saved-list row.
+- Panel keys: no Go-to-folder keystroke was needed. The earlier failure
+  was that Cmd-Shift-G went to the harness search field because the
+  panel was not key; this pass used only panel controls and worked.
+
+Stall cause: NSOpenPanel.runModal() blocks the harness's main thread for
+as long as the panel is open. AX presses that enter the action return
+-25204 (the action never completes), and AXOpen returns -25205 when the
+modal session ends; AX reads and clicks on the harness window hang until
+the panel closes. The earlier "sidebar stopped responding" was a panel
+still open, not a harness bug.
+
+F2, live Cancel and Delete (DONE):
+- Launch: TRACKLOG_HARNESS_DETAIL=track. Track page "Heart of Glass" with
+  "1 listen".
+- Row menu "Actions for Heart of Glass" -> "Delete listen..." showed
+  `Delete "Heart of Glass"?` with Cancel and Delete.
+- Cancel: the page still showed "1 listen" and the row stayed, with the
+  confirmation gone.
+- Menu again -> "Delete listen..." -> Delete: the local section changed to
+  "0 listens" and the confirmation disappeared.
+
+F11, Command-Return (DONE):
+- Launch: TRACKLOG_HARNESS_PALETTE=normal. The palette "Search and play"
+  opened with query `blo`; the selected Blondie row's hint read
+  "Return opens details. Option-Return plays. Command-Return opens the
+  Last.fm page."
+- Command-Return on the palette window closed it. The harness Activity
+  page host calls now read:
+  `open https://www.last.fm/music/Blondie` (01:05:21.674).
+  No detail was opened, so the Last.fm URL is from the command path.
+
+F12, palette Return then Back (DONE):
+- Launch: TRACKLOG_HARNESS_HISTORY=jump TRACKLOG_HARNESS_PALETTE=normal.
+  The jump loaded the yesterday window; opening the palette dismissed the
+  takeover, which cleared the jump notice but kept the jumped rows.
+- Return on Blondie opened the Blondie artist detail from the palette
+  (heading Blondie, "On this Mac. 1 listen...").
+- Back revealed the newest feed: "Thursday, 5 November 2026, 4 listens"
+  first, then "Wednesday, 4 November 2026, 2 listens", 6 listens in all,
+  and no "Showing from" jump bar. The stale jumped window would have
+  started at 4 November 20:00 with its notice.
+- The in-takeover Back from a real jump is still the `history-jump-back`
+  gate shot, which passes in this run.
+
+F13, album image after Remove: not observed live. The harness override
+fixtures are artist images and there is no live Last.fm album read on
+this machine. Covered by
+removingAnAlbumOverrideRestoresTheServiceImage and
+removingAnAlbumOverrideStartsTheServiceImageThatArrivedUnderIt against
+the scripted transport (1 request when the service image was already
+downloaded, 1 request when it was never fetched under the override).
+
+F14, draft clearing (DONE):
+- After the F1 save, the "Chosen image" section cleared while the Images
+  page stayed up.
+- Opened Change image... again: "Chosen image" / "Blondie" appeared,
+  again surviving the takeover dismissal.
+- Switched from the Settings pane to the Expanded surface (the Images
+  page left the screen), then back to Settings: "Chosen image" was gone
+  and "Saved images" / "Blondie" remained.
+- A page that leaves while the image bytes are being stored cannot lose
+  the save: the draft is copied before the first suspension. The
+  composition test holds the store write, clears the draft, then lets the
+  write finish and finds the override saved.
