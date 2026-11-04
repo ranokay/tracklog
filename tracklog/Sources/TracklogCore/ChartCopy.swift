@@ -84,7 +84,7 @@ public enum ChartCopy {
         }
         let locale = calendar.locale ?? .autoupdatingCurrent
         let span = "Returned span \(utcDate(range.start, locale: locale)) – \(utcDate(end, locale: locale))"
-        let age = "data ends \(relativeAge(end, now: now))"
+        let age = "data ends \(relativeAge(range.end, now: now))"
         guard let updated = range.lastUpdated else {
             return "\(span) · \(age)"
         }

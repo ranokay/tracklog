@@ -1235,6 +1235,23 @@ struct ChartServiceTests {
         #expect(label.contains("Oct 18, 2026"), "the exclusive end is shown as the last included day")
     }
 
+    @Test func listenBrainzDataAgeUsesTheUnadjustedReturnedEnd() {
+        let now = chartDate(2026, 11, 8)
+        let end = now.addingTimeInterval(-5 * 86_400 + 0.5)
+        let range = ChartReturnedRange(start: chartDate(2026, 10, 1), end: end, lastUpdated: end)
+        let label = ChartCopy.returnedRangeLabel(
+            range,
+            period: .week,
+            serviceKind: .listenBrainz,
+            now: now,
+            calendar: chartCalendar(utc),
+        )
+        #expect(
+            label.contains("data ends 4 d ago"),
+            "the last included day is adjusted for display, but the age uses the returned end: \(label)",
+        )
+    }
+
     @Test func listenBrainzSpanIsAUTCWeekInEveryMacZone() throws {
         let range = ChartReturnedRange(
             start: chartDate(2026, 10, 12),
