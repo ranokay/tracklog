@@ -52,6 +52,10 @@ public final class CaptureRuntime {
     /// clear the loading flag of a newer one.
     var trackHistoryLoadSequence = 0
     var artworkIdentity: String?
+    /// Covers filled this session, keyed by raw track identity. A page can be
+    /// read before `attachArtwork` and applied after it; the visible-row fill
+    /// alone is not enough when the captured row is not on the page yet.
+    var knownArtworkHashes: [String: String] = [:]
     var artworkTask: Task<Void, Never>?
     var deliveryRefreshTask: Task<Void, Never>?
     /// Identifies the newest delivery read, so an older suspended read cannot

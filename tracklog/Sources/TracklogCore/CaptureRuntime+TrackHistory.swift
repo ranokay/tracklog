@@ -67,10 +67,12 @@ extension CaptureRuntime {
             }
         }
         do {
-            let page = try await historyStore.trackHistoryPage(
-                matching: track.identityKey,
-                limit: historyPageSize,
-                before: cursor,
+            let page = try await fillingKnownArtwork(
+                historyStore.trackHistoryPage(
+                    matching: track.identityKey,
+                    limit: historyPageSize,
+                    before: cursor,
+                ),
             )
             guard isCurrentTrackHistoryRequest(request), var next = state.trackHistory else { return }
             var known = Set(next.listens.compactMap(\.id))
@@ -119,10 +121,12 @@ extension CaptureRuntime {
         state.trackHistory = opening
         do {
             let summary = try await historyStore.trackHistorySummary(matching: identityKey)
-            let page = try await historyStore.trackHistoryPage(
-                matching: identityKey,
-                limit: historyPageSize,
-                before: nil,
+            let page = try await fillingKnownArtwork(
+                historyStore.trackHistoryPage(
+                    matching: identityKey,
+                    limit: historyPageSize,
+                    before: nil,
+                ),
             )
             guard isCurrentTrackHistoryRequest(request), var track = state.trackHistory else { return }
             track.listens = page

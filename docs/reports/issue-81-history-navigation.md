@@ -83,6 +83,19 @@ duplicate row in the already loaded page. A track-read failure is scoped to
 `state.trackHistory.failure`: it does not set `state.failure`, does not
 replace the feed, and capture continues.
 
+### Cover fill across page reads
+
+A page read can start before `attachArtwork` and finish after it. The artwork
+task used to fill only the already visible row; a later page apply then
+overwrote it with the stale `artwork_hash == nil`, and nothing filled it again
+that session. The runtime now also records every cover it resolves by raw
+track identity, and every page apply (feed first page, jump, reload, older
+page, newer page and both track-history page assignments) fills a nil hash
+from that known set before publishing. A stale page can no longer erase a
+cover in the running app. `aStalePageCannotEraseAKnownCover` forces the
+ordering with a real store whose pages strip the hash and fails without this
+merge.
+
 ## Implementation
 
 - `LocalChartGrouping.swift`: `LocalTrackIdentity` shared key; the Tracks
@@ -100,6 +113,7 @@ replace the feed, and capture continues.
 - `CaptureRuntime+HistoryNotice.swift`: the small position/missing-day notice helpers.
 - `CaptureRuntime+TrackHistory.swift`: open/reload/load-more/close, scoped
   failure.
+- `CaptureRuntime+Artwork.swift`: session cover map and the stale-page merge.
 - `TracklogAppState.swift`: published track/jump/pending/settings state.
 - Views: `TracklogHistory.swift`, `TracklogHistoryComponents.swift`,
   `TracklogHistoryBars.swift`, `TracklogTrackHistory.swift`,
@@ -138,6 +152,11 @@ focused suite is 19 tests in four suites.
 | `aCancelledLoadMoreLeavesTheViewReadyToRetry` | A load-more cancelled mid-scan clears `isLoading`; the retry uses the same cursor with no skipped or duplicate row. |
 | `aPickerMinuteStartIgnoresHiddenSeconds` | A picked minute carrying 37 hidden seconds positions at the 00:00:10 listen; the raw second value skips it. |
 | `aHeldTrackHistoryScanDoesNotBlockCapture` | Held read connection at row 64; capture still persists and now playing advances; reload sees the new row. |
+| `aStalePageCannotEraseAKnownCover` | A real store whose pages strip the hash cannot erase a known cover on reload or append; fails before the merge. |
+
+Ten consecutive full `swift test --package-path Tests` runs after the cover
+merge: exit 0 on every run (1–10). Before the merge, the same new test failed
+with `artworkHash == nil` on both the reload and append assertions.
 
 ### Observable acceptance map (#81)
 
@@ -167,7 +186,7 @@ Command:
   - The commits after this code head are documentation and evidence only; the
     source and test tree the gate checked is unchanged.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 286 files.
-- `swift test --package-path Tests`: 626 tests in 96 suites; 51 media tests in 7 suites.
+- `swift test --package-path Tests`: 627 tests in 96 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64.
 - `droppykit validate`: `Ready to submit`.
 - Every harness report `verdict: ok`, `problems: []`, active activation, every declared surface provided.
@@ -237,7 +256,7 @@ container, not the button label. That keeps the row as one `AXButton` with
 
 | Class | Result | Evidence |
 | --- | --- | --- |
-| Composition tests | Run | 626 tests / 96 suites after the focused additions. These do not prove UI or runtime behaviour. |
+| Composition tests | Run | 627 tests / 96 suites after the focused additions. These do not prove UI or runtime behaviour. |
 | Harness output | Run | Empty, large, track, missing-art, jump, track-error, feed-error, refusal and Settings shots; interactive AX readouts. |
 | Real host load | **Not passed** | The droplet was not installed in Droppy Playground; no changes outside the repository. |
 | Live service qualification | **Not passed** | No live credentials or production writes; track history reads made no service request. |
@@ -267,12 +286,15 @@ Tracklog branding are unchanged. Tests remain in the sibling `Tests` package.
    when applied, and cleared on restart. Retention was required because the
    Settings handoff re-creates the takeover view; clearing on the old view's
    disappearance lost the jump before the new view could apply it.
-4. **Artwork test stability.** `CaptureArtworkTests` now waits up to 10
-   seconds instead of 3 for the off-path artwork write and runs its seven
-   tests serialized instead of in parallel. The assertions are unchanged; the
-   suite flaked under the full parallel suite (the off-path artwork write
-   occasionally took longer than the old wait). This is a test stability
-   change, not a behaviour change.
+4. **Cover fill across page reads.** A stale page could overwrite a cover the
+   artwork task filled while the page was being read, leaving the row
+   cover-less for the session. The fix records resolved covers by raw track
+   identity and merges them into every page apply;
+   `aStalePageCannotEraseAKnownCover` forces the ordering and fails before the
+   merge. The widened artwork wait and suite serialization are reverted. Please
+   confirm the session-map approach is the intended behaviour (a cover resolved
+   during a read is authoritative for that identity until a later cover
+   replaces it).
 
 The real Playground handoff, live-service smoke and audible VoiceOver remain
 the same owner-run checks recorded for issue #80.

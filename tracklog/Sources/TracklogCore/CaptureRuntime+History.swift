@@ -34,7 +34,9 @@ extension CaptureRuntime {
         }
 
         do {
-            let page = try await store.page(limit: historyPageSize, before: cursor)
+            let page = try await fillingKnownArtwork(
+                store.page(limit: historyPageSize, before: cursor),
+            )
             guard isCurrentHistoryRequest(request, startGeneration: startGeneration) else { return }
             var known = Set(state.listens.compactMap(\.id))
             for listen in page where listen.id.map({ !known.contains($0) }) ?? false {
@@ -76,7 +78,9 @@ extension CaptureRuntime {
         }
 
         do {
-            let newer = try await navigation.page(limit: historyPageSize, after: cursor)
+            let newer = try await fillingKnownArtwork(
+                navigation.page(limit: historyPageSize, after: cursor),
+            )
             guard isCurrentHistoryRequest(request, startGeneration: startGeneration) else { return }
             var known = Set(state.listens.compactMap(\.id))
             let added = newer.filter { listen in
@@ -289,7 +293,7 @@ extension CaptureRuntime {
             startGeneration: generation,
             needsScrobbling: needsScrobbling,
         ) else { return false }
-        state.listens = listens
+        state.listens = fillingKnownArtwork(listens)
         state.historyCount = total
         state.historyHasMore = hasMore
         clearHistoryFailure()
