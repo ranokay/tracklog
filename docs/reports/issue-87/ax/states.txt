@@ -1,0 +1,54 @@
+# AX readout — Loved loading, empty, unsupported, failed and no connection
+
+Each state was a fresh harness launch with
+`TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_SECTION=loved` and the named
+`TRACKLOG_HARNESS_LOVED` fixture. Excerpts are the first (notch) takeover.
+
+## `loading`
+
+- `AXBusyIndicator` `Loading loved tracks`.
+- `AXStaticText` `Loading loved tracks…`.
+- The header keeps `Loved`, the source label `Last.fm · listener`, the
+  connection popup and `Refresh loved tracks`.
+
+## `empty`
+
+- `AXStaticText` `No loved tracks on Last.fm`.
+- `AXStaticText` `Tracks you love there appear here.`
+- No rows, no `Unlove` buttons. This is a successful empty read, not an error.
+
+## `unsupported` (custom ListenBrainz-compatible root)
+
+- `AXPopUpButton` value `ListenBrainz · listener`.
+- `AXStaticText` `Loved tracks unavailable`.
+- `AXStaticText` `This ListenBrainz-compatible server does not provide loved tracks.`
+- `AXButton` `Open Services`.
+
+## `failed`
+
+- `AXStaticText` `Loved tracks could not be loaded`.
+- `AXStaticText` `Last.fm could not be reached. Check your connection and try again.`
+- `AXButton` `Try again`.
+- The source label still names the account the failed read belonged to.
+
+## `no-connection`
+
+- `AXStaticText` `Current connection, none` (the header's switcher).
+- `AXStaticText` `Loved tracks unavailable`.
+- `AXStaticText` `Loved tracks come from the current connection. Choose
+  Last.fm, Libre.fm or ListenBrainz in the switcher above, or connect one on
+  Services.`
+- `AXButton` `Open Services`.
+- No rows: the state never pretends the account has no loved tracks.
+
+## Unreachable in this build
+
+- A Pleroma connection has no `ServiceKind` yet (#97 owns additional service
+  connections), so its unavailable state cannot be created through the UI.
+  The read model still refuses any kind without a reader with the same
+  unavailable treatment; the custom-root fixture above is the reachable
+  unsupported path.
+- The `metadataUnavailable` state (a successful read whose every entry lacks
+  track metadata) is covered by composition tests; it has no harness fixture
+  because the synthetic Last.fm reader always supplies names and the
+  ListenBrainz fixture does not drive the harness window.

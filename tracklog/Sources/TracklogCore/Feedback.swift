@@ -47,10 +47,13 @@ public enum RecordingReference: Equatable, Sendable {
 }
 
 /// Which track a feedback action targets, so a history row can never borrow
-/// the current track's recording reference.
+/// the current track's recording reference. A service-read row names its
+/// source connection: that connection's recording reference is valid only
+/// there, and another connection resolves its own.
 public enum FeedbackScope: Equatable, Sendable {
     case listen(Int64)
     case currentTrack
+    case serviceRow(connectionID: Int64, reference: RecordingReference?)
 }
 
 /// Which feedback actions the current connection set can perform.

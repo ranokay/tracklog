@@ -131,6 +131,31 @@ public extension CaptureRuntime {
         }
     }
 
+    /// Unloves one row from a service-read list. The action runs through the
+    /// same serialized feedback chain and fan-out policy as every other love
+    /// action. The row's recording reference belongs to its source connection
+    /// and is never lent to another one. Returns whether that source
+    /// connection confirmed the change.
+    @discardableResult
+    func unloveLovedRow(_ row: LovedRow) async -> Bool {
+        guard started, let sourceID = row.connectionID else { return false }
+        let track = row.track
+        let identity = ListenMetadata(track).identity
+        var sourceSucceeded = false
+        await enqueueFeedback { [weak self] generation in
+            guard let self else { return }
+            let succeeded = await applyFeedback(
+                .unlove,
+                track: track,
+                identity: identity,
+                scope: .serviceRow(connectionID: sourceID, reference: row.reference),
+                generation: generation,
+            )
+            sourceSucceeded = succeeded.contains { $0.id == sourceID }
+        }
+        return sourceSucceeded
+    }
+
     /// Hates one history listen. Only supporting ListenBrainz connections are
     /// eligible; Last.fm and Libre.fm never receive it.
     func hate(_ listen: Listen) async {
@@ -234,16 +259,17 @@ private extension CaptureRuntime {
         return state.feedback(for: identity)?.score == .loved ? .unlove : .love
     }
 
+    @discardableResult
     func applyFeedback(
         _ action: FeedbackAction,
         track: Track,
         identity: String,
         scope: FeedbackScope,
         generation: Int,
-    ) async {
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
+    ) async -> [Connection] {
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let targets = feedbackTargets(for: action)
-        guard !targets.isEmpty, let feedbackStore else { return }
+        guard !targets.isEmpty, let feedbackStore else { return [] }
 
         let now = clock.now
         let score = action.localScore
@@ -251,17 +277,17 @@ private extension CaptureRuntime {
             try await feedbackStore.setFeedback(score, for: identity, at: now)
         } catch {
             state.failure = .storage(error: error)
-            return
+            return []
         }
 
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         feedbackWriteRevisions[identity, default: 0] += 1
         feedbackLoadedIdentities.insert(identity)
         var next = state.feedbackByTrack
         next[identity] = score.map { TrackFeedback(identity: identity, score: $0, updatedAt: now) }
         state.feedbackByTrack = next
 
-        guard started, startGeneration == generation, !Task.isCancelled else { return }
+        guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let succeeded = await deliveryOutbox?.sendFeedback(
             action,
             track: track,
@@ -269,10 +295,12 @@ private extension CaptureRuntime {
             connectionIDs: targets.compactMap(\.id),
         ) ?? []
         guard started, startGeneration == generation, !Task.isCancelled, !succeeded.isEmpty else {
-            return
+            return succeeded
         }
 
         showFeedbackHUD(action, services: succeeded.map(\.hudServiceName))
+        await loved?.feedbackSucceeded(action, track: track, connections: succeeded)
+        return succeeded
     }
 
     func showFeedbackHUD(_ action: FeedbackAction, services: [String]) {

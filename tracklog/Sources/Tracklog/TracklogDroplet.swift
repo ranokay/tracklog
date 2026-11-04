@@ -72,7 +72,6 @@ public final class TracklogDroplet: NSObject, Droplet {
     var exportPanel: NSSavePanel?
     var exportAlert: NSAlert?
 
-    // swiftlint:disable:next function_body_length
     public func activate(host: DropletHost) throws {
         self.host = host
 
@@ -147,12 +146,7 @@ public final class TracklogDroplet: NSObject, Droplet {
             await runtime.start()
             if isHarness {
                 await HarnessDemo.showNowPlaying(on: runtime)
-                if ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "charts"
-                    || HarnessChartFixture.selected != nil {
-                    state.setTakeoverSection(.charts)
-                } else {
-                    await HarnessHistoryDemo.show(on: runtime)
-                }
+                await showHarnessSection()
                 if let paletteFixture = HarnessPaletteFixture.selected {
                     await HarnessPaletteDemo.show(paletteFixture, on: self)
                 }
@@ -165,6 +159,20 @@ public final class TracklogDroplet: NSObject, Droplet {
             }
         }
         host.log.info("Tracklog activated")
+    }
+
+    /// Harness-only: pick the section the shots open at. The normal run keeps
+    /// History; a fixture or the explicit environment selects another built
+    /// section.
+    private func showHarnessSection() async {
+        let section = ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"]
+        if section == "loved" || (section == nil && HarnessLovedFixture.selected != nil) {
+            state.setTakeoverSection(.loved)
+        } else if section == "charts" || HarnessChartFixture.selected != nil {
+            state.setTakeoverSection(.charts)
+        } else if let runtime {
+            await HarnessHistoryDemo.show(on: runtime)
+        }
     }
 
     // MARK: - Scrobbling

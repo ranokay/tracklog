@@ -26,6 +26,77 @@ public extension LastFMClient {
     /// `user.getLovedTracks` for one page. The account's identity is public;
     /// this read needs the app pair, not the listener's session key.
     func lovedTracks(account: String, page: Int, limit: Int) async throws -> CataloguePage {
+        let read = try await lovedEntries(account: account, page: page, limit: limit)
+        let rows = read.entries.compactMap { entry -> CatalogueRow? in
+            guard let title = trimmed(entry.name), !title.isEmpty else { return nil }
+            let artist = trimmed(entry.artist?.name) ?? ""
+            return CatalogueRow(
+                group: .loved,
+                title: title,
+                subtitle: artist,
+                playbackQuery: CatalogueQuery.track(artist: artist, title: title),
+                pageURL: CatalogueURL.httpsURL(from: entry.url),
+            )
+        }
+        let hasMore = read.totalPages.map { read.currentPage < $0 }
+            ?? (read.entries.count >= limit)
+        return CataloguePage(rows: Array(rows.prefix(limit)), hasMore: hasMore)
+    }
+
+    /// The current connection's loved page for the Loved section. Rows the
+    /// service could not name are counted, never guessed. The next cursor is
+    /// the page after this one when the service reports another page.
+    func lovedPage(
+        connection: Connection,
+        cursor: LovedCursor,
+        limit: Int,
+    ) async throws -> LovedServicePage {
+        guard case let .page(page) = cursor else {
+            throw LastFMError.service(code: 6, message: "Loved tracks are read by page.")
+        }
+        let read = try await lovedEntries(account: connection.identity, page: page, limit: limit)
+        var omitted = 0
+        let rows = read.entries.compactMap { entry -> LovedRow? in
+            guard let title = trimmed(entry.name), !title.isEmpty,
+                  let artist = trimmed(entry.artist?.name), !artist.isEmpty
+            else {
+                omitted += 1
+                return nil
+            }
+            let providerID = trimmed(entry.mbid) ?? ""
+            let id = providerID.isEmpty
+                ? "\(dialect.rawValue):track:\(Identity.joined([title, artist]))"
+                : "\(dialect.rawValue):mbid:\(providerID)"
+            return LovedRow(
+                connectionID: connection.id,
+                id: id,
+                title: title,
+                artist: artist,
+            )
+        }
+        let nextCursor: LovedCursor? = if let totalPages = read.totalPages {
+            read.currentPage < totalPages ? .page(read.currentPage + 1) : nil
+        } else {
+            read.entries.count >= limit ? .page(read.currentPage + 1) : nil
+        }
+        return LovedServicePage(
+            rows: Array(rows.prefix(limit)),
+            omitted: omitted,
+            nextCursor: nextCursor,
+        )
+    }
+
+    private struct LovedEntriesRead {
+        let entries: [LastFMLovedTrackValue]
+        let currentPage: Int
+        let totalPages: Int?
+    }
+
+    private func lovedEntries(
+        account: String,
+        page: Int,
+        limit: Int,
+    ) async throws -> LovedEntriesRead {
         let user = account.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !user.isEmpty else {
             throw LastFMError.service(code: 6, message: "A Last.fm account is required.")
@@ -41,22 +112,11 @@ public extension LastFMClient {
         guard let payload = try? JSONDecoder().decode(LastFMLovedTracksPayload.self, from: data),
               let loved = payload.lovedtracks
         else { throw LastFMError.malformedResponse }
-        let entries = loved.track?.items ?? []
-        let rows = entries.compactMap { entry -> CatalogueRow? in
-            guard let title = trimmed(entry.name), !title.isEmpty else { return nil }
-            let artist = trimmed(entry.artist?.name) ?? ""
-            return CatalogueRow(
-                group: .loved,
-                title: title,
-                subtitle: artist,
-                playbackQuery: CatalogueQuery.track(artist: artist, title: title),
-                pageURL: CatalogueURL.httpsURL(from: entry.url),
-            )
-        }
-        let currentPage = loved.attr?.page?.value ?? page
-        let totalPages = loved.attr?.totalPages?.value
-        let hasMore = totalPages.map { currentPage < $0 } ?? (entries.count >= limit)
-        return CataloguePage(rows: Array(rows.prefix(limit)), hasMore: hasMore)
+        return LovedEntriesRead(
+            entries: loved.track?.items ?? [],
+            currentPage: loved.attr?.page?.value ?? page,
+            totalPages: loved.attr?.totalPages?.value,
+        )
     }
 
     private func searchArtists(_ query: String, limit: Int) async throws -> CataloguePage {
@@ -183,5 +243,28 @@ extension LastFMAdapter: CatalogueSearching {
             return failure
         }
         return (error as? LastFMError)?.serviceFailure ?? .retryable
+    }
+}
+
+extension LastFMAdapter: LovedServiceReading {
+    public var firstCursor: LovedCursor {
+        .page(1)
+    }
+
+    public func loved(
+        connection: Connection,
+        credential _: String,
+        cursor: LovedCursor,
+        limit: Int,
+    ) async throws -> LovedServicePage {
+        do {
+            return try await client.lovedPage(
+                connection: connection,
+                cursor: cursor,
+                limit: limit,
+            )
+        } catch {
+            throw Self.catalogueFailure(for: error)
+        }
     }
 }

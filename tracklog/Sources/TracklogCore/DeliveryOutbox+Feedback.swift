@@ -124,7 +124,6 @@ extension DeliveryOutbox {
         ) {
             return .ready(stored)
         }
-
         await waitForSpacing(id: id, interval: adapter.capabilities.minimumRequestInterval)
         guard canContinueFeedback(pending, id: id, action: pending.action) else {
             return .unavailable
@@ -192,7 +191,8 @@ extension DeliveryOutbox {
 
     /// A history action reads its own delivery row first; a current-track
     /// action may use the retained now-playing reference only for the same
-    /// track. Lookup is the fallback when neither has a reference.
+    /// track. A service-read row lends its reference only to the connection it
+    /// came from. Lookup is the fallback when none applies.
     private func storedReference(
         for scope: FeedbackScope,
         track: Track,
@@ -207,6 +207,8 @@ extension DeliveryOutbox {
             else { return nil }
             let reference = stored.trimmingCharacters(in: .whitespacesAndNewlines)
             return reference.isEmpty ? nil : .msid(reference)
+        case let .serviceRow(sourceConnectionID, reference):
+            return sourceConnectionID == id ? reference : nil
         }
     }
 

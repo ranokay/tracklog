@@ -154,6 +154,9 @@ public final class TracklogAppState: ObservableObject {
     @Published public internal(set) var playbackTemplate: SearchTemplate?
     /// The palette's published search state. Search is never cached.
     @Published public internal(set) var catalogueSearch = CatalogueSearchState()
+    /// The Loved section's published state. The list is read from the current
+    /// connection and is never kept after the section closes.
+    @Published public internal(set) var lovedState = LovedViewState()
     /// A refused play or Settings handoff from a takeover row action. Shown by
     /// the takeover's refusal bar and cleared when it is dismissed.
     @Published public internal(set) var searchRefusal: String?

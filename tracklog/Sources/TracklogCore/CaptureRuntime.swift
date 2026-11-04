@@ -36,6 +36,9 @@ public final class CaptureRuntime {
     /// The palette's one catalogue read model. Nil when the composition has no
     /// catalogue adapter (only a test or a transport-less harness).
     public let catalogueSearch: CatalogueSearchReadModel?
+    /// The Loved section's one read model. Nil when the composition has no
+    /// credential store.
+    public let loved: LovedReadModel?
     let persistPlaybackTemplate: (@MainActor (String?) -> Void)?
 
     var started = false
@@ -229,6 +232,22 @@ public final class CaptureRuntime {
             catalogueSearch = nil
         }
 
+        if let credentials {
+            let lovedClients = serviceAdapters.compactMap { $0 as? any LovedServiceReading }
+            let loveSupport = Set(
+                feedbackAdapters.filter(\.capabilities.supportsLove).map(\.kind),
+            )
+            loved = LovedReadModel(
+                state: state,
+                credentials: credentials,
+                clock: clock,
+                serviceClients: lovedClients,
+                supportsLove: { loveSupport.contains($0) },
+            )
+        } else {
+            loved = nil
+        }
+
         wireOutboxCallbacks()
     }
 
@@ -401,6 +420,7 @@ extension CaptureRuntime {
         state.mediaStatus = source.mediaStatus
         charts?.activate()
         catalogueSearch?.activate()
+        loved?.activate()
         clearExpiredPauseOnActivation()
 
         if let store {

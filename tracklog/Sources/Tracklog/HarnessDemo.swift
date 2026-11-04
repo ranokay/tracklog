@@ -80,6 +80,9 @@ enum HarnessDemo {
             } else {
                 _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
             }
+        } else if HarnessLovedFixture.selected != nil
+            || ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SECTION"] == "loved" {
+            await HarnessLovedDemo.link(on: runtime)
         } else if let chartFixture {
             if chartFixture.linksListenBrainz {
                 _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")

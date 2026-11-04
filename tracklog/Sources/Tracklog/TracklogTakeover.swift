@@ -22,6 +22,8 @@ struct TracklogTakeover: View {
                 Group {
                     if state.takeoverSection == .charts {
                         TracklogChartsView(droplet: droplet, state: state)
+                    } else if state.takeoverSection == .loved {
+                        TracklogLovedView(droplet: droplet, state: state)
                     } else {
                         TracklogHistoryContent(droplet: droplet, state: state)
                     }
@@ -62,11 +64,12 @@ struct TakeoverHeader: View {
             ) {
                 Text("History").tag(TakeoverSection.history)
                 Text("Charts").tag(TakeoverSection.charts)
+                Text("Loved").tag(TakeoverSection.loved)
             }
             .pickerStyle(.segmented)
             .controlSize(.regular)
             .labelsHidden()
-            .frame(width: 164)
+            .frame(width: 246)
             .accessibilityLabel(Text("Sections"))
 
             Spacer(minLength: DroppySpacing.md)
@@ -82,7 +85,7 @@ struct TakeoverHeader: View {
             .help("Search and play")
             .accessibilityLabel(Text("Search and play"))
 
-            if state.takeoverSection == .charts {
+            if state.takeoverSection == .charts || state.takeoverSection == .loved {
                 connectionSwitcher
                     .frame(width: 208, alignment: .trailing)
                     .padding(.leading, DroppySpacing.sm)
@@ -142,7 +145,7 @@ struct TakeoverHeader: View {
             get: { state.currentConnection?.id.map(String.init) ?? "none" },
             set: { value in
                 Task {
-                    try? await droplet.setChartCurrentConnection(
+                    try? await droplet.setCurrentConnection(
                         value == "none" ? nil : Int64(value),
                     )
                 }

@@ -6,6 +6,7 @@ public extension CaptureRuntime {
     func stop() {
         charts?.deactivate()
         catalogueSearch?.deactivate()
+        loved?.deactivate()
         pauseTask?.cancel()
         pauseTask = nil
         deliveryRefreshTask?.cancel()

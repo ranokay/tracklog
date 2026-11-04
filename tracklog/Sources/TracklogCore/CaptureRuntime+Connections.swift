@@ -33,6 +33,7 @@ extension CaptureRuntime {
         scheduleStuckEvaluation()
         charts?.connectionsChanged()
         catalogueSearch?.connectionsChanged()
+        loved?.connectionsChanged()
     }
 }
 
