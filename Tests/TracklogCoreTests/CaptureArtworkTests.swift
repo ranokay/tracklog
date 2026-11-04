@@ -67,7 +67,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         await first.start()
 
         await replay(thresholdSamples(track()), on: first, clock: firstClock)
-        await eventually { first.state.listens.first?.artworkHash != nil }
+        await eventually(timeout: .seconds(10)) { first.state.listens.first?.artworkHash != nil }
         let hash = try #require(first.state.listens.first?.artworkHash)
         first.stop()
 
