@@ -2,7 +2,8 @@
 
 - Base: `aa6bdeb257b24dd94b33b8a5f8295be5affff908` (`feat: build history navigation (#112)`)
 - Branch: `feat/catalogue-search-85`
-- State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate result is recorded under **Gate**.
+- Code head: `56d3943f20d1fa0496a2bb9f7903c01680b9e833` (the gate receipt below is for this head; later commits are documentation and evidence only)
+- State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 9 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
 ## Contract
@@ -88,16 +89,21 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: to be filled from the gate run at the final head.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 305 files.
-- `swift test --package-path Tests`: 670 tests in 102 suites.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `56d3943f20d1fa0496a2bb9f7903c01680b9e833`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092018Z-31d3ec83f383.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T092018Z-31d3ec83f383.log`
+  - Duration: 1055.2 seconds.
+  - `git_before` and `git_after` both report head `56d3943…`, empty porcelain status and the same tracked-content hash.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 306 files.
+- `swift test --package-path Tests`: 670 tests in 102 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
 - New harness states: `search-refusal` and `search-settings`; every existing expanded surface now shows the section-bar search button.
+- Artifacts: `docs/reports/issue-85/search-settings.png`, `search-refusal.png`, `search-settings.json` and `search-refusal.json` under `docs/reports/issue-85/reports/`; the gate's charts surface is `charts-search-button.png`.
 
 ## Native observations
 
-All palette evidence is from the running `TracklogHarness`; the panel is a separate droplet-owned `NSPanel`, so `droppykit run --shots` cannot capture it. The deterministic fixtures are listed in `HarnessDemo+Palette.swift` and were opened with `TRACKLOG_HARNESS_PALETTE=<fixture>`.
+All palette evidence is from the running `TracklogHarness`; the panel is a separate droplet-owned `NSPanel`, so `droppykit run --shots` cannot capture it. The deterministic fixtures are listed in `HarnessDemo+Palette.swift` and were opened with `TRACKLOG_HARNESS_PALETTE=<fixture>`. Image names in this section and the evidence list are relative to `docs/reports/issue-85/`; the AX readouts are in `docs/reports/issue-85/ax/`.
 
 | State | Fixture | Result |
 | --- | --- | --- |
@@ -127,7 +133,9 @@ Touch points:
 - The takeover's section-bar search button is visible in every expanded-surface shot and opens the palette.
 - History rows expose `AXButton` with an extra `search and play` action; the row menu includes the same item.
 - The now-playing strip menu contains `Search and play this track` above the shared menu items; the shelf overflow menu contains only `Search and play…` and no Play item.
-- Chart rows expose `AXButton`/static rows with a `Search and play` custom action and a context menu.
+- Chart rows expose an `AXUnknown` labelled row with a `Search and play` custom action and a context menu; the Artists/Albums/Tracks query mapping is artist, `artist album`, and `artist title`.
+- The now-playing strip's `More` menu starts with `Search and play this track`; screenshot `strip-overflow-menu.png`.
+- The shelf overflow menu contains only `Search and play…` as its palette opener and no Play item; screenshot `shelf-overflow-menu.png`.
 
 ## Accessibility
 
@@ -145,6 +153,8 @@ The checklist is `docs/accessibility/voiceover-checklist.md`; it now has a Searc
 | Credentials remedy | Passed (AX + screenshot) | Banner and group Settings buttons; no request for missing credentials. |
 | Long and non-Latin names | Passed (AX + screenshot) | Full AX labels; one-line visual truncation. |
 | Failed launch | Passed (AX + screenshot) | Inline notice; panel stays open. |
+| Chart row Play | Passed (AX) | `AXUnknown` `Rank 1, Blondie, 42 plays` with `AXShowMenu` and a named `Search and play` action. |
+| Strip and shelf menus | Passed (AX) | Strip `More` contains `Search and play this track`; shelf `More` contains `Search and play…` and no Play. |
 | Takeover refusal bar | Passed (gate shot) | `search-refusal` shot and AX tree. |
 | Audible VoiceOver | Not run | No VoiceOver session or microphone capture. |
 

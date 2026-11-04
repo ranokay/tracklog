@@ -1,13 +1,15 @@
 # AX readout — Play on existing surfaces
 
-Fixture: `TRACKLOG_DEMO_STATE=playing` (normal History).
-Harness window 1320 × 940; the expanded surface page shows three copies of
-the takeover (Notch, Dynamic Island, Camera Island).
+Fixtures: `TRACKLOG_DEMO_STATE=playing` for History and the strip;
+`TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal
+TRACKLOG_HARNESS_SECTION=charts` for Charts. Harness window 1320 × 940.
 
 ## Search button
 
 - `AXButton` `Search and play`, id `magnifyingglass`, help `Search and play`,
-  actions `AXPress`, in the takeover header beside the section picker.
+  actions `AXPress`, in the takeover header beside the section picker. It is
+  present on History and Charts; on Charts it sits to the left of the current
+  connection picker.
 
 ## History row
 
@@ -21,17 +23,37 @@ the takeover (Notch, Dynamic Island, Camera Island).
 - Track-history rows use the same `HistoryRow`; they are inert labelled
   elements with the same named `search and play` action and the same menu.
 
+## Chart row
+
+- `AXUnknown` label `Rank 1, Blondie, 42 plays`, actions:
+  `AXScrollToVisible`, `AXShowMenu`, and a named `Search and play` custom
+  action. The same label/action is on every ranked row.
+- A right-click or `AXShowMenu` opens the row's context menu with
+  `Search and play`.
+- Query mapping: Artists use the artist name; Albums and Tracks use the
+  artist and the row title (`artist album` / `artist title`). A local artist
+  chart row with an empty subtitle falls back to the title.
+
 ## Now-playing strip
 
-- The ellipsis is an `AXMenuButton` `More`; its first item is
-  `Search and play this track`, followed by the shared menu items. The shelf
-  overflow menu has no Play item, only `Search and play…` (the palette
-  opener).
+- The ellipsis is an `AXMenuButton` `More`. Opening it shows:
+  - `AXMenuItem` `Search and play this track` (first item),
+  - Pause, Edit this track, Block this track, Stop scrobbling and Settings.
+- Screenshot: `docs/reports/issue-85/strip-overflow-menu.png`.
 
-## Summary check
+## Shelf overflow
+
+- The shelf widget's `More` menu contains `Search and play…` as its first
+  item, then Cancel this listen / Pause / Edit / Block / Stop scrobbling /
+  Settings. It has no Play item; Play belongs to the strip.
+- Screenshot: `docs/reports/issue-85/shelf-overflow-menu.png`.
+
+## Summary
 
 - Palette `Return` on a row uses `SearchPlayback.performPrimary`: play the
   encoded query when a template is set, otherwise open the row's Last.fm page.
+  A row with no valid service page shows no `Open on Last.fm` custom action and
+  reports why in the panel.
 - The strip and History row Play uses `SearchPlayback.play`: a template opens
   the search URL; no template opens the Search settings page. A refusal is
   shown by `SearchRefusalBar` in the takeover, not written only to a log.
