@@ -784,6 +784,34 @@ struct LovedBrowsingTests {
         #expect(runtime.state.lovedState.rows.isEmpty)
     }
 
+    @Test func anEmptyFeedbackPageStopsPagingEvenWithAStaleTotal() async throws {
+        let database = try TemporaryDatabase()
+        let transport = LovedTransport { request in
+            guard lovedFeedbackQuery(request) != nil else {
+                return HTTPResponse(statusCode: 404, body: Data())
+            }
+            // A stale or filtered total must not make an empty page repeat.
+            return lovedListenBrainzResponse([], totalCount: 5)
+        }
+        let (runtime, _) = try makeLovedRuntime(
+            database: database,
+            clock: FakeClock(base),
+            transport: transport,
+        )
+        await runtime.start()
+        _ = try await runtime.linkVerified(
+            kind: .listenBrainz,
+            credential: "demo-token",
+            identity: ServiceIdentity(name: "listener"),
+        )
+        await runtime.loved?.show()
+
+        #expect(runtime.state.lovedState.rows.isEmpty)
+        #expect(runtime.state.lovedState.hasMore == false)
+        #expect(runtime.state.lovedState.phase == .empty)
+        #expect(await transport.requests { lovedFeedbackQuery($0) != nil }.count == 1)
+    }
+
     @Test func anEmptySuccessIsNotAnError() async throws {
         let database = try TemporaryDatabase()
         let transport = LovedTransport { request in

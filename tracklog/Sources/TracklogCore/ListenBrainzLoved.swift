@@ -150,7 +150,10 @@ extension ListenBrainzAdapter: LovedServiceReading {
                 reference: reference,
             )
         }
-        let nextCursor: LovedCursor? = if let total = payload.totalCount {
+        let nextCursor: LovedCursor? = if items.isEmpty {
+            // A stale or filtered total must not repeat the offset just read.
+            nil
+        } else if let total = payload.totalCount {
             offset + items.count < total ? .offset(offset + items.count) : nil
         } else {
             items.count >= limit ? .offset(offset + items.count) : nil

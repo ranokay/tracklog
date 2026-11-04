@@ -15,7 +15,9 @@ After (the first surface re-reads the same state):
   `Unlove Example Track Two`.
 - The pinned strip keeps playing (`Heart of Glass`) and its own heart and
   overflow controls.
-- This proves the row is removed only after the source connection confirms the
-  action. The harness's feedback adapter returns success without a network.
+- The harness's feedback adapter returns success immediately and without a
+  network, so this readout shows only that a confirmed unlove removes the row.
+  Removal-only-after-confirmation is covered by the core tests and the
+  `action-failure` fixture, where the row stays.
 
 Screenshot: `docs/reports/issue-87/loved-unloved.png`.
