@@ -17,8 +17,9 @@ expanded). The expanded surface page was opened from the harness sidebar.
 Pressing the row (`AXPress`) opened track history:
 
 - `AXButton (Back to History)` 85 × 31.
-- `AXStaticText = "1 listen"` (the normal fixture has one stored
-  `Heart of Glass` listen; the scratch harness had also captured one).
+- `AXStaticText = "1 listen"` at the time of the press (the normal fixture's
+  stored `Heart of Glass` rows; the demo source may add a capture while the
+  harness is open).
 - `AXHeading (Heart of Glass)`.
 - `AXStaticText = "Blondie — Parallel Lines"`.
 - `AXStaticText = "First listened 4 November 2026"`.
