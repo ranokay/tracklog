@@ -1,0 +1,39 @@
+Scratch install proof (not the real Playground path)
+=====================================================
+
+Layout created under the repository's ignored .scratch directory:
+
+  .scratch/playground-install-proof/Droplets/tracklog/
+    Container/sub/keep.txt
+    Tracklog.droplet/Contents/old/stale.txt
+
+Command used (the owner replaces DEST with the real Playground path):
+
+  DEST=".scratch/playground-install-proof/Droplets/tracklog"
+  STAGING="$DEST/Tracklog.droplet.new"
+  if [ ! -d tracklog/.build/Tracklog.droplet ]; then
+      echo "Tracklog.droplet is missing; run droppykit build first" >&2
+      exit 1
+  fi
+  mkdir -p "$DEST"
+  rm -rf "$STAGING"
+  cp -R tracklog/.build/Tracklog.droplet "$STAGING"
+  rm -rf "$DEST/Tracklog.droplet"
+  mv "$STAGING" "$DEST/Tracklog.droplet"
+
+Observed:
+
+  diff -r tracklog/.build/Tracklog.droplet \
+          .scratch/playground-install-proof/Droplets/tracklog/Tracklog.droplet
+  diff exit: 0
+
+  Container kept:
+  .scratch/playground-install-proof/Droplets/tracklog/Container/sub/keep.txt
+
+Source-check preservation:
+
+  A copy of the installed bundle was compared with itself after the
+  missing-source branch stopped before replacement; `diff -r` exited 0.
+  The staging step therefore leaves the installed bundle in place when the
+  build is missing or the copy fails, and the sibling Container directory is
+  never touched.

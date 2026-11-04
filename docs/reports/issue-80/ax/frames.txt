@@ -1,0 +1,84 @@
+# AX frames: every interactive control on the chart takeover
+
+Measured on the running `TracklogHarness` (window `Tracklog — DroppyKit
+harness`, 1320 × 940 at global origin 240, 87), Expanded surface, with Cua
+Driver `get_window_state` `tree_format: "elements"`. Frames are window-global
+points.
+
+## Before the round-1 fix
+
+These are the measurements that raised F1:
+
+| Control | Frame |
+| --- | --- |
+| Section picker `History` / `Charts` (`.controlSize(.small)`) | 85 × 21 / 84 × 21 |
+| `Current connection` menu (borderless Menu) | 99.5 × 15 (text) and 6.5 × 9.5 (chevron) |
+| Playing-strip `More` (borderless Menu) | 20 × 14 |
+| Playing-strip `Love` | no AX frame; the harness Last.fm adapter declared `supportsLove: false`, so the control was disabled and the AX element was unaddressable |
+
+## After the fix
+
+| Control | State / fixture | Frame |
+| --- | --- | --- |
+| Section picker `History` | needs-sign-in and normal | 85 × 24 |
+| Section picker `Charts` | needs-sign-in and normal | 84 × 24 |
+| `Current connection` popup | normal, failed-saved, needs-sign-in | 190 × 28 (inside a 208 pt container) |
+| Connection menu item `No connection` | open popup | 220 × 24 |
+| Source `Service` | normal | 186 × 31 |
+| Source `On this Mac` | normal | 186 × 31 |
+| Type `Artists` | normal | 78 × 31 |
+| Type `Albums` | normal | 68.5 × 31 |
+| Type `Tracks` | normal | 63.5 × 31 |
+| Period `Week` | normal | 186 × 31 |
+| Period `Month` | normal | 186 × 31 |
+| Period `Year` | normal | 186 × 31 |
+| Period `All time` | normal | 186 × 31 |
+| Period `Today` | local | 186 × 31 |
+| Period `Custom` | local | 186 × 31 |
+| `Refresh charts` | normal / needs-sign-in | 24 × 24 |
+| Failure `Try again` | needs-sign-in | 78.5 × 31 |
+| Failure `Open Services settings` | needs-sign-in | 161 × 31 |
+| Failure `Use local history` | needs-sign-in | 122.5 × 31 |
+| Notice `Try again` | failed-saved | 78.5 × 31 |
+| Playing-strip `Love` / `Unlove this track` | normal, loved | 24 × 24, selected |
+| Playing-strip `Cancel this listen` | normal | 24 × 24 |
+| Playing-strip `More` | normal | 24 × 24 |
+| Paused state-bar `Resume` | paused | 71 × 31 |
+| Paused state-bar `More` | paused | 24 × 24 |
+| Off state-bar `Turn on` | off | 69 × 31 |
+| Off state-bar `More` | off | 24 × 24 |
+
+The notice `Settings` action is only shown for a saved-charts sign-in failure;
+no saved-data sign-in fixture exists. It uses the same
+`DroppyQuietButtonStyle(size: .small)` as the measured `Try again` and
+`Open Services settings` actions (31 pt).
+
+## What changed
+
+- Section picker: `.controlSize(.small)` → `.regular` (21 → 24).
+- Connection switcher: borderless `Menu` → native menu-style `Picker`
+  (`controlSize(.large)`) with a visible, accessibility-hidden
+  `chevron.up.chevron.down` overlay; the popup is 190 × 28 inside a 208 pt
+  container. The selection was exercised: `No connection` → `No connection
+  selected` and no rows, then `Last.fm · listener` → rows return. Readout:
+  `docs/reports/issue-80/ax/connection-switch.txt`.
+- Overflow `More` in the playing strip and state bar:
+  borderless `Menu` → `.menuStyle(.button)` with
+  `DroppyCircleButtonStyle(size: 24)` (20 × 14 → 24 × 24).
+- Love: the harness Last.fm adapter now declares `supportsLove: true`, so the
+  control is enabled and addressable; the production button also carries an
+  explicit 24 × 24 frame/content shape. Re-measured 24 × 24.
+
+Rows remain 606 × 52 (not interactive) and all source, type and period
+choices are 31 pt high.
+
+## Shot viewport note (F2)
+
+The raw `--shots` page is 2360 × 3800 px (1180 × 1900 pt). The expanded-surface
+content is declared `898 × 557` (AXStaticText). The page is narrower than the
+laid-out surface, so the raw PNGs clip the panel's right edge and the
+right-most controls. This is a harness shot-viewport limit, not layout
+overflow: in the 1320 pt window the right-most controls end at x 1487 and the
+window's right edge is x 1560; the connection popup ends at 1487 as well. The
+full right edge and the panel's rounded corner are visible in
+`docs/reports/issue-80/ax/harness-window.png` (2640 × 1880 px window capture).

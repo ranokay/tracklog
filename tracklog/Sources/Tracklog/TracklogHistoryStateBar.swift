@@ -37,7 +37,8 @@ struct HistoryStateBar: View {
                     .font(.caption.weight(.bold))
                     .frame(width: 24, height: 24)
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(DroppyCircleButtonStyle(size: 24))
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")

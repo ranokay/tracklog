@@ -305,6 +305,8 @@ struct NowPlayingStrip: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(DroppyCircleButtonStyle(size: 24))
+        .frame(width: 24, height: 24)
+        .contentShape(Rectangle())
         .disabled(!canLove)
         .help(loveHelp)
         .accessibilityLabel(isLoved ? "Unlove this track" : "Love this track")
@@ -329,7 +331,8 @@ struct NowPlayingStrip: View {
                 .font(.caption.weight(.bold))
                 .frame(width: 24, height: 24)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(DroppyCircleButtonStyle(size: 24))
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More")

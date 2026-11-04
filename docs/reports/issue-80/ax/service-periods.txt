@@ -1,0 +1,56 @@
+# Service fixture: artists, albums, tracks across every service period
+
+Fixture: `TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal TRACKLOG_HARNESS_SECTION=charts`.
+Connection: Last.fm · listener (AXMenuButton value `Last.fm, listener`).
+
+Selected controls, initial tree:
+
+- `AXButton = "Selected" (Artists)`
+- `AXButton = "Not selected" (Albums)`, `AXButton = "Not selected" (Tracks)`
+- `AXButton = "Selected" (Service)`, `AXButton = "Not selected" (On this Mac)`
+- `AXButton = "Selected" (Week)`, `Month/Year/All time` not selected
+- `AXStaticText "Last.fm · listener"`
+- `AXStaticText "Range totals unavailable"`
+- `AXStaticText "Saved just now"`
+- `AXButton "Refresh charts"`, frame 24×24
+
+Matrix, 15 AXPress steps; every expectation matched:
+
+| Type | Week | Month | Year | All time |
+| --- | --- | --- | --- | --- |
+| Artists | Top 50 artists · Rolling 7 days | Top 50 artists · Rolling month | Top 50 artists · Rolling 12 months | Top 50 artists · All time |
+| Albums | Top 50 albums · Rolling 7 days | Top 50 albums · Rolling month | Top 50 albums · Rolling 12 months | Top 50 albums · All time |
+| Tracks | Top 50 tracks · Rolling 7 days | Top 50 tracks · Rolling month | Top 50 tracks · Rolling 12 months | Top 50 tracks · All time |
+
+Ranked rows at Week (label / accessible value):
+
+- Artists, 8 rows:
+  - `Rank 1, Blondie, 42 plays` / `Last.fm · listener, Rolling 7 days`
+  - `Rank 2, Talking Heads, 35 plays`
+  - `Rank 3, Fleetwood Mac, 28 plays`
+  - `Rank 4, Massive Attack, 23 plays`
+  - `Rank 5, New Order, 19 plays`
+  - `Rank 6, Kate Bush, 16 plays`
+  - `Rank 7, Björk, 12 plays`
+  - `Rank 8, Portishead, 9 plays`
+  - End of list: `AXStaticText "8 artists shown"`.
+- Albums, 8 rows:
+  - `Rank 1, Parallel Lines, Blondie, 30 plays`
+  - `Rank 2, Remain in Light, Talking Heads, 27 plays`
+  - `Rank 3, Rumours, Fleetwood Mac, 24 plays`
+  - `Rank 4, Mezzanine, Massive Attack, 20 plays`
+  - `Rank 5, Power, Corruption & Lies, New Order, 17 plays`
+  - `Rank 6, Hounds of Love, Kate Bush, 14 plays`
+  - `Rank 7, Homogenic, Björk, 11 plays`
+  - `Rank 8, Dummy, Portishead, 8 plays`
+- Tracks, 8 rows:
+  - `Rank 1, Heart of Glass, Blondie, 22 plays`
+  - `Rank 2, Once in a Lifetime, Talking Heads, 18 plays`
+  - `Rank 3, Dreams, Fleetwood Mac, 15 plays`
+  - `Rank 4, Teardrop, Massive Attack, 12 plays`
+  - `Rank 5, Blue Monday, New Order, 9 plays`
+  - `Rank 6, Running Up That Hill, Kate Bush, 7 plays`
+  - `Rank 7, Jóga, Björk, 5 plays`
+  - `Rank 8, Glory Box, Portishead, 3 plays`
+
+The row element is 606×52 pt; its `value_description` names source and period.

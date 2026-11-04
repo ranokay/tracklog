@@ -31,7 +31,7 @@ struct HarnessDemoServiceAdapter: FeedbackAdapter {
 /// rejected so the inline error has a demo path.
 struct HarnessDemoLastFMAdapter: ServiceAdapter, LastFMAppCredentialValidating {
     let kind = ServiceKind.lastFM
-    let capabilities = ServiceCapabilities(signsRequests: true)
+    let capabilities = ServiceCapabilities(supportsLove: true, signsRequests: true)
 
     func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
         ServiceIdentity(name: "listener")

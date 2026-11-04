@@ -597,7 +597,10 @@ struct TracklogChartsView: View {
             }
             return "Tracklog could not reach \(sourceLabel). Check your connection and try again."
         case .needsSignIn:
-            return "The saved sign-in for \(sourceLabel) was rejected. Sign in again in Settings; saved charts stay visible."
+            return ChartCopy.signInFailureMessage(
+                source: sourceLabel,
+                hasSavedCharts: state.chartState.snapshot != nil,
+            )
         case .appCredentials:
             return "Last.fm needs application credentials in Settings before it can return charts."
         case .rateLimited:

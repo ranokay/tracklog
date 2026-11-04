@@ -42,6 +42,17 @@ public enum ChartCopy {
         "\(count) \(count == 1 ? type.singularName : type.displayName.lowercased()) shown"
     }
 
+    /// The failure panel's sign-in remedy. A selection without saved rows must
+    /// not claim rows are still visible.
+    public static func signInFailureMessage(source: String, hasSavedCharts: Bool) -> String {
+        if hasSavedCharts {
+            return "The saved sign-in for \(source) was rejected. "
+                + "Sign in again in Settings; saved charts stay visible."
+        }
+        return "The saved sign-in for \(source) was rejected. "
+            + "Sign in again in Settings, or use this Mac's local history."
+    }
+
     public static func totalLabel(count: Int, caption: String, savedAt: Date?, age: String) -> String {
         if savedAt != nil {
             return "\(count) \(caption), saved \(age)"

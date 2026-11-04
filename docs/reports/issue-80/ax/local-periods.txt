@@ -1,0 +1,54 @@
+# Local mode: artists, albums, tracks across every local period
+
+Local mode was reached from the same running service fixture by pressing
+`On this Mac`; the gate's `charts-local` shot covers the no-connection local
+fixture separately.
+
+Selected controls:
+
+- `AXButton = "Selected" (On this Mac)`, `"Not selected" (Service)`
+- `AXStaticText "On this Mac · Local history only"`
+- No connection is required for the read.
+
+Matrix, 18 AXPress steps; every expectation matched:
+
+| Type | Today | Week | Month | Year | All time |
+| --- | --- | --- | --- | --- | --- |
+| Artists | Top 50 artists · Today | Top 50 artists · This week | Top 50 artists · This month | Top 50 artists · This year | Top 50 artists · All time |
+| Albums | Top 50 albums · Today | Top 50 albums · This week | Top 50 albums · This month | Top 50 albums · This year | Top 50 albums · All time |
+| Tracks | Top 50 tracks · Today | Top 50 tracks · This week | Top 50 tracks · This month | Top 50 tracks · This year | Top 50 tracks · All time |
+
+Ranked rows at Week:
+
+- Artists:
+  - `Rank 1, Blondie, 2 listens`
+  - `Rank 2, Fleetwood Mac, 1 listen`
+  - `Rank 3, Massive Attack, 1 listen`
+  - `Rank 4, New Order, 1 listen`
+  - `Rank 5, Soft Cell, 1 listen`
+  - `Rank 6, Talking Heads, 1 listen`
+- Albums:
+  - `Rank 1, Parallel Lines, Blondie, 2 listens`
+  - `Rank 2, Mezzanine, Massive Attack, 1 listen`
+  - `Rank 3, Remain in Light, Talking Heads, 1 listen`
+  - `Rank 4, Rumours, Fleetwood Mac, 1 listen`
+- Tracks:
+  - `Rank 1, Heart of Glass, Blondie, 2 listens`
+  - `Rank 2, Blue Monday, New Order, 1 listen`
+  - `Rank 3, Dreams, Fleetwood Mac, 1 listen`
+  - `Rank 4, Once in a Lifetime, Talking Heads, 1 listen`
+  - `Rank 5, Tainted Love, Soft Cell, 1 listen`
+  - `Rank 6, Teardrop, Massive Attack, 1 listen`
+
+Row accessible value: `On this Mac, This week`.
+Observed local total at the end of the walk: `AXUnknown "7 local listens"` (the
+harness playback source added one listen during the walk; the total updated
+with the stored history).
+
+Custom:
+
+- `AXPress` on `AXButton "Custom"` produced no AX tree change: the takeover
+  stayed on the current Week list and the harness did not open a Settings
+  page. This is the harness's refusal of the host Settings call, not a
+  production pass. The gate's `settings-charts.png` shows the destination
+  page, and the real host handoff is recorded as not passed in the report.
