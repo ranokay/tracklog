@@ -2,7 +2,7 @@
 
 - Base: `aa6bdeb257b24dd94b33b8a5f8295be5affff908` (`feat: build history navigation (#112)`)
 - Branch: `feat/catalogue-search-85`
-- Code head: the commit for the F1–F5 fixes (the gate receipt is added in the follow-up evidence commit).
+- Code head: `0555b3466fbaa2eaa0144fb3fe82e1393e41a16e` (the gate receipt below is for this head; later commits are documentation and evidence only).
 - State: implementation, composition tests, harness fixtures and this report. The receipt-backed gate passed; the Gate section records the receipt and clean-tree state.
 - Scope: ticket 9 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
@@ -94,12 +94,16 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: the final gate runs at the F1–F5 code head; its receipt and exit code are recorded in the follow-up evidence commit.
-- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean.
-- `swift test --package-path Tests`: 676 tests in 102 suites.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `0555b3466fbaa2eaa0144fb3fe82e1393e41a16e`.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T102852Z-dac07409cdbf.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T102852Z-dac07409cdbf.log`
+  - Duration: 995.6 seconds.
+  - `git_before` and `git_after` both report head `0555b34…`, empty porcelain status and the same tracked-content hash.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 SwiftLint violations in 306 files.
+- `swift test --package-path Tests`: 676 tests in 102 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal droplet, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
 - `droppykit validate`: `Ready to submit`.
-- New harness states: `search-refusal` and `search-settings`; `loved-held` is an interactive fixture for the early-Return walk.
+- New harness states: `search-refusal` and `search-settings`; `loved-held` is the interactive early-Return fixture.
 - Artifacts: `docs/reports/issue-85/search-settings.png`, `search-refusal.png`, `search-settings.json` and `search-refusal.json` under `docs/reports/issue-85/reports/`; the gate's charts surface is `charts-search-button.png`.
 
 ## Native observations
