@@ -34,6 +34,7 @@ echo "==> droplet validation"
 echo "==> surface shots"
 mkdir -p tracklog/shots
 rm -rf tracklog/shots/playing tracklog/shots/paused tracklog/shots/off tracklog/shots/feed-unavailable tracklog/shots/charts
+rm -rf tracklog/shots/charts-listenbrainz
 rm -f tracklog/shots/report.json tracklog/shots/*.png
 
 # The main report keeps the documented path and the playing state. Each extra
@@ -51,6 +52,10 @@ done
 echo "==> surface shots: charts"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=normal TRACKLOG_HARNESS_SECTION=charts droppykit run -- --shots ./shots/charts --report ./shots/charts/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/charts/report.json tracklog/shots/charts
+
+echo "==> surface shots: charts (ListenBrainz)"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_CHARTS=listenbrainz TRACKLOG_HARNESS_SECTION=charts droppykit run -- --shots ./shots/charts-listenbrainz --report ./shots/charts-listenbrainz/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/charts-listenbrainz/report.json tracklog/shots/charts-listenbrainz
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

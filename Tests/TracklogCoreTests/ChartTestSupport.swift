@@ -109,6 +109,8 @@ actor ChartFlags {
     private var failing = false
     private var failingTotal = false
     private var notReady = false
+    private var notReadyTotal = false
+    private var rateLimited = false
 
     func setFailing(_ value: Bool) {
         failing = value
@@ -132,6 +134,22 @@ actor ChartFlags {
 
     func isNotReady() -> Bool {
         notReady
+    }
+
+    func setNotReadyTotal(_ value: Bool) {
+        notReadyTotal = value
+    }
+
+    func isNotReadyTotal() -> Bool {
+        notReadyTotal
+    }
+
+    func setRateLimited(_ value: Bool) {
+        rateLimited = value
+    }
+
+    func isRateLimited() -> Bool {
+        rateLimited
     }
 }
 
@@ -271,6 +289,13 @@ func listenBrainzTransport(
             if let gate {
                 await gate.enter()
             }
+            if await flags.isRateLimited() {
+                return HTTPResponse(
+                    statusCode: 429,
+                    headers: ["Retry-After": "30"],
+                    body: Data(),
+                )
+            }
             if await flags.isNotReady() {
                 return HTTPResponse(statusCode: 204, body: Data())
             }
@@ -299,6 +324,9 @@ func listenBrainzTransport(
         if path.contains("listen-count") {
             if let totalGate {
                 await totalGate.enter()
+            }
+            if await flags.isNotReadyTotal() {
+                return HTTPResponse(statusCode: 204, body: Data())
             }
             if await flags.isFailingTotal() {
                 throw URLError(.notConnectedToInternet)
@@ -432,6 +460,7 @@ func listenBrainzStatsResponse(
     from: Date,
     end: Date,
     lastUpdated: Date,
+    includeBounds: Bool = true,
 ) -> HTTPResponse {
     var items: [[String: Any]] = []
     for row in rows {
@@ -463,13 +492,15 @@ func listenBrainzStatsResponse(
     case .albums: "releases"
     case .tracks: "recordings"
     }
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
         key: items,
-        "from_ts": Int(from.timeIntervalSince1970),
-        "to_ts": Int(end.timeIntervalSince1970),
-        "last_updated": Int(lastUpdated.timeIntervalSince1970),
         "range": "week",
     ]
+    if includeBounds {
+        payload["from_ts"] = Int(from.timeIntervalSince1970)
+        payload["to_ts"] = Int(end.timeIntervalSince1970)
+        payload["last_updated"] = Int(lastUpdated.timeIntervalSince1970)
+    }
     return chartJSONResponse(["payload": payload])
 }
 

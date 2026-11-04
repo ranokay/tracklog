@@ -12,6 +12,16 @@ public enum ChartCalendar {
         calendar.minimumDaysInFirstWeek = 4
         return calendar
     }
+
+    /// The service statistics calendar. ListenBrainz computes and returns
+    /// week/month/year bounds as midnight UTC dates.
+    public static var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        return calendar
+    }
 }
 
 /// A resolved local window. `range` is nil only for All time.
