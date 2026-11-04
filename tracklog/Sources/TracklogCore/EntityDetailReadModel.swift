@@ -698,7 +698,9 @@ public final class EntityDetailReadModel {
     }
 
     /// The Images page picks a file and hands the bytes here. A failed decode
-    /// leaves any existing override untouched.
+    /// leaves any existing override untouched. The chosen entity is captured
+    /// before the first suspension, so the page leaving the screen and
+    /// clearing its draft mid-save cannot lose the save.
     public func selectOverrideImage(_ data: Data) async throws {
         guard let draft = state.imageOverrideDraft else {
             throw ImageOverrideError.noSelection
@@ -710,6 +712,12 @@ public final class EntityDetailReadModel {
             subtitle: draft.subtitle,
             data: data,
         )
+        // A page that stayed up starts from the saved list, not an old draft.
+        // A newer draft belongs to another entity and is left alone.
+        if state.imageOverrideDraft?.kind == draft.kind,
+           state.imageOverrideDraft?.key == draft.key {
+            state.imageOverrideDraft = nil
+        }
     }
 
     public func beginOverride(_ request: EntityRequest) {

@@ -199,9 +199,10 @@ extension TracklogDroplet {
         }
     }
 
+    /// The Images page left the screen. The draft is transient: if the picker
+    /// was cancelled or the host popped the page, the next visit starts clean.
     func finishImagesSettingsPage() {
         runtime?.clearImageOverrideDraft()
-        host?.workspace.goBackInSettings()
     }
 
     func dismissImageOverrideError() {

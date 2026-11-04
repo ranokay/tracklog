@@ -425,6 +425,50 @@ struct EntityImageCompositionTests {
                 "the released album page downloads the service image once")
     }
 
+    @Test func aSuccessfulSaveClearsTheDraft() async throws {
+        let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
+        let request = try artistRequest()
+        composition.runtime.beginImageOverride(request)
+        #expect(composition.state.imageOverrideDraft?.key == request.key)
+        try await composition.runtime.saveSelectedImageOverride(image())
+        #expect(composition.state.imageOverrideDraft == nil)
+    }
+
+    @Test func theImagesPageLeavingClearsTheDraftWithoutLosingAnInFlightSave() async throws {
+        let database = try TemporaryDatabase()
+        let base = try SQLiteListenStore(url: database.url)
+        let saveGate = ChartHoldGate()
+        let store = HoldingOverridesStore(
+            base,
+            gate: ChartHoldGate(),
+            saveGate: saveGate,
+        )
+        let composition = try await entityComposition(
+            database: database,
+            existingStore: base,
+            runtimeStore: store,
+        ) { _ in entityLastFMArtistInfo() }
+        let request = try artistRequest()
+        composition.runtime.beginImageOverride(request)
+        #expect(composition.state.imageOverrideDraft?.key == request.key)
+
+        await saveGate.startHolding()
+        let save = Task { try await composition.runtime.saveSelectedImageOverride(image()) }
+        #expect(await saveGate.waitUntilEntered(1), "the save is in flight")
+
+        // The Images page leaves the screen while the chosen bytes are being
+        // stored; its draft is cleared, but the save that already read it
+        // still completes.
+        composition.runtime.clearImageOverrideDraft()
+        #expect(composition.state.imageOverrideDraft == nil)
+        await saveGate.release()
+        try await save.value
+
+        #expect(composition.state.imageOverrideDraft == nil)
+        #expect(try await base.imageOverrideCount() == 1)
+        #expect(composition.state.imageOverrides.count == 1)
+    }
+
     @Test func anOversizedSelectionIsRefusedBeforeItEntersTheStore() async throws {
         let composition = try await entityComposition { _ in entityLastFMArtistInfo() }
         try await linkLastFM(composition)

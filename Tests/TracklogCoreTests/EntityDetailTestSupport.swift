@@ -473,10 +473,12 @@ actor FailingEntityDetailStore: ListenStore, TrackHistoryStore, EntityDetailStor
 actor HoldingOverridesStore: ListenStore, TrackHistoryStore, EntityDetailStore, ConnectionStore {
     private let base: SQLiteListenStore
     private let gate: ChartHoldGate
+    private let saveGate: ChartHoldGate?
 
-    init(_ base: SQLiteListenStore, gate: ChartHoldGate) {
+    init(_ base: SQLiteListenStore, gate: ChartHoldGate, saveGate: ChartHoldGate? = nil) {
         self.base = base
         self.gate = gate
+        self.saveGate = saveGate
     }
 
     func insert(_ listen: Listen) async throws -> Listen? {
@@ -545,6 +547,7 @@ actor HoldingOverridesStore: ListenStore, TrackHistoryStore, EntityDetailStore, 
     }
 
     func saveImageOverride(_ override: ImageOverride, artwork: StoredArtwork) async throws {
+        await saveGate?.enter()
         try await base.saveImageOverride(override, artwork: artwork)
     }
 

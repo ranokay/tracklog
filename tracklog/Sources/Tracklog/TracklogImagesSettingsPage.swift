@@ -154,6 +154,9 @@ struct TracklogImagesSettingsPage: View {
                 }
             }
         }
+        .onDisappear {
+            droplet.finishImagesSettingsPage()
+        }
     }
 
     private func overridePreview(_ draft: ImageOverrideDraft) -> Data? {
