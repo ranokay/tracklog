@@ -21,6 +21,10 @@ run = "hk fix --all"
 description = "Install the hk Git hooks"
 run = "hk install"
 
+[tasks.verify]
+description = "Run the inner-loop checks without the surface shot matrix"
+run = "scripts/verify.sh"
+
 [tasks.gate]
 description = "Run the full pre-submission gate"
 run = "scripts/gate.sh"
