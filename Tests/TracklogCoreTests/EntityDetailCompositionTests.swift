@@ -516,6 +516,41 @@ struct EntityDetailCompositionTests {
         #expect(try await base.count() == 1)
     }
 
+    /// A delete can land while the deleted listen's album page is open. That
+    /// page must reload so its count and top tracks lose the deleted row.
+    @Test func deletingAListenRefreshesItsOpenAlbumPage() async throws {
+        let composition = try await entityComposition { request in
+            if formParameters(request)["method"] == "album.getInfo" {
+                return entityLastFMAlbumInfo()
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        for index in 0 ..< 2 {
+            _ = try await composition.store.insert(
+                entityListen(
+                    title: index == 0 ? "Heart of Glass" : "Dreaming",
+                    artist: "Blondie",
+                    album: "Parallel Lines",
+                    start: historyBase.addingTimeInterval(Double(index) * 60),
+                ),
+            )
+        }
+        try await linkLastFM(composition)
+        let album = try albumRequest()
+        try await composition.runtime.openEntityDetail(album)
+        #expect(composition.state.entityDetail?.local.count == 2)
+
+        let page = try await composition.store.page(limit: 10, before: nil)
+        let victim = try #require(page.first)
+        try await composition.runtime.deleteListen(victim)
+
+        #expect(composition.state.entityDetail?.request.kind == .album)
+        #expect(composition.state.entityDetail?.local.count == 1,
+                "the open album page drops the deleted listen")
+        let topTrack = try #require(composition.state.entityDetail?.local.topTracks.first)
+        #expect(topTrack.count == 1)
+    }
+
     @Test func aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone() async throws {
         let database = try TemporaryDatabase()
         let base = try SQLiteListenStore(url: database.url)

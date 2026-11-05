@@ -75,10 +75,13 @@ public extension CaptureRuntime {
 
         state.listens.removeAll { $0.id == id }
         state.historyCount = max(0, state.historyCount - 1)
+        let openDetail = state.entityDetail?.request
         let deletedTrackKey = EntityRequest.track(listen)?.key
+        let deletedArtistKey = EntityRequest.artist(from: listen)?.key
+        let deletedAlbumKey = EntityRequest.album(from: listen)?.key
         if let deletedTrackKey,
-           state.entityDetail?.request.kind == .track,
-           state.entityDetail?.request.key == deletedTrackKey {
+           openDetail?.kind == .track,
+           openDetail?.key == deletedTrackKey {
             if var detail = state.entityDetail, var track = detail.track {
                 track.listens.removeAll { $0.id == id }
                 track.totalCount = max(0, track.totalCount - 1)
@@ -92,6 +95,11 @@ public extension CaptureRuntime {
                 )
                 state.entityDetail = detail
             }
+            await reloadEntityDetail()
+        } else if (openDetail?.kind == .artist && openDetail?.key == deletedArtistKey)
+            || (openDetail?.kind == .album && openDetail?.key == deletedAlbumKey) {
+            // A track delete also changes the artist or album page it belongs
+            // to; reload only that page so its count and top tracks follow.
             await reloadEntityDetail()
         }
         await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
