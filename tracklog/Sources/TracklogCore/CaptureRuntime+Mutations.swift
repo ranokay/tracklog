@@ -75,7 +75,10 @@ public extension CaptureRuntime {
 
         state.listens.removeAll { $0.id == id }
         state.historyCount = max(0, state.historyCount - 1)
-        if state.entityDetail?.request.kind == .track {
+        let deletedTrackKey = EntityRequest.track(listen)?.key
+        if let deletedTrackKey,
+           state.entityDetail?.request.kind == .track,
+           state.entityDetail?.request.key == deletedTrackKey {
             if var detail = state.entityDetail, var track = detail.track {
                 track.listens.removeAll { $0.id == id }
                 track.totalCount = max(0, track.totalCount - 1)

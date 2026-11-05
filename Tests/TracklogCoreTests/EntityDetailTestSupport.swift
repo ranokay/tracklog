@@ -359,7 +359,7 @@ func seedEntityHistory(_ store: SQLiteListenStore) async throws {
 
 /// A real store whose local detail read fails a fixed number of times. Every
 /// other read and write still reaches SQLite.
-actor FailingEntityDetailStore: ListenStore, TrackHistoryStore, EntityDetailStore, ConnectionStore {
+actor FailingEntityDetailStore: ListenStore, TrackHistoryStore, EntityDetailStore, ConnectionStore, ListenMutationStore {
     private let base: SQLiteListenStore
     private var failuresRemaining: Int
 
@@ -374,6 +374,18 @@ actor FailingEntityDetailStore: ListenStore, TrackHistoryStore, EntityDetailStor
 
     func insert(_ listen: Listen) async throws -> Listen? {
         try await base.insert(listen)
+    }
+
+    func editListen(
+        id: Int64,
+        to metadata: ListenMetadata,
+        remembering rule: SimpleEditRule?,
+    ) async throws -> ListenEditResult {
+        try await base.editListen(id: id, to: metadata, remembering: rule)
+    }
+
+    func deleteListen(id: Int64, at date: Date) async throws {
+        try await base.deleteListen(id: id, at: date)
     }
 
     func page(limit: Int, before cursor: ListenCursor?) async throws -> [Listen] {

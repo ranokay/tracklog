@@ -466,6 +466,56 @@ struct EntityDetailCompositionTests {
         #expect(after.totalCount == 119)
     }
 
+    /// A delete can finish after the user opened another track. The open
+    /// page's counts must not move, even when its refresh fails.
+    @Test func deletingAnotherTracksListenLeavesTheOpenTrackAlone() async throws {
+        let database = try TemporaryDatabase()
+        let base = try SQLiteListenStore(url: database.url)
+        let failing = FailingEntityDetailStore(base, failures: 0)
+        let composition = try await entityComposition(
+            database: database,
+            existingStore: base,
+            runtimeStore: failing,
+        ) { request in
+            if formParameters(request)["method"] == "track.getInfo" {
+                return entityLastFMTrackInfo()
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        let heartInserted = try await base.insert(
+            entityListen(
+                title: "Heart of Glass",
+                artist: "Blondie",
+                album: "Parallel Lines",
+                start: historyBase,
+            ),
+        )
+        let heartOfGlass = try #require(heartInserted)
+        _ = try await base.insert(
+            entityListen(
+                title: "Dreams",
+                artist: "Fleetwood Mac",
+                album: "Rumours",
+                start: historyBase.addingTimeInterval(60),
+            ),
+        )
+        try await linkLastFM(composition)
+        let dreams = try #require(EntityRequest.track(title: "Dreams", artist: "Fleetwood Mac"))
+        try await composition.runtime.openEntityDetail(dreams)
+        #expect(composition.state.entityDetail?.track?.totalCount == 1)
+
+        // The delete of the other track lands while Dreams is open, and the
+        // open page's own reload fails.
+        await failing.failNextDetailRead()
+        try await composition.runtime.deleteListen(heartOfGlass)
+
+        #expect(composition.state.entityDetail?.track?.totalCount == 1,
+                "another track's delete must not decrement this page")
+        #expect(composition.state.entityDetail?.local.count == 1)
+        #expect(composition.state.entityDetail?.track?.listens.count == 1)
+        #expect(try await base.count() == 1)
+    }
+
     @Test func aFailedReloadKeepsTheRowsAndLeavesTheServiceAlone() async throws {
         let database = try TemporaryDatabase()
         let base = try SQLiteListenStore(url: database.url)
