@@ -37,8 +37,9 @@ ADR-0003, as #86 recorded.
    so a space becomes `%20`. Queries are the artist name, `artist album`, or
    `artist title`.
 8. **Where play appears.** Palette results, History rows, track history, chart
-   rows and the now-playing strip menu. With no template set, the action opens
-   the Settings page.
+   rows and the now-playing strip menu. With no template set, Play on the
+   History, track history, chart and now-playing surfaces opens the Settings
+   page. A palette row's primary action opens its Last.fm page instead.
 
 The accepted brief also recorded that the Last.fm method details behind
 decisions 3 and 6 still needed checking against its API documentation during
