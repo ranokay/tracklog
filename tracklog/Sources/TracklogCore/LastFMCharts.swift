@@ -6,8 +6,8 @@ public extension LastFMClient {
     /// `user.getTopArtists`, `user.getTopAlbums` or `user.getTopTracks` for
     /// the connection's own account. Last.fm exposes rolling periods only; the
     /// returned page therefore carries no returned span.
-    // swiftlint:disable:next cyclomatic_complexity
     func topChart(
+        // swiftlint:disable:previous cyclomatic_complexity
         type: ChartType,
         user: String,
         period: ChartPeriod,

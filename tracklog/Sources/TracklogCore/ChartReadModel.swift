@@ -392,8 +392,8 @@ public final class ChartReadModel {
     /// Returns which reads this pass actually attempted, so an explicit
     /// refresh that arrived during a cache-only or total-only pass can force
     /// the missing read without duplicating one already underway.
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private func performLoad(_ request: ChartRequest, force: Bool, automatic: Bool) async -> ChartLoadOutcome {
+        // swiftlint:disable:previous cyclomatic_complexity function_body_length
         if !didPruneCache {
             didPruneCache = true
             do {

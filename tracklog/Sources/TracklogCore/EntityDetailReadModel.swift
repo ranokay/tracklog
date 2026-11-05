@@ -253,8 +253,7 @@ public final class EntityDetailReadModel {
         recomputeImage()
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private func startLocal(_ request: EntityRequest, token: Int, preservingRows: Bool) {
         let store = store
         let historyStore = historyStore
@@ -544,8 +543,7 @@ public final class EntityDetailReadModel {
         startArtistImageIfNeeded(request, token: generation)
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private func startArtistImageIfNeeded(_ request: EntityRequest, token: Int) {
         guard state.artistImageLookupsEnabled,
               !overridePresent,
