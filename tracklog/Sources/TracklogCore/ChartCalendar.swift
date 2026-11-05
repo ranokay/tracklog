@@ -39,8 +39,7 @@ public struct LocalChartWindow: Equatable, Sendable {
 public enum ChartWindows {
     /// Resolves the half-open local window. Today, Week, Month, Year and All
     /// time ignore the stored Custom dates; Custom validates and uses them.
-    public static func resolve(
-        // swiftlint:disable:previous cyclomatic_complexity
+    public static func resolve( // swiftlint:disable:this cyclomatic_complexity
         selection: ChartSelection,
         now: Date,
         calendar: Calendar,

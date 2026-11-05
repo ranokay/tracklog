@@ -5,8 +5,7 @@ import TracklogCore
 
 /// The accepted Context rail: source, period and supported totals stay in a
 /// persistent left rail; the ranked list takes the remaining width.
-struct TracklogChartsView: View {
-    // swiftlint:disable:previous type_body_length
+struct TracklogChartsView: View { // swiftlint:disable:this type_body_length
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
 

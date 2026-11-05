@@ -2099,8 +2099,8 @@ struct ChartCacheTests {
     }
 
     /// Repeated runtime deactivation must leave no late chart or capture work.
-    @Test func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws {
-        // swiftlint:disable:previous function_body_length
+    @Test
+    func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws { // swiftlint:disable:this function_body_length
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)

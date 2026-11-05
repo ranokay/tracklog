@@ -106,8 +106,7 @@ public enum ChartPeriod: String, CaseIterable, Codable, Sendable {
     }
 
     /// The honest label beneath a service list.
-    public func serviceSemantics(for kind: ServiceKind) -> String? {
-        // swiftlint:disable:previous cyclomatic_complexity
+    public func serviceSemantics(for kind: ServiceKind) -> String? { // swiftlint:disable:this cyclomatic_complexity
         switch kind {
         case .lastFM:
             switch self {

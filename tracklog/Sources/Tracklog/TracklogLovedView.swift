@@ -6,8 +6,7 @@ import TracklogCore
 /// The Loved section: the current connection's currently-loved tracks, read
 /// fresh each time the section opens. The list never mixes accounts and never
 /// claims a range total.
-struct TracklogLovedView: View {
-    // swiftlint:disable:previous type_body_length
+struct TracklogLovedView: View { // swiftlint:disable:this type_body_length
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
 
