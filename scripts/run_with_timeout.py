@@ -206,7 +206,9 @@ def main() -> int:
             break
         time.sleep(POLL_SECONDS)
 
-    if received is not None:
+    # A completed child wins over a signal that arrived just after it exited;
+    # the normal path still cleans the group and passes the status through.
+    if received is not None and code is None:
         print(
             f"run_with_timeout: received SIG{received}; tearing down the process tree",
             file=sys.stderr,
