@@ -1,13 +1,15 @@
-// swiftlint:disable file_length function_body_length large_tuple type_body_length
+// swiftlint:disable file_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Chart local read model")
 @MainActor
+// swiftlint:disable:next type_body_length
 struct ChartLocalTests: CaptureTestHelpers {
     private let utc = TimeZone(identifier: "UTC")!
 
+    // swiftlint:disable:next function_body_length
     @Test func localChartsCountEachListenOnceAcrossDeliveriesAndHistoryPages() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -110,6 +112,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
+        // swiftlint:disable:next large_tuple
         let rows: [(String, String, String, String, String, TimeInterval)] = [
             ("Song", "  ARTIST  ", "Album", "", "com.apple.Music", 0),
             ("song", "artist", " album ", "ALBUM ARTIST", "com.apple.Music", 1),
@@ -184,6 +187,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
+        // swiftlint:disable:next large_tuple
         let rows: [(String, String, String, String)] = [
             ("A", "", "Unknown", ""),
             ("B", "   ", "Unknown", "  "),
@@ -595,5 +599,3 @@ func chartListen(
         artworkHash: artworkHash,
     )
 }
-
-// swiftlint:enable file_length function_body_length large_tuple type_body_length
