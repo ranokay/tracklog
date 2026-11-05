@@ -10,6 +10,6 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. An owner marking a ticket `needs-info` is the stop condition in `issue-tracker.md`; otherwise the ticket's recommended answers are enough to proceed.
+When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. `issue-tracker.md` has two stop conditions: the owner marked the ticket `needs-info`, or a decision has no recommended answer. Proceed only when neither applies.
 
 Edit the "Label in our tracker" column to match whatever vocabulary you actually use.

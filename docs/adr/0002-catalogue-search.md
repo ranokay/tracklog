@@ -20,9 +20,10 @@ ADR-0003, as #86 recorded.
    that account and say when the limit was reached. Otherwise the group explains
    why it is unavailable instead of appearing empty.
 4. **Keyboard and groups.** The field keeps focus. Up and Down move through
-   rows, Return runs the primary action, and Esc clears the text and then
-   closes. Groups are Artists, Albums, Tracks and Loved, with 5 rows each,
-   collapsible and with a "Show more" row. Collapsed state resets on each open.
+   rows. Return toggles a group header, expands "Show more", or runs the
+   primary action on a result row. Esc clears the text and then closes. Groups
+   are Artists, Albums, Tracks and Loved, with 5 rows each, collapsible and
+   with a "Show more" row. Collapsed state resets on each open.
 5. **Primary action on a row.** Search and play when a template is set,
    otherwise open the Last.fm page. Command-Return always opens Last.fm. #86
    may later take over the primary action for entity details.

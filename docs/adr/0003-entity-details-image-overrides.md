@@ -52,6 +52,15 @@ through the History row entry. No deviation from these decisions was found.
     connection change clears and reloads the service section, and late replies
     are ignored.
 
+## Implementation note
+
+The shipped model also starts a lookup when lookups are enabled on an
+already-open artist page, and when an artist override is removed, provided no
+fresh cache exists (`EntityDetailReadModel.swift`,
+`artistImageLookupsSettingChanged` and `removeOverride`). This extends decision
+12's page-open trigger; the 15-second timeout and 30-day/1-day cache timings are
+unchanged.
+
 ## Checks during implementation
 
 - Last.fm and Libre.fm `getInfo` details against primary documentation, and
