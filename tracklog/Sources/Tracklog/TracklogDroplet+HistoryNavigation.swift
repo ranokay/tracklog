@@ -234,10 +234,20 @@ extension TracklogDroplet {
     /// but the off-main file read does not: the page can leave (clearing the
     /// draft) or the user can start Replace on another row while the bytes are
     /// read. The save is addressed to the captured entity, and only a draft
-    /// that still names it is consumed.
+    /// that still names it is consumed. The task is owned by the droplet, and
+    /// the activation generation plus the runtime identity stop a read that
+    /// survives deactivation from saving through a replacement runtime.
     func chooseImageOverrideFile(for draft: ImageOverrideDraft) {
         guard imageOverridePanel == nil, let host else { return }
+        guard let runtime else {
+            state.setImageOverrideError("The image could not be saved. Tracklog is not active.")
+            return
+        }
         let chosen = draft
+        let generation = imageOverrideGeneration
+        imageOverrideTask?.cancel()
+        imageOverrideTask = nil
+        imageOverrideOperationID = nil
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
@@ -251,39 +261,58 @@ extension TracklogDroplet {
         }
         guard response == .OK, let url = panel.url else { return }
 
-        Task { [weak self] in
+        let operationID = UUID()
+        imageOverrideOperationID = operationID
+        imageOverrideTask = Task { [weak self] in
+            defer {
+                if let self, self.imageOverrideOperationID == operationID {
+                    self.imageOverrideTask = nil
+                    self.imageOverrideOperationID = nil
+                }
+            }
             guard let self else { return }
             // Reading up to 20 MiB must not run on the main actor with capture.
             let result = await Task.detached(priority: .userInitiated) {
                 ImageOverrideFileReader.read(url)
             }.value
-            switch result {
-            case let .success(data):
-                guard let runtime else {
-                    state.setImageOverrideError("The image could not be saved. Tracklog is not active.")
-                    return
-                }
-                do {
-                    try await runtime.saveImageOverride(
-                        kind: chosen.kind,
-                        key: chosen.key,
-                        title: chosen.title,
-                        subtitle: chosen.subtitle,
-                        data: data,
-                    )
-                    state.setImageOverrideError(nil)
-                } catch {
-                    state.setImageOverrideError(
-                        (error as? LocalizedError)?.errorDescription
-                            ?? "That image could not be read. Choose another image.",
-                    )
-                    host.log.notice("Choosing an image failed")
-                }
-            case .failure(.tooLarge):
-                state.setImageOverrideError(ImageOverrideError.tooLarge.errorDescription)
-            case .failure(.unreadable):
-                state.setImageOverrideError(ImageOverrideError.unreadable.errorDescription)
+            guard imageOverrideOperationID == operationID,
+                  imageOverrideGeneration == generation,
+                  self.runtime === runtime,
+                  !Task.isCancelled
+            else { return }
+            await applyImageOverrideRead(result, to: chosen, runtime: runtime)
+        }
+    }
+
+    /// The read has already passed the ownership checks. A failed save keeps
+    /// the error in state so it is shown on this page or the next Images visit.
+    private func applyImageOverrideRead(
+        _ result: Result<Data, ImageOverrideFileReadError>,
+        to chosen: ImageOverrideDraft,
+        runtime: CaptureRuntime,
+    ) async {
+        switch result {
+        case let .success(data):
+            do {
+                try await runtime.saveImageOverride(
+                    kind: chosen.kind,
+                    key: chosen.key,
+                    title: chosen.title,
+                    subtitle: chosen.subtitle,
+                    data: data,
+                )
+                state.setImageOverrideError(nil)
+            } catch {
+                state.setImageOverrideError(
+                    (error as? LocalizedError)?.errorDescription
+                        ?? "That image could not be read. Choose another image.",
+                )
+                host?.log.notice("Choosing an image failed")
             }
+        case .failure(.tooLarge):
+            state.setImageOverrideError(ImageOverrideError.tooLarge.errorDescription)
+        case .failure(.unreadable):
+            state.setImageOverrideError(ImageOverrideError.unreadable.errorDescription)
         }
     }
 

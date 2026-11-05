@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import AppKit
 import DroppyKit
 import SwiftUI
@@ -77,6 +78,12 @@ public final class TracklogDroplet: NSObject, Droplet {
     /// The image picker the Images page opened. Deactivation cancels it like
     /// the export panel.
     var imageOverridePanel: NSOpenPanel?
+    /// The off-main file read and save for the Images picker. Owned so a
+    /// deactivation cancels it, and paired with a generation and operation id
+    /// so a stale read cannot save through a replacement runtime.
+    var imageOverrideTask: Task<Void, Never>?
+    var imageOverrideOperationID: UUID?
+    var imageOverrideGeneration = 0
 
     // swiftlint:disable:next function_body_length cyclomatic_complexity
     public func activate(host: DropletHost) throws {
@@ -122,6 +129,7 @@ public final class TracklogDroplet: NSObject, Droplet {
             )
         }
         self.runtime = runtime
+        imageOverrideGeneration += 1
         if isHarness {
             state.setHarnessSettingsPage(
                 ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"],

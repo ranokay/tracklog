@@ -206,7 +206,15 @@ public struct HTTPRemoteImageLoader: RemoteImageLoading {
                 "Accept": "image/*",
             ],
         )
-        let response = try await transport.send(request)
+        let response: HTTPResponse
+        do {
+            response = try await transport.send(
+                request,
+                bodyLimit: ImageOverridePolicy.maximumRemoteBytes,
+            )
+        } catch HTTPTransportError.bodyTooLarge {
+            throw ArtistImageError.oversized
+        }
         guard (200 ..< 300).contains(response.statusCode) else {
             throw ArtistImageError.badStatus(response.statusCode)
         }

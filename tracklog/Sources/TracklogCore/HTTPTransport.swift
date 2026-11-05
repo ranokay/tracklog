@@ -54,10 +54,32 @@ public enum HTTPRedirectPolicy {
     }
 }
 
+/// A transport-level refusal for a response body that would exceed the
+/// caller's limit before it is materialized.
+public enum HTTPTransportError: Error, Equatable, Sendable {
+    case bodyTooLarge(limit: Int)
+}
+
 /// The one request/response seam. No client opens its own session: production
 /// is URLSession, tests are recorded fixtures.
 public protocol HTTPTransport: Sendable {
     func send(_ request: HTTPRequest) async throws -> HTTPResponse
+
+    /// Sends a request whose body is refused once it passes `limit`. The
+    /// default buffers through `send`; the production transport streams and
+    /// cancels the task at the limit, so a hostile response cannot occupy
+    /// more memory than the caller allows.
+    func send(_ request: HTTPRequest, bodyLimit: Int) async throws -> HTTPResponse
+}
+
+public extension HTTPTransport {
+    func send(_ request: HTTPRequest, bodyLimit: Int) async throws -> HTTPResponse {
+        let response = try await send(request)
+        guard response.body.count <= bodyLimit else {
+            throw HTTPTransportError.bodyTooLarge(limit: bodyLimit)
+        }
+        return response
+    }
 }
 
 /// The identifiers every service request carries.
