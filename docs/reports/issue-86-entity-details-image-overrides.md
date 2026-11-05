@@ -3,7 +3,7 @@
 - Base: started from `10e20840c8f71913cb8c492cb779cdb23cf36aac` (`feat: build loved browsing (#87) (#115)`).
 - Branch: `feat/entity-details-image-overrides-86`.
 - Code head: `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`.
-- State: implementation, composition tests, harness fixtures, glossary and checklist updates, the review-round-2 fixes for F12, F13 and F14, the F15 picker-entity fix, and the live F1, F2, F11, F12, F14 and F15 checks. The receipt-backed gate passed at the previous code head `8c68562`; the receipt for `19768f7` is pending (the supervisor runs it next). The report and evidence are the only later changes.
+- State: implementation, composition tests, harness fixtures, glossary and checklist updates, the review-round-2 fixes for F12, F13 and F14, the F15 picker-entity fix, and the live F1, F2, F11, F12, F14 and F15 checks. The receipt-backed gate passed at `dfd72e5` and covers code head `19768f7`; the later commits are documentation and evidence only.
 - Scope: ticket 10 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
 ## Contract
@@ -93,7 +93,7 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | settings export tests | Old export defaults the switch on; false round-trips; overrides absent. |
 | updated track-history tests | Track history now runs through the one entity surface. |
 
-Full suite at the last gate (`8c68562`): **791 tests in 106 suites**, exit `0`. The F15 change removes two draft tests and adds four on the explicit save path; the focused run is 53 tests in the two entity suites, exit `0`. A full suite and gate receipt for `19768f7` are pending.
+Full suite at the `dfd72e5` gate: **793 tests in 106 suites**, exit `0` (51 media tests in 7 suites). The F15 focused run in the two entity suites is 53 tests, exit `0`.
 
 ## Gate
 
@@ -103,14 +103,15 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Receipt status: **pending for the F15 code head `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`**; the supervisor runs the gate next. The receipt below is the last completed one and covers `8c68562`, not this head.
-- Last completed receipt: exit `0`, frozen gate `true`, clean before and after, at head `8c68562d8c9643f086cb01f9c52d3a54441cfba5`.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T230714Z-8813b33b95b2.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T230714Z-8813b33b95b2.log`
-  - Duration: 1765.9 seconds.
-  - `git_before` and `git_after` both report head `8c68562…`, empty porcelain status and the same tracked-content hash.
-- For `19768f7` before handing over: `hk check --all` (SwiftFormat, SwiftLint, jactionlint) clean with 0 violations in 336 files, and the focused `EntityImageCompositionTests` + `EntityDetailCompositionTests` run is 53 tests exit `0`. `droppykit run` rebuilt the droplet and harness from this head for the live F1/F15 recheck; the full suite, `droppykit build`/`validate` and surface shots are part of the pending gate.
-- Last completed gate details: `swift test --package-path Tests` 791 tests in 106 suites (51 media tests in 7 suites); `droppykit build` universal x86_64 + arm64; `droppykit validate` `Ready to submit`.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `dfd72e5d8081e6af7d5fef27cbfcb732b6bf173b`. The gate covers code head `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`; `dfd72e5` is the documentation and evidence commit on top.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T234837Z-1ffe2a829cc7.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T234837Z-1ffe2a829cc7.log`
+  - Duration: 1610.6 seconds.
+  - `git_before` and `git_after` both report head `dfd72e5…`, empty porcelain status and the same tracked-content hash.
+- `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 violations in 336 files.
+- `swift test --package-path Tests`: 793 tests in 106 suites; 51 media tests in 7 suites.
+- `droppykit build`: universal, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
+- `droppykit validate`: `Ready to submit`.
 - New gate runs: `details-artist`, `details-artist-approximate`, `details-artist-no-connection`, `details-album`, `details-album-service-image`, `details-track`, `details-album-listenbrainz`, `details-override`, `details-corrupt-override`, `details-long-names`, `details-track-delete`, `history-jump-back`, `loved-detail-back`, `images-settings` and `charts-override`. Every `report.json` reported no problems and every declared surface `provided`; `history-jump-back` still shows its jumped window after Back.
 - Evidence: `docs/reports/issue-86/` holds the PNGs and report JSONs above plus a contrast shot, `live-f1-detail-override.png` (refreshed from the `19768f7` run) and the live observation notes.
 
