@@ -1,4 +1,4 @@
-// swiftlint:disable file_length cyclomatic_complexity
+// swiftlint:disable file_length
 import Foundation
 
 /// The three ranked entities Core charts presents.
@@ -106,6 +106,7 @@ public enum ChartPeriod: String, CaseIterable, Codable, Sendable {
     }
 
     /// The honest label beneath a service list.
+    // swiftlint:disable:next cyclomatic_complexity
     public func serviceSemantics(for kind: ServiceKind) -> String? {
         switch kind {
         case .lastFM:
@@ -448,5 +449,3 @@ public enum ChartLimits {
 public enum ChartFreshness {
     public static let interval: TimeInterval = 15 * 60
 }
-
-// swiftlint:enable file_length cyclomatic_complexity
