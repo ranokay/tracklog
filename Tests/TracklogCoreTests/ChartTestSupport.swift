@@ -1,4 +1,4 @@
-// swiftlint:disable file_length large_tuple
+// swiftlint:disable file_length
 import Foundation
 @testable import TracklogCore
 
@@ -305,6 +305,7 @@ func listenBrainzTransport(
             let type: ChartType = path.contains("/artists")
                 ? .artists
                 : path.contains("/releases") ? .albums : .tracks
+            // swiftlint:disable:next large_tuple
             let rows: [(String, String, Int, String)] = switch type {
             case .artists:
                 [("Blondie", "", 42, "artist-mbid"), ("Talking Heads", "", 30, "artist-mbid-2")]
@@ -377,6 +378,7 @@ func makeChartRuntime(
 
 func lastFMChartResponse(
     type: ChartType,
+    // swiftlint:disable:next large_tuple
     rows: [(title: String, subtitle: String, count: Int, mbid: String)],
     ranks: [Int]? = nil,
 ) -> HTTPResponse {
@@ -456,6 +458,7 @@ func lastFMUserInfoResponse(name: String = "listener", playcount: Int? = nil) ->
 
 func listenBrainzStatsResponse(
     type: ChartType,
+    // swiftlint:disable:next large_tuple
     rows: [(title: String, subtitle: String, count: Int, mbid: String)],
     from: Date,
     end: Date,
@@ -544,5 +547,3 @@ func chartQueryValue(_ name: String, in request: HTTPRequest) -> String? {
 func chartIsLastFMTopRequest(_ request: HTTPRequest) -> Bool {
     ["user.getTopArtists", "user.getTopAlbums", "user.getTopTracks"].contains(chartMethod(request))
 }
-
-// swiftlint:enable file_length large_tuple
