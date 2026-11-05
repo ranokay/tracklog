@@ -1,9 +1,9 @@
-// swiftlint:disable cyclomatic_complexity function_parameter_count
 import Foundation
 
 // MARK: - ListenBrainz statistics
 
 extension ListenBrainzAdapter: ChartServiceReading {
+    // swiftlint:disable:next cyclomatic_complexity
     public func top(
         _ type: ChartType,
         period: ChartPeriod,
@@ -173,6 +173,7 @@ extension ListenBrainzAdapter: ChartServiceReading {
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     private func namedItem(
         rank: Int,
         type: ChartType,
@@ -298,5 +299,3 @@ private struct ListenBrainzErrorPayload: Decodable {
     let error: String?
     let message: String?
 }
-
-// swiftlint:enable cyclomatic_complexity function_parameter_count
