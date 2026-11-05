@@ -23,7 +23,7 @@ echo "==> lint"
 hk check --all
 
 echo "==> engine tests"
-swift test --package-path Tests
+python3 scripts/run_with_timeout.py swift test --package-path Tests
 
 echo "==> droplet build"
 (cd tracklog && droppykit build)
