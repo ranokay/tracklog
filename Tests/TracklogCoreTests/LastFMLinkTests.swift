@@ -62,8 +62,7 @@ private func waitForLinkPhase(
         phase = model.phase
     }
     try #require(
-        until(phase),
-        "Timed out after \(timeout) waiting for a Last.fm link phase; last phase was \(phase)",
+        until(phase), "Timed out after \(timeout) waiting for a Last.fm link phase; last phase was \(phase)",
         sourceLocation: sourceLocation,
     )
     return phase
@@ -85,8 +84,7 @@ private func waitForSessionRequests(
     }
     try #require(
         requests >= count,
-        "Timed out after \(timeout) waiting for \(count) session request(s); last count was \(requests)",
-        sourceLocation: sourceLocation,
+        "Timed out after \(timeout) waiting for \(count) session request(s); last count was \(requests)", sourceLocation: sourceLocation,
     )
     return requests
 }
