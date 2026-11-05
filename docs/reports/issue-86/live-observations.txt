@@ -224,7 +224,12 @@ Talking Heads saved row and the valid Blondie row. `images-settings.png`
 was refreshed from that run. The Loved row hint/action change is source
 and AX-label work; no separate live VoiceOver pass was run.
 
-Gate receipt: exit 0, frozen true, clean before and after, 1548.7 s at
-786d5e7. Receipt:
-/Users/ranokay/.local/state/agent-tools/gates/20261105T003222Z-8208178c8394.json
-Log: the same path ending .log. It reports 793 tests in 106 suites.
+The damaged-artwork repair (8632286) is covered by
+savingTheSameImageAgainRepairsAnUnreadableStoredCopy, which damages the
+stored row, re-saves the same bytes and reopens the store. No live drive
+was used to corrupt a real row.
+
+Gate receipt: exit 0, frozen true, clean before and after, 1413.8 s at
+8632286. Receipt:
+/Users/ranokay/.local/state/agent-tools/gates/20261105T011210Z-f7d1b6db41e1.json
+Log: the same path ending .log. It reports 794 tests in 106 suites.
