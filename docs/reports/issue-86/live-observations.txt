@@ -227,9 +227,12 @@ and AX-label work; no separate live VoiceOver pass was run.
 The damaged-artwork repair (8632286) is covered by
 savingTheSameImageAgainRepairsAnUnreadableStoredCopy, which damages the
 stored row, re-saves the same bytes and reopens the store. No live drive
-was used to corrupt a real row.
+was used to corrupt a real row. The delete-count guard (62b1d80) is
+covered by deletingAnotherTracksListenLeavesTheOpenTrackAlone, which
+opens one track, deletes another track's listen and forces the open
+page's reload to fail; the race is not reproduced through the harness.
 
-Gate receipt: exit 0, frozen true, clean before and after, 1413.8 s at
-8632286. Receipt:
-/Users/ranokay/.local/state/agent-tools/gates/20261105T011210Z-f7d1b6db41e1.json
-Log: the same path ending .log. It reports 794 tests in 106 suites.
+Gate receipt: exit 0, frozen true, clean before and after, 1420.7 s at
+62b1d80. Receipt:
+/Users/ranokay/.local/state/agent-tools/gates/20261105T014657Z-d63f62dc28d6.json
+Log: the same path ending .log. It reports 795 tests in 106 suites.
