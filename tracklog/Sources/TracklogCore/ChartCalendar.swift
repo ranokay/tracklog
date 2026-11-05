@@ -1,4 +1,3 @@
-// swiftlint:disable cyclomatic_complexity
 import Foundation
 
 /// The one calendar contract behind local chart windows: Gregorian, the Mac's
@@ -40,6 +39,7 @@ public struct LocalChartWindow: Equatable, Sendable {
 public enum ChartWindows {
     /// Resolves the half-open local window. Today, Week, Month, Year and All
     /// time ignore the stored Custom dates; Custom validates and uses them.
+    // swiftlint:disable:next cyclomatic_complexity
     public static func resolve(
         selection: ChartSelection,
         now: Date,
@@ -103,5 +103,3 @@ public enum ChartWindows {
         }
     }
 }
-
-// swiftlint:enable cyclomatic_complexity
