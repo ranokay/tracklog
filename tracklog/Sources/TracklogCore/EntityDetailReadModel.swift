@@ -1,9 +1,10 @@
-// swiftlint:disable file_length type_body_length function_body_length
+// swiftlint:disable file_length
 import Foundation
 
 /// The one detail read model: local reads, Last.fm service reads, approximate
 /// artist images and user overrides. Views publish nothing themselves.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class EntityDetailReadModel {
     /// The stack stays bounded; the oldest page is dropped when a new page
     /// would exceed it. Back always keeps the page just left.
@@ -253,6 +254,7 @@ public final class EntityDetailReadModel {
     }
 
     // swiftlint:disable:next cyclomatic_complexity
+    // swiftlint:disable:next function_body_length
     private func startLocal(_ request: EntityRequest, token: Int, preservingRows: Bool) {
         let store = store
         let historyStore = historyStore
@@ -543,6 +545,7 @@ public final class EntityDetailReadModel {
     }
 
     // swiftlint:disable:next cyclomatic_complexity
+    // swiftlint:disable:next function_body_length
     private func startArtistImageIfNeeded(_ request: EntityRequest, token: Int) {
         guard state.artistImageLookupsEnabled,
               !overridePresent,
@@ -998,5 +1001,3 @@ public enum ImageOverrideError: Error, Equatable, LocalizedError, Sendable {
         }
     }
 }
-
-// swiftlint:enable file_length type_body_length function_body_length
