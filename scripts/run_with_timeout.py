@@ -4,6 +4,10 @@
 The timeout is a single default here so `mise run test` and the verify loop
 cannot drift. A descendant that leaves its parent's session or process group
 would escape a group-only kill, so the tree is snapshotted before signalling.
+
+The command must be a trusted argv list supplied by repository automation
+(`mise` or `scripts/verify.sh`). This script never uses a shell, so shell
+metacharacters stay literal arguments.
 """
 
 from __future__ import annotations
@@ -182,6 +186,8 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle)
     signal.signal(signal.SIGINT, handle)
 
+    # Trusted repository automation supplies the argv list; shell=False keeps
+    # every metacharacter a literal argument.
     child = subprocess.Popen(command, start_new_session=True)
     deadline = time.monotonic() + args.timeout
     timed_out = False
@@ -217,7 +223,8 @@ def main() -> int:
             print(f"run_with_timeout: still alive after SIGKILL: {sorted(remaining)}", file=sys.stderr)
         return 124
 
-    assert code is not None
+    if code is None:
+        raise RuntimeError("the child exited without a status")
     # A normal exit does not prove the child's group is empty: a test helper
     # that outlives the runner in the same group would be orphaned.
     kill_child_group(child.pid)

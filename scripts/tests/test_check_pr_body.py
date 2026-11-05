@@ -80,6 +80,7 @@ class CheckPRBodyTests(unittest.TestCase):
             [sys.executable, str(Path(__file__).resolve().parents[1] / "check_pr_body.py")],
             env={"PR_BODY": "does not close #76"},
             capture_output=True,
+            check=False,
             text=True,
         )
         self.assertEqual(result.returncode, 1)

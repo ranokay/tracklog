@@ -172,6 +172,32 @@ class RunWithTimeoutTests(unittest.TestCase):
         _stdout, stderr = process.communicate(timeout=WAIT_SECONDS)
         self.assertEqual(process.returncode, 7, stderr)
 
+    def test_shell_metacharacters_stay_literal_arguments(self) -> None:
+        child = self.root / "args-child.py"
+        child.write_text("import sys\nprint(repr(sys.argv[1:]))\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--timeout",
+                "60",
+                "--",
+                sys.executable,
+                str(child),
+                "a; echo injected",
+                "$(echo injected)",
+                "`echo injected`",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=WAIT_SECONDS,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("'a; echo injected'", result.stdout)
+        self.assertIn("'$(echo injected)'", result.stdout)
+        self.assertIn("'`echo injected`'", result.stdout)
+
     def test_timeout_kills_child_and_own_session_grandchild(self) -> None:
         process, pidfile = self.start_hanging("15")
         pids = self.pids_from(pidfile)
@@ -197,6 +223,7 @@ class RunWithTimeoutTests(unittest.TestCase):
                 str(pidfile),
             ],
             capture_output=True,
+            check=False,
             text=True,
             timeout=WAIT_SECONDS,
         )
