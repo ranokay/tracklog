@@ -44,6 +44,7 @@ public extension CaptureRuntime {
                 scrobblingEnabled: state.scrobblingEnabled,
                 nowPlayingEnabled: state.nowPlayingEnabled,
                 minimumDuration: state.minimumDuration,
+                artistImageLookupsEnabled: state.artistImageLookupsEnabled,
             ),
             apps: apps,
             edits: edits,

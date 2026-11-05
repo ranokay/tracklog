@@ -47,6 +47,8 @@ extension TracklogDroplet {
                 ? SearchTemplate.parseOrNil("https://music.example/search?q={query}")
                 : nil,
             catalogueSearchTimeout: 600,
+            artistImageSearch: HarnessArtistImageSearch(),
+            imageLoader: HarnessRemoteImageLoader(),
         )
     }
 
@@ -65,6 +67,10 @@ extension TracklogDroplet {
             minimumDuration: host.preferences.value(
                 forKey: "minimumDuration",
                 default: CaptureSettings.defaultMinimumDuration,
+            ),
+            artistImageLookupsEnabled: host.preferences.value(
+                forKey: "artistImageLookupsEnabled",
+                default: true,
             ),
         )
         let databaseURL = host.environment.containerDirectory.appendingPathComponent("tracklog.sqlite")
@@ -120,6 +126,10 @@ extension TracklogDroplet {
                 host.preferences.setValue(settings.nowPlayingEnabled, forKey: "nowPlayingEnabled")
                 host.preferences.setValue(settings.pausedUntil, forKey: "pausedUntil")
                 host.preferences.setValue(settings.minimumDuration, forKey: "minimumDuration")
+                host.preferences.setValue(
+                    settings.artistImageLookupsEnabled,
+                    forKey: "artistImageLookupsEnabled",
+                )
             },
             appCredentialProblem: appCredentialProblem,
             persistAppCredentialProblem: { problem in
@@ -141,6 +151,8 @@ extension TracklogDroplet {
             persistPlaybackTemplate: { template in
                 host.preferences.setValue(template ?? "", forKey: "playbackTemplate")
             },
+            artistImageSearch: ITunesSearchClient(transport: transport),
+            imageLoader: HTTPRemoteImageLoader(transport: transport),
         )
     }
 

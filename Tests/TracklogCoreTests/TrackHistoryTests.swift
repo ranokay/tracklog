@@ -34,9 +34,9 @@ struct TrackHistoryTests: CaptureTestHelpers {
         let loadedFeed = state.listens
         let row = try #require(state.listens.first { $0.processed.title == "Blue Monday" })
 
-        await runtime.openTrackHistory(row)
+        await openTrackDetail(runtime, row)
 
-        var track = try #require(state.trackHistory)
+        var track = try #require(state.entityDetail?.track)
         #expect(track.totalCount == 150)
         #expect(track.listens.count == 50)
         #expect(track.hasMore)
@@ -45,11 +45,11 @@ struct TrackHistoryTests: CaptureTestHelpers {
         #expect(state.listens == loadedFeed, "the feed is not replaced")
 
         var loads = 0
-        while state.trackHistory?.hasMore == true, loads < 10 {
-            await runtime.loadMoreTrackHistory()
+        while state.entityDetail?.track?.hasMore == true, loads < 10 {
+            await runtime.loadMoreEntityListens()
             loads += 1
         }
-        track = try #require(state.trackHistory)
+        track = try #require(state.entityDetail?.track)
         #expect(loads == 2)
         #expect(track.listens.count == 150)
         #expect(Set(track.listens.compactMap(\.id)).count == 150)
@@ -110,9 +110,9 @@ struct TrackHistoryTests: CaptureTestHelpers {
         let runtime = historyRuntime(store: store, state: state)
         await runtime.start()
         let row = try #require(state.listens.first { $0.processed.title == "Café" })
-        await runtime.openTrackHistory(row)
+        await openTrackDetail(runtime, row)
 
-        let track = try #require(state.trackHistory)
+        let track = try #require(state.entityDetail?.track)
         #expect(track.identityKey == expectedKey)
         #expect(track.totalCount == chartItem.count, "track history and the Tracks chart agree")
         #expect(track.totalCount == 4)
@@ -128,9 +128,9 @@ struct TrackHistoryTests: CaptureTestHelpers {
         let runtime = historyRuntime(store: store, state: state)
         await runtime.start()
         let blank = try #require(state.listens.first { $0.processed.artist.isEmpty })
-        await runtime.openTrackHistory(blank)
+        await openTrackDetail(runtime, blank)
 
-        let track = try #require(state.trackHistory)
+        let track = try #require(state.entityDetail?.track)
         #expect(track.totalCount == 1)
         #expect(track.identityKey == LocalTrackIdentity.key(title: "Orphan", artist: ""))
         #expect(track.identityKey != LocalTrackIdentity.chartKey(title: "Orphan", artist: "Artist"))
@@ -188,9 +188,9 @@ struct TrackHistoryTests: CaptureTestHelpers {
         }
         await runtime.reloadHistory()
         let row = try #require(state.listens.first { $0.processed.title == "Blue Monday" })
-        await runtime.openTrackHistory(row)
+        await openTrackDetail(runtime, row)
 
-        var track = try #require(state.trackHistory)
+        var track = try #require(state.entityDetail?.track)
         #expect(track.totalCount == 20, "one listen with a target is still one listen")
         #expect(track.listens.count == 20)
         #expect(state.currentConnectionID == connectionID)
@@ -198,8 +198,8 @@ struct TrackHistoryTests: CaptureTestHelpers {
         #expect(requestsAfterTrackRead == 1, "track history makes no service read")
 
         try await runtime.setCurrentConnection(nil)
-        await runtime.reloadTrackHistory()
-        track = try #require(state.trackHistory)
+        await runtime.reloadEntityDetail()
+        track = try #require(state.entityDetail?.track)
         #expect(track.totalCount == 20)
         #expect(track.listens.count == 20)
     }

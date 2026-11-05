@@ -38,6 +38,9 @@ rm -rf tracklog/shots/charts-*
 rm -rf tracklog/shots/history-*
 rm -rf tracklog/shots/search-*
 rm -rf tracklog/shots/loved-*
+rm -rf tracklog/shots/details-*
+rm -rf tracklog/shots/images-settings
+rm -rf tracklog/shots/charts-override
 rm -f tracklog/shots/report.json tracklog/shots/*.png
 
 # The main report keeps the documented path and the playing state. Each extra
@@ -136,6 +139,38 @@ for fixture in normal loading empty failed unsupported app-credentials long-name
     needs-sign-in credential-rejected paused action-failure refresh-failure rate-limited metadata-unavailable; do
     run_loved_shots "$fixture"
 done
+
+echo "==> surface shots: details"
+run_detail_shots() {
+    local fixture="$1"
+    echo "==> surface shots: details-$fixture"
+    (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL="$fixture" droppykit run -- --shots "./shots/details-$fixture" --report "./shots/details-$fixture/report.json" --shot-height 1900)
+    python3 scripts/check_shot_report.py "tracklog/shots/details-$fixture/report.json" "tracklog/shots/details-$fixture"
+}
+
+# Artist, album and track pages, Last.fm facts, the no-connection reason, the
+# ListenBrainz MBID link, the approximate artist image, an explicit override,
+# an unreadable stored copy and long metadata.
+for fixture in artist artist-approximate artist-no-connection album album-service-image track \
+    album-listenbrainz override corrupt-override long-names track-delete; do
+    run_detail_shots "$fixture"
+done
+
+echo "==> surface shots: history-jump-back"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=history-jump-back TRACKLOG_HARNESS_HISTORY=jump droppykit run -- --shots ./shots/history-jump-back --report ./shots/history-jump-back/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/history-jump-back/report.json tracklog/shots/history-jump-back
+
+echo "==> surface shots: loved-detail-back"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=loved-back TRACKLOG_HARNESS_SECTION=loved TRACKLOG_HARNESS_LOVED=normal droppykit run -- --shots ./shots/loved-detail-back --report ./shots/loved-detail-back/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/loved-detail-back/report.json tracklog/shots/loved-detail-back
+
+echo "==> surface shots: images-settings"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=corrupt-override TRACKLOG_HARNESS_SETTINGS_PAGE=images droppykit run -- --shots ./shots/images-settings --report ./shots/images-settings/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/images-settings/report.json tracklog/shots/images-settings
+
+echo "==> surface shots: charts-override"
+(cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=override TRACKLOG_HARNESS_SECTION=charts droppykit run -- --shots ./shots/charts-override --report ./shots/charts-override/report.json --shot-height 1900)
+python3 scripts/check_shot_report.py tracklog/shots/charts-override/report.json tracklog/shots/charts-override
 
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

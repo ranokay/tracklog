@@ -306,9 +306,12 @@ struct TracklogChartsView: View {
                     item: item,
                     type: state.chartState.selection.type,
                     unit: unit,
-                    artwork: item.artworkHash.flatMap { state.artworkByHash[$0] },
+                    artwork: chartArtwork(item),
                     sourceLabel: sourceLabel,
                     periodLabel: periodLabel,
+                    onOpen: {
+                        droplet.openEntityDetailFromChart(item)
+                    },
                     onPlay: {
                         droplet.searchAndPlay(
                             query: chartPlaybackQuery(
@@ -327,6 +330,17 @@ struct TracklogChartsView: View {
         }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// An override row owns the sleeve even when its stored copy is missing:
+    /// the result is nil and the neutral sleeve shows. Otherwise the captured
+    /// cover is the row's artwork.
+    private func chartArtwork(_ item: ChartItem) -> Data? {
+        let type = state.chartState.selection.type
+        if state.hasImageOverride(for: item, type: type) {
+            return state.imageOverrideData(for: item, type: type)
+        }
+        return item.artworkHash.flatMap { state.artworkByHash[$0] }
     }
 
     /// Artists search by name; albums and tracks use the artist and the row
@@ -690,10 +704,36 @@ struct ChartRankRow: View {
     let artwork: Data?
     let sourceLabel: String
     let periodLabel: String
+    let onOpen: () -> Void
     let onPlay: () -> Void
     @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
+        Button(action: onOpen) {
+            rowContent
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityValue(Text(ChartCopy.rowAccessibilityValue(source: sourceLabel, period: periodLabel)))
+        .accessibilityHint(Text("Opens this \(type.displayName.lowercased()) page"))
+        .accessibilityAction(named: Text("Search and play")) {
+            onPlay()
+        }
+        .contextMenu {
+            Button("Open details", action: onOpen)
+            Button("Search and play", action: onPlay)
+        }
+        .overlay(alignment: .bottom) {
+            if SurfaceContrast.isIncreased(colorContrast) {
+                SurfaceSeparator()
+                    .padding(.horizontal, DroppySpacing.lg)
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: DroppySpacing.md) {
             Text("\(item.rank)")
                 .font(.caption.weight(.medium))
@@ -736,21 +776,6 @@ struct ChartRankRow: View {
         }
         .padding(.horizontal, DroppySpacing.lg)
         .frame(height: 68)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(accessibilityLabel))
-        .accessibilityValue(Text(ChartCopy.rowAccessibilityValue(source: sourceLabel, period: periodLabel)))
-        .accessibilityAction(named: Text("Search and play")) {
-            onPlay()
-        }
-        .contextMenu {
-            Button("Search and play", action: onPlay)
-        }
-        .overlay(alignment: .bottom) {
-            if SurfaceContrast.isIncreased(colorContrast) {
-                SurfaceSeparator()
-                    .padding(.horizontal, DroppySpacing.lg)
-            }
-        }
     }
 
     private var accessibilityLabel: String {

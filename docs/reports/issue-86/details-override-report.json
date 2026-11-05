@@ -1,0 +1,179 @@
+{
+  "activation" : {
+    "active" : true,
+    "error" : null
+  },
+  "activity" : [
+    {
+      "at" : "2026-11-04T22:19:25Z",
+      "detail" : "present \"hud.failure.ratelimit\"",
+      "refused" : false,
+      "service" : "hud"
+    },
+    {
+      "at" : "2026-11-04T22:19:25Z",
+      "detail" : "dismiss \"hud.failure.ratelimit\"",
+      "refused" : false,
+      "service" : "hud"
+    },
+    {
+      "at" : "2026-11-04T22:19:25Z",
+      "detail" : "present \"hud.failure.signin\" (card)",
+      "refused" : false,
+      "service" : "hud"
+    }
+  ],
+  "artwork" : {
+    "creatorAvatar" : "ok",
+    "icon" : "ok"
+  },
+  "capabilities" : {
+    "declared" : [
+      "apple-events",
+      "clipboard-write",
+      "expanded-surface",
+      "global-shortcuts",
+      "hud",
+      "network-client"
+    ],
+    "granted" : [
+      "apple-events",
+      "clipboard-write",
+      "expanded-surface",
+      "global-shortcuts",
+      "hud",
+      "network-client"
+    ]
+  },
+  "droplet" : {
+    "capabilities" : [
+      "apple-events",
+      "clipboard-write",
+      "expanded-surface",
+      "global-shortcuts",
+      "hud",
+      "network-client"
+    ],
+    "category" : "media",
+    "creator" : "ranokay",
+    "icon" : "Tracklog.icon",
+    "id" : "tracklog",
+    "kit" : {
+      "abi" : 1,
+      "minAPI" : "1.19.0"
+    },
+    "minAppVersion" : "15.3.0",
+    "name" : "Tracklog",
+    "summary" : "Scrobbles what you play on your Mac to three services.",
+    "surfaces" : [
+      "shelf-widget",
+      "expanded-surface",
+      "settings-pane",
+      "hud"
+    ],
+    "typeID" : "tracklog",
+    "version" : "1.0.0"
+  },
+  "expandedSurfaces" : [
+    {
+      "id" : "history",
+      "systemImage" : "clock.arrow.circlepath",
+      "title" : "History"
+    }
+  ],
+  "harness" : {
+    "abi" : 1,
+    "apiVersion" : "1.22.0"
+  },
+  "liveActivity" : {
+    "publishing" : false,
+    "seat" : "none(idle)"
+  },
+  "lockScreen" : {
+    "publishing" : false
+  },
+  "log" : [
+    {
+      "at" : "2026-11-04T22:19:25Z",
+      "level" : "info",
+      "message" : "Tracklog activated"
+    }
+  ],
+  "manifest" : {
+    "loaded" : true,
+    "path" : "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/droplet.json",
+    "problem" : null
+  },
+  "problems" : [
+
+  ],
+  "schema" : "droppykit-harness-report\/1",
+  "shelfWidgets" : [
+    {
+      "contentHeight" : "fixed(150.0)",
+      "id" : "tracklog",
+      "preferredPairedWidth" : 210,
+      "preferredSoloWidth" : 420,
+      "systemImage" : "waveform",
+      "title" : "Tracklog"
+    }
+  ],
+  "shots" : [
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/overview.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/shelf-widget.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/live-activity.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/hud.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/expanded-surface.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/settings-pane.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/lock-screen.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/menu-bar.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/capabilities.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/preferences.png",
+    "\/Users\/ranokay\/.t3\/worktrees\/tracklog\/t3-f725024c\/tracklog\/shots\/details-override\/activity.png"
+  ],
+  "surfaces" : [
+    {
+      "declared" : true,
+      "implemented" : true,
+      "surface" : "shelf-widget",
+      "verdict" : "provided"
+    },
+    {
+      "declared" : false,
+      "implemented" : false,
+      "surface" : "live-activity",
+      "verdict" : "not-provided"
+    },
+    {
+      "declared" : true,
+      "implemented" : true,
+      "surface" : "expanded-surface",
+      "verdict" : "provided"
+    },
+    {
+      "declared" : true,
+      "implemented" : true,
+      "surface" : "settings-pane",
+      "verdict" : "provided"
+    },
+    {
+      "declared" : true,
+      "implemented" : true,
+      "surface" : "hud",
+      "verdict" : "provided"
+    },
+    {
+      "declared" : false,
+      "implemented" : false,
+      "surface" : "lock-screen-status",
+      "verdict" : "not-provided"
+    },
+    {
+      "declared" : false,
+      "implemented" : false,
+      "surface" : "menu-bar-extra",
+      "verdict" : "not-provided"
+    }
+  ],
+  "verdict" : "ok"
+}

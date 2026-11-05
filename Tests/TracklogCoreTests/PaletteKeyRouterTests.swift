@@ -28,6 +28,27 @@ struct PaletteKeyRouterTests {
         #expect(PaletteKeyRouter.route(keyCode: Key.downArrow, command: true, hasMarkedText: false) == .passThrough)
     }
 
+    @Test func optionReturnPlaysAndReturnOpensDetails() {
+        #expect(PaletteKeyRouter.route(
+            keyCode: Key.return,
+            command: false,
+            option: true,
+            hasMarkedText: false,
+        ) == .optionActivate)
+        #expect(PaletteKeyRouter.route(
+            keyCode: Key.keypadEnter,
+            command: false,
+            option: true,
+            hasMarkedText: false,
+        ) == .optionActivate)
+        #expect(PaletteKeyRouter.route(
+            keyCode: Key.return,
+            command: true,
+            option: true,
+            hasMarkedText: false,
+        ) == .commandActivate, "Command-Return keeps the Last.fm action")
+    }
+
     @Test func markedInputMethodTextKeepsEveryPaletteKeyInTheFieldEditor() {
         for key in [Key.upArrow, Key.downArrow, Key.return, Key.keypadEnter, Key.escape] {
             #expect(

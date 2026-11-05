@@ -39,6 +39,9 @@ public final class CaptureRuntime {
     /// The Loved section's one read model. Nil when the composition has no
     /// credential store.
     public let loved: LovedReadModel?
+    /// The entity detail and image override read model. Nil when the store
+    /// cannot answer local detail reads.
+    public let entityDetail: EntityDetailReadModel?
     let persistPlaybackTemplate: (@MainActor (String?) -> Void)?
 
     var started = false
@@ -127,6 +130,9 @@ public final class CaptureRuntime {
         playbackTemplate: SearchTemplate? = nil,
         persistPlaybackTemplate: (@MainActor (String?) -> Void)? = nil,
         catalogueSearchTimeout: TimeInterval = CatalogueSearchReadModel.defaultTimeout,
+        artistImageSearch: (any ArtistImageSearching)? = nil,
+        imageLoader: (any RemoteImageLoading)? = nil,
+        entityDetailTimeout: TimeInterval = EntityDetailReadModel.defaultTimeout,
     ) {
         self.state = state
         self.clock = clock
@@ -203,6 +209,7 @@ public final class CaptureRuntime {
         state.lastFMOverridePresent = false
         state.mediaStatus = source.mediaStatus
         state.playbackTemplate = playbackTemplate
+        state.artistImageLookupsEnabled = settings.artistImageLookupsEnabled
         self.persistPlaybackTemplate = persistPlaybackTemplate
 
         if let chartStore = store as? any ChartStore, let credentials {
@@ -248,6 +255,28 @@ public final class CaptureRuntime {
             loved = nil
         }
 
+        if let detailStore = store as? any EntityDetailStore {
+            entityDetail = EntityDetailReadModel(
+                state: state,
+                store: detailStore,
+                historyStore: store as? any TrackHistoryStore,
+                artworkStore: store as? any ArtworkStore,
+                historyPageSize: historyPageSize,
+                serviceClients: serviceAdapters.compactMap { $0 as? any EntityServiceReading },
+                imageSearch: artistImageSearch,
+                imageLoader: imageLoader,
+                clock: clock,
+                timeout: entityDetailTimeout,
+            )
+        } else {
+            entityDetail = nil
+        }
+        entityDetail?.onTrackListensLoaded = { [weak self] listens in
+            guard let self else { return }
+            await loadFeedback(for: listens.map(\.processed.identity))
+            await reloadDeliveryState()
+        }
+
         wireOutboxCallbacks()
     }
 
@@ -281,6 +310,9 @@ public final class CaptureRuntime {
         playbackTemplate: SearchTemplate? = nil,
         persistPlaybackTemplate: (@MainActor (String?) -> Void)? = nil,
         catalogueSearchTimeout: TimeInterval = CatalogueSearchReadModel.defaultTimeout,
+        artistImageSearch: (any ArtistImageSearching)? = nil,
+        imageLoader: (any RemoteImageLoading)? = nil,
+        entityDetailTimeout: TimeInterval = EntityDetailReadModel.defaultTimeout,
     ) -> CaptureRuntime {
         var store: SQLiteListenStore?
         var failure: CaptureFailure?
@@ -325,6 +357,9 @@ public final class CaptureRuntime {
             playbackTemplate: playbackTemplate,
             persistPlaybackTemplate: persistPlaybackTemplate,
             catalogueSearchTimeout: catalogueSearchTimeout,
+            artistImageSearch: artistImageSearch,
+            imageLoader: imageLoader,
+            entityDetailTimeout: entityDetailTimeout,
         )
     }
 
@@ -421,6 +456,7 @@ extension CaptureRuntime {
         charts?.activate()
         catalogueSearch?.activate()
         loved?.activate()
+        entityDetail?.activate()
         clearExpiredPauseOnActivation()
 
         if let store {

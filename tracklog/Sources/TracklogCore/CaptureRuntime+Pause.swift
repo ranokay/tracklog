@@ -99,6 +99,7 @@ public extension CaptureRuntime {
             nowPlayingEnabled: state.nowPlayingEnabled,
             pausedUntil: state.pausedUntil,
             minimumDuration: state.minimumDuration,
+            artistImageLookupsEnabled: state.artistImageLookupsEnabled,
         ))
     }
 }

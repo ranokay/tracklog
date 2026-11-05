@@ -47,14 +47,43 @@ final class URLSessionTransport: HTTPTransport, @unchecked Sendable {
     }
 
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        let (data, response) = try await session.data(for: Self.urlRequest(request))
+        return try Self.httpResponse(response, body: data)
+    }
+
+    /// Image responses stream into memory. The cap is a hard stop: the task is
+    /// cancelled on the first byte past it, so a huge or endless body never
+    /// occupies more than `bodyLimit` bytes.
+    func send(_ request: HTTPRequest, bodyLimit: Int) async throws -> HTTPResponse {
+        let (bytes, response) = try await session.bytes(for: Self.urlRequest(request))
+        var body = Data()
+        body.reserveCapacity(min(bodyLimit, 256 * 1024))
+        do {
+            for try await byte in bytes {
+                guard body.count < bodyLimit else {
+                    bytes.task.cancel()
+                    throw HTTPTransportError.bodyTooLarge(limit: bodyLimit)
+                }
+                body.append(byte)
+            }
+        } catch {
+            bytes.task.cancel()
+            throw error
+        }
+        return try Self.httpResponse(response, body: body)
+    }
+
+    private static func urlRequest(_ request: HTTPRequest) -> URLRequest {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method.rawValue
         urlRequest.httpBody = request.body
         for (name, value) in request.headers {
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
+        return urlRequest
+    }
 
-        let (data, response) = try await session.data(for: urlRequest)
+    private static func httpResponse(_ response: URLResponse, body: Data) throws -> HTTPResponse {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -62,6 +91,6 @@ final class URLSessionTransport: HTTPTransport, @unchecked Sendable {
         for (name, value) in http.allHeaderFields {
             headers[String(describing: name)] = String(describing: value)
         }
-        return HTTPResponse(statusCode: http.statusCode, headers: headers, body: data)
+        return HTTPResponse(statusCode: http.statusCode, headers: headers, body: body)
     }
 }

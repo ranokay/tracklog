@@ -7,7 +7,8 @@ extension CaptureRuntime {
     /// at the top of the feed or for the Newest action.
     public func reloadHistory() async {
         guard started, let store, !state.historyJumpInFlight else { return }
-        closeTrackHistory()
+        // Reloading the feed never closes a detail. A palette-opened detail
+        // mounts History underneath it and must stay up while the feed loads.
         state.pendingHistoryJump = nil
         state.historyJumpNotice = nil
         state.historyHasNewer = false
@@ -136,7 +137,7 @@ extension CaptureRuntime {
         state.cancelDeleteListen()
         state.historyJumpInFlight = true
         defer { state.historyJumpInFlight = false }
-        closeTrackHistory()
+        closeEntityDetail()
         guard let navigation = store as? any HistoryNavigationStore else {
             recordHistoryFailure(DatabaseError.unavailable("Date jumps are unavailable"))
             return
@@ -280,7 +281,6 @@ extension CaptureRuntime {
         state.historyJumpInFlight = false
         state.historySettingsUnavailable = false
         state.cancelDeleteListen()
-        closeTrackHistory()
     }
 
     // MARK: - Helpers

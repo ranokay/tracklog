@@ -1,0 +1,246 @@
+Issue #86 live harness observations (2026-11-04)
+
+Environment: TracklogHarness launched with `droppykit run`, fixture
+`TRACKLOG_HARNESS_DETAIL=override` and `TRACKLOG_HARNESS_SETTINGS_PAGE=images`,
+then the Expanded surface and Settings pane selections.
+
+AX readout, expanded surface with the artist page open:
+- AXWindow "Tracklog — DroppyKit harness"
+  - AXHeading "Blondie"
+  - AXOpaqueProviderGroup [actions=[scrolltotop,scrolltobottom]]
+    - AXButton "Heart of Glass, Blondie, 1 listen" help="Opens this track's page" [actions=[press]]
+
+The same tree contains three rendered surface copies (notch, island, camera).
+
+Settings pane, Images page:
+- "Chosen image", "Blondie"
+- Button "Choose image…"
+- Button "Remove image"
+- "Saved images", row "Blondie", Button "Remove"
+- "Artist images", Toggle "Look up artist images" (knob at the on position),
+  privacy note naming Apple.
+
+File picker:
+- Activating "Choose image…" opened NSOpenPanel in the harness host process.
+- Window title: "Choose an artist or album image".
+- The panel listed a JSON file from an earlier session and was cancelled with
+  Escape. No image was selected in this run.
+- This proves the panel opens in the real host process; it does not prove a
+  sandboxed Store build, which is not available on this machine.
+
+Palette:
+- A separate run with `TRACKLOG_HARNESS_PALETTE=normal` opened the palette over
+  the harness window. It showed the query `blo`, the Artists group with
+  "Blondie" carrying the override sleeve (orange circle), the other artists,
+  the footer `Return opens details · ⌥Return plays · ⌘Return opens Last.fm ·
+  Esc clears, then closes`.
+- An unrelated macOS TCC prompt ("Raycast.app wants to access files managed by
+  Kumo") took focus before Return could be sent on the Blondie row. The
+  palette was still receiving keys (Escape cleared its query), but the
+  detail-from-palette Return observation was not completed. Do not claim it
+  was run.
+
+Not run:
+- Live Last.fm `getInfo` reads: no working user app pair/session is configured
+  on this machine.
+- Live ListenBrainz reads: no user token is configured.
+- VoiceOver speech, focus order and keyboard traversal: no VoiceOver session
+  was started. The AX tree above is structural evidence only.
+- Droppy Playground install and a Store-signed build: not attempted.
+
+Second pass (after the review fixes)
+
+F1, Change image:
+- Detail page -> Change image… -> Settings pane showed "Chosen image",
+  "Blondie", "Choose image…", "Remove image" after the takeover disappeared.
+  The draft survived the detail close.
+- Choose image… opened the NSOpenPanel titled "Choose an artist or album image".
+- The file save was not completed. A Cmd-Shift-G path keystroke landed in the
+  harness sidebar search field instead of the panel; no file was selected.
+  The composition test covers the save through saveSelectedImageOverride.
+
+F2, track delete:
+- The track page rendered the delete confirmation with Cancel and Delete
+  (gate shot details-track-delete.png). Live Cancel/Delete clicks were not
+  completed because the harness sidebar stopped responding after a Settings
+  page switch.
+
+F3, originating list:
+- Gate shot history-jump-back.png shows "Showing from 3 Nov 2026 at 21:18"
+  after opening a detail and going Back.
+- Gate shot loved-detail-back.png shows the same loaded Loved rows after
+  opening a detail and going Back.
+
+F11, palette keys:
+- With a detail open, the section-bar search button opened the palette over
+  the takeover. Return on the selected Blondie row closed the palette and
+  opened the Blondie artist detail; the detail survived.
+- Option-Return closed the palette; the harness Activity log recorded
+  `open https://music.example/search?q=Blondie`.
+- Command-Return was attempted; the Activity log kept only the Option-Return
+  open line, so a Last.fm open was not observed. Do not claim it passed live.
+
+Third pass (review round 2)
+
+Environment: TracklogHarness built from 8c68562 with `droppykit run`, one
+fresh launch per fixture, driven with Cua Driver background AX actions.
+The harness Activity page is the host-call log.
+
+F1, a real file through the picker (DONE):
+- Launch: TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=artist.
+- Expanded surface -> Blondie artist detail -> Change image...
+- Settings pane showed "Chosen image" / "Blondie" / "Choose image..." /
+  "Remove image". The draft survived the takeover dismissal.
+- Choose image... opened NSOpenPanel "Choose an artist or album image"
+  (window 21492, 880x448, layer 8) in the TracklogHarness process.
+- The panel was driven through its own controls: sidebar "Pictures", then
+  the file list row "tracklog-issue86-panel-choice.png" (PNG image,
+  162 KB, created at ~/Pictures, outside the repository). AXOpen on that
+  row closed the panel with OK.
+- The save completed: the page showed "Saved images" / "Blondie" with
+  "Replace image for Blondie" and "Remove image for Blondie", and the
+  "Chosen image" section was gone (successful-save clear).
+- Reopened Blondie from the History row menu "Open artist": the detail
+  showed the heading Blondie, the local count, "Change image..." and
+  "Remove" (the override-owned detail), and the chosen magenta image.
+  The header is visual; the screenshot
+  docs/reports/issue-86/live-f1-detail-override.png was sampled for the
+  chosen PNG's flat colour: 4,533 matching pixels with the dominant
+  cluster in the header sleeve region (about 80x80 pt). The neutral
+  sleeve fixture has no pixel of that colour. The textual proof is the
+  Remove action and the saved-list row.
+- Panel keys: no Go-to-folder keystroke was needed. The earlier failure
+  was that Cmd-Shift-G went to the harness search field because the
+  panel was not key; this pass used only panel controls and worked.
+
+Stall cause: NSOpenPanel.runModal() blocks the harness's main thread for
+as long as the panel is open. AX presses that enter the action return
+-25204 (the action never completes), and AXOpen returns -25205 when the
+modal session ends; AX reads and clicks on the harness window hang until
+the panel closes. The earlier "sidebar stopped responding" was a panel
+still open, not a harness bug.
+
+F2, live Cancel and Delete (DONE):
+- Launch: TRACKLOG_HARNESS_DETAIL=track. Track page "Heart of Glass" with
+  "1 listen".
+- Row menu "Actions for Heart of Glass" -> "Delete listen..." showed
+  `Delete "Heart of Glass"?` with Cancel and Delete.
+- Cancel: the page still showed "1 listen" and the row stayed, with the
+  confirmation gone.
+- Menu again -> "Delete listen..." -> Delete: the local section changed to
+  "0 listens" and the confirmation disappeared.
+
+F11, Command-Return (DONE):
+- Launch: TRACKLOG_HARNESS_PALETTE=normal. The palette "Search and play"
+  opened with query `blo`; the selected Blondie row's hint read
+  "Return opens details. Option-Return plays. Command-Return opens the
+  Last.fm page."
+- Command-Return on the palette window closed it. The harness Activity
+  page host calls now read:
+  `open https://www.last.fm/music/Blondie` (01:05:21.674).
+  No detail was opened, so the Last.fm URL is from the command path.
+
+F12, palette Return then Back (DONE):
+- Launch: TRACKLOG_HARNESS_HISTORY=jump TRACKLOG_HARNESS_PALETTE=normal.
+  The jump loaded the yesterday window; opening the palette dismissed the
+  takeover, which cleared the jump notice but kept the jumped rows.
+- Return on Blondie opened the Blondie artist detail from the palette
+  (heading Blondie, "On this Mac. 1 listen...").
+- Back revealed the newest feed: "Thursday, 5 November 2026, 4 listens"
+  first, then "Wednesday, 4 November 2026, 2 listens", 6 listens in all,
+  and no "Showing from" jump bar. The stale jumped window would have
+  started at 4 November 20:00 with its notice.
+- The in-takeover Back from a real jump is still the `history-jump-back`
+  gate shot, which passes in this run.
+
+F13, album image after Remove: not observed live. The harness override
+fixtures are artist images and there is no live Last.fm album read on
+this machine. Covered by
+removingAnAlbumOverrideRestoresTheServiceImage and
+removingAnAlbumOverrideStartsTheServiceImageThatArrivedUnderIt against
+the scripted transport (1 request when the service image was already
+downloaded, 1 request when it was never fetched under the override).
+
+F14, draft clearing (DONE):
+- After the F1 save, the "Chosen image" section cleared while the Images
+  page stayed up.
+- Opened Change image... again: "Chosen image" / "Blondie" appeared,
+  again surviving the takeover dismissal.
+- Switched from the Settings pane to the Expanded surface (the Images
+  page left the screen), then back to Settings: "Chosen image" was gone
+  and "Saved images" / "Blondie" remained.
+- A page that leaves while the image bytes are being stored cannot lose
+  the save: the draft is copied before the first suspension. The
+  composition test holds the store write, clears the draft, then lets the
+  write finish and finds the override saved.
+
+Fourth pass (review round 3, F15)
+
+Environment: TracklogHarness rebuilt from 19768f7 with `droppykit run`,
+one fresh launch with TRACKLOG_HARNESS_DETAIL=artist. This re-runs the
+path F1 proved, now that the picker captures the entity before the panel
+instead of reading the draft after the file read.
+
+- Expanded surface -> Blondie artist detail -> Change image...
+- Settings pane showed "Chosen image" / "Blondie" / "Choose image...".
+- Choose image... opened NSOpenPanel "Choose an artist or album image"
+  in the TracklogHarness process. The panel opened in Pictures; the file
+  list row "tracklog-issue86-panel-choice.png" (PNG image, 162 KB,
+  outside the repository) was opened with AXOpen. The panel closed.
+- "Chosen image" cleared and "Saved images" showed "Blondie" with
+  "Replace image for Blondie" and "Remove image for Blondie".
+- Expanded surface again -> row menu "Open artist" -> Blondie detail:
+  "Change image..." and "Remove" are present, so the override owns the
+  detail. The refreshed screenshot docs/reports/issue-86/live-f1-detail-override.png
+  sampled 4,533 pixels of the chosen PNG's flat colour with the dominant
+  cluster in the header sleeve region, the same as the round-2 run.
+- The harness was quit after the check. `list_windows(app: "Tracklog")`
+  returned no windows; no NSOpenPanel was left open.
+
+The two F15 composition cases (draft cleared before the save, and the
+draft changed to another entity before the save) are covered at the
+runtime's explicit saveImageOverride seam; the live run exercises the
+same save path through the real panel.
+
+Fifth pass (PR review comments)
+
+Environment: TracklogHarness rebuilt from 786d5e7 with `droppykit run`,
+TRACKLOG_HARNESS_DETAIL=track.
+
+- Expanded surface showed the Heart of Glass track page ("Blondie -
+  Parallel Lines", "Duration" section).
+- Row menu "Actions for Heart of Glass" -> "Open artist" opened the
+  Blondie artist detail.
+- The detail Back returned to the same track page: AXStaticText
+  "Blondie - Parallel Lines" and "Duration" were present after Back. The
+  track page stayed on the stack; before the fix Back closed the detail
+  to History.
+- Harness quit; no windows remain.
+
+The Images settings fixture change is covered by the gate run: the
+`corrupt-override` + `images` shot now shows "Chosen image" /
+"Talking Heads", "Choose image...", "Remove image", the unreadable
+Talking Heads saved row and the valid Blondie row. `images-settings.png`
+was refreshed from that run. The Loved row hint/action change is source
+and AX-label work; no separate live VoiceOver pass was run.
+
+The damaged-artwork repair (8632286) is covered by
+savingTheSameImageAgainRepairsAnUnreadableStoredCopy, which damages the
+stored row, re-saves the same bytes and reopens the store. No live drive
+was used to corrupt a real row. The delete-count guard and the artist/album
+reload (62b1d80, 2d1ea1e) are covered by
+deletingAnotherTracksListenLeavesTheOpenTrackAlone and
+deletingAListenRefreshesItsOpenAlbumPage; the delete races are not
+reproduced through the harness.
+
+The bounded remote-image read and the picker task ownership (25833c4)
+are structural changes: the transport ceiling is covered by the
+existing oversized-image composition test through the bounded default,
+and the picker guards were built, linted and gate-tested but not
+re-driven live on this head. The last live picker save was the
+19768f7 run above.
+
+Gate receipt: exit 0, frozen true, clean before and after, 1417.7 s at
+25833c4. Receipt:
+/Users/ranokay/.local/state/agent-tools/gates/20261105T030235Z-4c83c114df3e.json
+Log: the same path ending .log. It reports 796 tests in 106 suites.

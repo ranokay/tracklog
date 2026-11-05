@@ -7,6 +7,7 @@ public extension CaptureRuntime {
         charts?.deactivate()
         catalogueSearch?.deactivate()
         loved?.deactivate()
+        entityDetail?.deactivate()
         pauseTask?.cancel()
         pauseTask = nil
         deliveryRefreshTask?.cancel()
@@ -45,6 +46,15 @@ public extension CaptureRuntime {
         guard clamped != state.minimumDuration else { return }
         state.minimumDuration = clamped
         engine.setMinimumThreshold(clamped)
+        persistCurrentSettings()
+    }
+
+    /// The Images page's privacy switch. State changes synchronously so the
+    /// settings export and the toggle agree; owned lookup work follows.
+    func setArtistImageLookupsEnabled(_ enabled: Bool) {
+        guard enabled != state.artistImageLookupsEnabled else { return }
+        state.artistImageLookupsEnabled = enabled
+        entityDetail?.artistImageLookupsSettingChanged(enabled)
         persistCurrentSettings()
     }
 }

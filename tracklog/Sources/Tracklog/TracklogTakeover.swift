@@ -7,6 +7,7 @@ import TracklogCore
 struct TracklogTakeover: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
+    let presentationID: UUID
 
     var body: some View {
         GeometryReader { proxy in
@@ -19,13 +20,17 @@ struct TracklogTakeover: View {
                 if let refusal = state.searchRefusal {
                     SearchRefusalBar(state: state, message: refusal)
                 }
-                Group {
-                    if state.takeoverSection == .charts {
-                        TracklogChartsView(droplet: droplet, state: state)
-                    } else if state.takeoverSection == .loved {
-                        TracklogLovedView(droplet: droplet, state: state)
-                    } else {
-                        TracklogHistoryContent(droplet: droplet, state: state)
+                ZStack(alignment: .topLeading) {
+                    sectionContent
+                        .opacity(state.entityDetail == nil ? 1 : 0)
+                        .allowsHitTesting(state.entityDetail == nil)
+                        .accessibilityHidden(state.entityDetail != nil)
+                    if let detail = state.entityDetail {
+                        TracklogEntityDetailView(
+                            droplet: droplet,
+                            state: state,
+                            detail: detail,
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,12 +42,29 @@ struct TracklogTakeover: View {
                 alignment: .topLeading,
             )
             .animation(TracklogMotion.stateAnimation, value: takeoverKey)
-            .onDisappear { droplet.takeoverDidDisappear() }
+            .onDisappear { droplet.takeoverDidDisappear(presentationID) }
+        }
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        if state.takeoverSection == .charts {
+            TracklogChartsView(droplet: droplet, state: state)
+        } else if state.takeoverSection == .loved {
+            TracklogLovedView(droplet: droplet, state: state)
+        } else {
+            TracklogHistoryContent(droplet: droplet, state: state)
         }
     }
 
     private var takeoverKey: String {
-        "\(state.takeoverSection.rawValue)|\(takeoverPinnedKey(state))"
+        [
+            state.takeoverSection.rawValue,
+            takeoverPinnedKey(state),
+            state.entityDetail?.request.kind.rawValue ?? "",
+            state.entityDetail?.request.key ?? "",
+            String(describing: state.entityDetail?.imageSource),
+        ].joined(separator: "|")
     }
 }
 
@@ -59,7 +81,7 @@ struct TakeoverHeader: View {
                 "Sections",
                 selection: Binding(
                     get: { state.takeoverSection },
-                    set: { state.setTakeoverSection($0) },
+                    set: { droplet.selectTakeoverSection($0) },
                 ),
             ) {
                 Text("History").tag(TakeoverSection.history)
@@ -85,7 +107,9 @@ struct TakeoverHeader: View {
             .help("Search and play")
             .accessibilityLabel(Text("Search and play"))
 
-            if state.takeoverSection == .charts || state.takeoverSection == .loved {
+            if state.entityDetail != nil
+                || state.takeoverSection == .charts
+                || state.takeoverSection == .loved {
                 connectionSwitcher
                     .frame(width: 208, alignment: .trailing)
                     .padding(.leading, DroppySpacing.sm)

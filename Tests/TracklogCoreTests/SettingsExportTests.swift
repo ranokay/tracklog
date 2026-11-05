@@ -160,7 +160,11 @@ struct SettingsExportTests: CaptureTestHelpers {
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == ["version", "settings", "apps", "simple_edits", "blocks"])
         let settingsObject = try #require(object["settings"] as? [String: Any])
-        #expect(Set(settingsObject.keys) == ["scrobbling_enabled", "now_playing_enabled", "minimum_duration"])
+        #expect(Set(settingsObject.keys) == [
+            "scrobbling_enabled", "now_playing_enabled", "minimum_duration",
+            "artist_image_lookups",
+        ])
+        #expect(settingsObject["artist_image_lookups"] as? Bool == true)
         #expect(settingsObject["search_template"] == nil)
         let firstEdit = try #require((object["simple_edits"] as? [[String: Any]])?.first)
         #expect(Set(firstEdit.keys) == ["match", "replacement"])
@@ -328,6 +332,36 @@ struct SettingsExportTests: CaptureTestHelpers {
 
         let decoded = try SettingsExport.decode(export.encoded())
         #expect(decoded.settings.searchTemplate == raw)
+    }
+
+    @Test func anOlderExportWithoutTheLookupSwitchDefaultsItToOn() throws {
+        let data = Data(
+            #"""
+            {"version":1,"settings":{"scrobbling_enabled":true,"now_playing_enabled":true,
+            "minimum_duration":30},"apps":[],"simple_edits":[],"blocks":[]}
+            """#.utf8,
+        )
+        let export = try SettingsExport.decode(data)
+        #expect(export.settings.artistImageLookupsEnabled)
+    }
+
+    @Test func theLookupSwitchIsEncodedAndRoundTrips() throws {
+        let export = SettingsExport(
+            settings: SettingsExportSettings(
+                scrobblingEnabled: true,
+                nowPlayingEnabled: true,
+                minimumDuration: 30,
+                artistImageLookupsEnabled: false,
+            ),
+            apps: [],
+            simpleEdits: [],
+            blocks: [],
+        )
+        let text = try String(data: export.encoded(), encoding: .utf8) ?? ""
+        #expect(text.contains(#""artist_image_lookups" : false"#)
+            || text.contains(#""artist_image_lookups": false"#))
+        let decoded = try SettingsExport.decode(export.encoded())
+        #expect(!decoded.settings.artistImageLookupsEnabled)
     }
 }
 

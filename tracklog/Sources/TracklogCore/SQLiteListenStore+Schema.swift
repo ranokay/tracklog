@@ -272,6 +272,34 @@ extension SQLiteListenStore {
                     """,
                 )
             },
+            Migration(version: 12) { handle in
+                // A user-picked artist or album image, keyed by the local chart
+                // grouping key. The stored copy lives in `artwork`; removal and
+                // replacement garbage-collect a blob only when nothing else
+                // still references it.
+                try execute(
+                    handle,
+                    """
+                    CREATE TABLE image_overrides (
+                        entity_kind TEXT NOT NULL,
+                        entity_key TEXT NOT NULL,
+                        display_title TEXT NOT NULL,
+                        display_subtitle TEXT NOT NULL,
+                        artwork_hash TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        PRIMARY KEY (entity_kind, entity_key)
+                    );
+                    CREATE INDEX image_overrides_artwork ON image_overrides (artwork_hash);
+                    CREATE TABLE artist_image_cache (
+                        artist_key TEXT PRIMARY KEY,
+                        artwork_hash TEXT,
+                        outcome TEXT NOT NULL,
+                        checked_at REAL NOT NULL
+                    );
+                    CREATE INDEX artist_image_cache_artwork ON artist_image_cache (artwork_hash);
+                    """,
+                )
+            },
         ]
     }
 

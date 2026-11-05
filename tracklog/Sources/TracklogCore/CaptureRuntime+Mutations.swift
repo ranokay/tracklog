@@ -43,7 +43,7 @@ public extension CaptureRuntime {
         // the old values back on screen. A track view is closed because the
         // edited key may no longer match it.
         state.listens = state.listens.map { $0.id == id ? result.listen : $0 }
-        closeTrackHistory()
+        closeEntityDetail()
         if result.rule != nil {
             await loadSimpleEdits()
         }
@@ -75,8 +75,32 @@ public extension CaptureRuntime {
 
         state.listens.removeAll { $0.id == id }
         state.historyCount = max(0, state.historyCount - 1)
-        if state.trackHistory != nil {
-            await reloadTrackHistory()
+        let openDetail = state.entityDetail?.request
+        let deletedTrackKey = EntityRequest.track(listen)?.key
+        let deletedArtistKey = EntityRequest.artist(from: listen)?.key
+        let deletedAlbumKey = EntityRequest.album(from: listen)?.key
+        if let deletedTrackKey,
+           openDetail?.kind == .track,
+           openDetail?.key == deletedTrackKey {
+            if var detail = state.entityDetail, var track = detail.track {
+                track.listens.removeAll { $0.id == id }
+                track.totalCount = max(0, track.totalCount - 1)
+                detail.track = track
+                detail.local = EntityLocalDetail(
+                    count: max(0, detail.local.count - 1),
+                    firstListenedAt: detail.local.firstListenedAt,
+                    lastListenedAt: detail.local.lastListenedAt,
+                    topTracks: detail.local.topTracks,
+                    capturedArtworkHash: detail.local.capturedArtworkHash,
+                )
+                state.entityDetail = detail
+            }
+            await reloadEntityDetail()
+        } else if (openDetail?.kind == .artist && openDetail?.key == deletedArtistKey)
+            || (openDetail?.kind == .album && openDetail?.key == deletedAlbumKey) {
+            // A track delete also changes the artist or album page it belongs
+            // to; reload only that page so its count and top tracks follow.
+            await reloadEntityDetail()
         }
         await reloadVisibleHistory(in: baseStore, requiresScrobbling: false)
         await reloadDeliveryState()

@@ -56,6 +56,7 @@ struct HistoryDayHeader: View {
 
 // MARK: - Row
 
+// swiftlint:disable:next type_body_length
 struct HistoryRow: View {
     let listen: Listen
     let droplet: TracklogDroplet
@@ -125,7 +126,7 @@ struct HistoryRow: View {
             .contentShape(Rectangle())
             .accessibilityLabel(rowLabel)
             .accessibilityValue(deliveryValue)
-            .accessibilityHint(Text("Shows this track's history"))
+            .accessibilityHint(Text("Opens this track's page"))
             .accessibilityAction(named: Text("Search and play")) {
                 droplet.searchAndPlay(
                     title: listen.processed.title,
@@ -273,6 +274,20 @@ struct HistoryRow: View {
                 title: listen.processed.title,
                 artist: listen.processed.artist,
             )
+        }
+        if EntityRequest.artist(from: listen) != nil || EntityRequest.album(from: listen) != nil {
+            Section("Details") {
+                if EntityRequest.artist(from: listen) != nil {
+                    Button("Open artist") {
+                        droplet.openEntityDetailFromHistory(listen, kind: .artist)
+                    }
+                }
+                if EntityRequest.album(from: listen) != nil {
+                    Button("Open album") {
+                        droplet.openEntityDetailFromHistory(listen, kind: .album)
+                    }
+                }
+            }
         }
         Section("History") {
             Button("Edit listen…") {

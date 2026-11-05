@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import AppKit
 import DroppyKit
 import SwiftUI
@@ -74,8 +75,17 @@ public final class TracklogDroplet: NSObject, Droplet {
     var exportOperationID: UUID?
     var exportPanel: NSSavePanel?
     var exportAlert: NSAlert?
+    /// The image picker the Images page opened. Deactivation cancels it like
+    /// the export panel.
+    var imageOverridePanel: NSOpenPanel?
+    /// The off-main file read and save for the Images picker. Owned so a
+    /// deactivation cancels it, and paired with a generation and operation id
+    /// so a stale read cannot save through a replacement runtime.
+    var imageOverrideTask: Task<Void, Never>?
+    var imageOverrideOperationID: UUID?
+    var imageOverrideGeneration = 0
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     public func activate(host: DropletHost) throws {
         self.host = host
 
@@ -119,6 +129,7 @@ public final class TracklogDroplet: NSObject, Droplet {
             )
         }
         self.runtime = runtime
+        imageOverrideGeneration += 1
         if isHarness {
             state.setHarnessSettingsPage(
                 ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"],
@@ -151,6 +162,9 @@ public final class TracklogDroplet: NSObject, Droplet {
             if isHarness {
                 await HarnessDemo.showNowPlaying(on: runtime, droplet: self)
                 await showHarnessSection()
+                if HarnessDetailFixture.selected != nil {
+                    await HarnessDetailDemo.show(on: self)
+                }
                 if state.takeoverSection == .loved {
                     await HarnessLovedDemo.prepare(on: self)
                 }
@@ -314,7 +328,8 @@ public final class TracklogDroplet: NSObject, Droplet {
         // history edit page needs the same harness route so the interactive
         // edit flow can be inspected there. The date-jump page keeps its
         // documented refusal state.
-        if host.environment.isHarness, id == tracklogHistoryEditPageID {
+        if host.environment.isHarness,
+           id == tracklogHistoryEditPageID || id == tracklogImagesPageID {
             state.setHarnessSettingsPage(id)
             dismissTakeoverForSettings()
             return true
@@ -329,6 +344,7 @@ public final class TracklogDroplet: NSObject, Droplet {
     }
 
     public func presentHistory(expandingPending: Bool = false) {
+        closeEntityDetail()
         state.setTakeoverSection(.history)
         guard let host else { return }
         if expandingPending {

@@ -182,11 +182,11 @@ struct HistoryMutationTests {
         #expect(runtime.state.chartState.snapshot?.items.map(\.title) == ["Corrected"])
         #expect(runtime.state.chartState.snapshot?.localTotal == 1)
 
-        await runtime.openTrackHistory(edited)
-        #expect(runtime.state.trackHistory?.totalCount == 1)
+        await openTrackDetail(runtime, edited)
+        #expect(runtime.state.entityDetail?.track?.totalCount == 1)
         try await runtime.deleteListen(edited)
-        #expect(runtime.state.trackHistory?.totalCount == 0)
-        #expect(runtime.state.trackHistory?.listens.isEmpty == true)
+        #expect(runtime.state.entityDetail?.track?.totalCount == 0)
+        #expect(runtime.state.entityDetail?.track?.listens.isEmpty == true)
     }
 
     @Test func aWaitingDeliveryKeepsItsStateAndSendsEditedValues() async throws {
@@ -723,15 +723,15 @@ struct HistoryMutationTests {
         await runtime.start()
         #expect(runtime.state.listens.map(\.processed.title) == ["Newest"])
 
-        await runtime.openTrackHistory(oldest)
-        #expect(runtime.state.trackHistory?.listens.first?.id == oldest.id)
+        await openTrackDetail(runtime, oldest)
+        #expect(runtime.state.entityDetail?.track?.listens.first?.id == oldest.id)
         #expect(runtime.state.deliveries(for: oldest).count == 1)
 
         runtime.state.requestListenEdit(oldest)
-        runtime.closeTrackHistory()
+        runtime.closeEntityDetail()
         await runtime.reloadDeliveryState()
 
-        #expect(runtime.state.trackHistory == nil)
+        #expect(runtime.state.entityDetail?.track == nil)
         #expect(runtime.state.deliveries(for: oldest).count == 1)
     }
 

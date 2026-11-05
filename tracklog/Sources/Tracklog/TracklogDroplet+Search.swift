@@ -26,6 +26,14 @@ extension TracklogDroplet {
     func retryCatalogueSearch() {
         runtime?.catalogueSearch?.retry()
     }
+
+    /// Return on a palette row. The panel closes before the takeover presents,
+    /// so only one droplet surface is ever up.
+    func openPaletteRowDetails(_ row: CatalogueRow) {
+        guard let request = EntityRequest.catalogueRow(row) else { return }
+        searchPaletteController.close()
+        presentEntityDetail(request)
+    }
 }
 
 // MARK: - Playing

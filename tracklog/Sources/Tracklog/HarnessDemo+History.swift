@@ -87,12 +87,14 @@ enum HarnessHistoryDemo {
         case .jump:
             await runtime.jumpHistory(to: jumpDate())
         case .track, .trackError:
-            if let row = runtime.state.listens.first(where: { $0.processed.title == "Heart of Glass" }) {
-                await runtime.openTrackHistory(row)
+            if let row = runtime.state.listens.first(where: { $0.processed.title == "Heart of Glass" }),
+               let request = EntityRequest.track(row) {
+                await runtime.openEntityDetail(request)
             }
         case .trackMissingArtwork:
-            if let row = runtime.state.listens.first(where: { $0.processed.title == "Blue Monday" }) {
-                await runtime.openTrackHistory(row)
+            if let row = runtime.state.listens.first(where: { $0.processed.title == "Blue Monday" }),
+               let request = EntityRequest.track(row) {
+                await runtime.openEntityDetail(request)
             }
         case .deleteListen:
             if let row = runtime.state.listens.first(where: { $0.processed.title == "Once in a Lifetime" }) {

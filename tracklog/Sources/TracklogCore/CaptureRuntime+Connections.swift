@@ -34,6 +34,7 @@ extension CaptureRuntime {
         charts?.connectionsChanged()
         catalogueSearch?.connectionsChanged()
         loved?.connectionsChanged()
+        entityDetail?.connectionsChanged()
     }
 }
 

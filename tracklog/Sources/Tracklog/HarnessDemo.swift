@@ -59,6 +59,7 @@ enum HarnessDemo {
     }
 
     @MainActor
+    // swiftlint:disable:next cyclomatic_complexity
     static func showNowPlaying(on runtime: CaptureRuntime, droplet: TracklogDroplet) async {
         let state = HarnessDemoState.selected
         let chartFixture = HarnessChartFixture.selected
@@ -78,6 +79,13 @@ enum HarnessDemo {
             if paletteFixture.linksLastFM {
                 _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
             } else {
+                _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
+            }
+        } else if let detailFixture = HarnessDetailFixture.selected {
+            if detailFixture.linksLastFM {
+                _ = try? await runtime.link(kind: .lastFM, credential: "demo-session")
+            }
+            if detailFixture.linksListenBrainz {
                 _ = try? await runtime.link(kind: .listenBrainz, credential: "demo-token")
             }
         } else if HarnessLovedFixture.selected != nil
@@ -163,8 +171,10 @@ final class HarnessDemoSource: NowPlayingSource {
 actor HarnessDemoStore: ListenStore, AppAllowlistStore, SimpleEditStore, BlockStore, ArtworkStore, ConnectionStore,
     DeliveryStore, FeedbackStore, ChartStore {
     var listens: [Listen]
-    private var artworks: [String: StoredArtwork]
-    private var artworkHashes: [String: String]
+    var artworks: [String: StoredArtwork]
+    var artworkHashes: [String: String]
+    var imageOverrideRows: [String: ImageOverride] = [:]
+    var artistImageCacheRows: [String: ArtistImageCacheEntry] = [:]
     private var seenApps: [SeenApp]
     private var simpleEdits: [SimpleEditRule]
     private var blockRules: [BlockRule]
