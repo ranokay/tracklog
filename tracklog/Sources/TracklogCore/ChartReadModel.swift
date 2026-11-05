@@ -1,10 +1,11 @@
-// swiftlint:disable file_length type_body_length function_body_length cyclomatic_complexity function_parameter_count
+// swiftlint:disable file_length
 import Foundation
 
 /// The one statistics boundary shared by local history and the service
 /// adapters. Views publish nothing themselves; every row, total, saved age and
 /// failure in ``ChartViewState`` comes from here.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class ChartReadModel {
     public let state: TracklogAppState
     public private(set) var selection: ChartSelection
@@ -306,6 +307,7 @@ public final class ChartReadModel {
         state.chartState = ChartViewState(selection: new)
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func load(force: Bool, automatic: Bool = false) async {
         guard isActive, isShowing else { return }
         defer { rescheduleFreshnessWake() }
@@ -390,6 +392,7 @@ public final class ChartReadModel {
     /// Returns which reads this pass actually attempted, so an explicit
     /// refresh that arrived during a cache-only or total-only pass can force
     /// the missing read without duplicating one already underway.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private func performLoad(_ request: ChartRequest, force: Bool, automatic: Bool) async -> ChartLoadOutcome {
         if !didPruneCache {
             didPruneCache = true
@@ -518,6 +521,7 @@ public final class ChartReadModel {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func loadService(
         _ request: ChartRequest,
         force: Bool,
@@ -601,6 +605,7 @@ public final class ChartReadModel {
         )
     }
 
+    // swiftlint:disable:next function_parameter_count
     private func loadServiceTotal(
         client: any ChartServiceReading,
         connection: Connection,
@@ -809,6 +814,7 @@ public final class ChartReadModel {
         let scopeKey: String
     }
 
+    // swiftlint:disable:next function_body_length
     private func resolvedRequest() throws -> ChartRequest {
         let resolved = selection
         let connection = state.currentConnection
@@ -1089,5 +1095,3 @@ public final class ChartReadModel {
         ].joined(separator: "\u{1F}")
     }
 }
-
-// swiftlint:enable file_length type_body_length function_body_length cyclomatic_complexity function_parameter_count
