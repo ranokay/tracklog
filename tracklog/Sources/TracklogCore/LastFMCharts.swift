@@ -1,4 +1,3 @@
-// swiftlint:disable cyclomatic_complexity
 import Foundation
 
 // MARK: - Last.fm reads
@@ -7,6 +6,7 @@ public extension LastFMClient {
     /// `user.getTopArtists`, `user.getTopAlbums` or `user.getTopTracks` for
     /// the connection's own account. Last.fm exposes rolling periods only; the
     /// returned page therefore carries no returned span.
+    // swiftlint:disable:next cyclomatic_complexity
     func topChart(
         type: ChartType,
         user: String,
@@ -143,5 +143,3 @@ extension LastFMAdapter: ChartServiceReading {
         return (error as? LastFMError)?.serviceFailure ?? .retryable
     }
 }
-
-// swiftlint:enable cyclomatic_complexity
