@@ -223,6 +223,8 @@ def main() -> int:
             file=sys.stderr,
         )
         remaining = tear_down(child, args.grace)
+        # tear_down may have reaped the child first, so walk its group directly.
+        kill_child_group(child.pid)
         if remaining:
             print(f"run_with_timeout: still alive after SIGKILL: {sorted(remaining)}", file=sys.stderr)
         return 128 + received

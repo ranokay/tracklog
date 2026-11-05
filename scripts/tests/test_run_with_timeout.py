@@ -69,6 +69,25 @@ with open(pidfile, "w", encoding="utf-8") as handle:
     handle.write(str(grandchild.pid))
 """
 
+# The child ignores SIGTERM, starts a same-group grandchild, then exits 0 as
+# soon as the release file appears. A signal sent before that exit exercises the
+# early-signal path after the child has already been reaped.
+EARLY_SIGNAL_CHILD = """
+import os
+import signal
+import subprocess
+import sys
+
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pidfile, release = sys.argv[1], sys.argv[2]
+grandchild = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+with open(pidfile, "w", encoding="utf-8") as handle:
+    handle.write(f"{os.getpid()} {grandchild.pid}\\n")
+while not os.path.exists(release):
+    pass
+raise SystemExit(0)
+"""
+
 
 def wait_for_file(path: Path, timeout: float = WAIT_SECONDS) -> None:
     deadline = time.monotonic() + timeout
@@ -246,6 +265,36 @@ class RunWithTimeoutTests(unittest.TestCase):
         self.assertTrue(WRAPPER.signal_wins(15, True))
         self.assertFalse(WRAPPER.signal_wins(15, False))
         self.assertFalse(WRAPPER.signal_wins(None, True))
+
+    def test_early_signal_cleans_the_child_group(self) -> None:
+        pidfile = self.root / f"early-signal-{time.monotonic_ns()}"
+        release = self.root / f"release-{time.monotonic_ns()}"
+        child = self.root / f"early-signal-child-{time.monotonic_ns()}.py"
+        child.write_text(EARLY_SIGNAL_CHILD, encoding="utf-8")
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--timeout",
+                "600",
+                "--grace",
+                "0.3",
+                "--",
+                sys.executable,
+                str(child),
+                str(pidfile),
+                str(release),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        pids = self.pids_from(pidfile)
+        os.kill(process.pid, signal.SIGTERM)
+        release.write_text("release", encoding="utf-8")
+        _stdout, stderr = process.communicate(timeout=WAIT_SECONDS)
+        self.assertEqual(process.returncode, 143, stderr)
+        wait_gone(pids)
 
     def test_kill_child_group_ignores_permission_error(self) -> None:
         with mock.patch.object(
