@@ -1,9 +1,10 @@
-// swiftlint:disable file_length type_body_length function_body_length
+// swiftlint:disable file_length
 import Foundation
 
 /// The capture composition seam: one clock, one now-playing source, one
 /// database. Constructed at activation and torn down at deactivation.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class CaptureRuntime {
     public let state: TracklogAppState
 
@@ -99,6 +100,7 @@ public final class CaptureRuntime {
     /// of the same save must still repair the connections.
     var lastFMInvalidationPending = false
 
+    // swiftlint:disable:next function_body_length
     public init(
         state: TracklogAppState = TracklogAppState(),
         clock: any Clock,
@@ -512,5 +514,3 @@ extension CaptureRuntime {
         return true
     }
 }
-
-// swiftlint:enable file_length type_body_length function_body_length
