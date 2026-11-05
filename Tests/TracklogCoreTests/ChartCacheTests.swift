@@ -1,10 +1,11 @@
-// swiftlint:disable file_length function_body_length type_body_length
+// swiftlint:disable file_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Chart cache and lifecycle", .serialized)
 @MainActor
+// swiftlint:disable:next type_body_length
 struct ChartCacheTests {
     private let utc = TimeZone(identifier: "UTC")!
 
@@ -306,6 +307,7 @@ struct ChartCacheTests {
         #expect(await chartStatsRequestCount(transport) == 1, "the manual refresh shares the fetch already underway")
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func aManualRefreshDuringATotalOnlyFetchStillRefreshesTheList() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -443,6 +445,7 @@ struct ChartCacheTests {
         #expect(try await store.chartCacheCount() == 1, "the obsolete artists response was never stored")
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func cachedRowsAreScopedByAccountAndSelection() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -1462,6 +1465,7 @@ struct ChartCacheTests {
         )
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func anAutomaticTotalRefreshDoesNotRetryAFailedList() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -1703,6 +1707,7 @@ struct ChartCacheTests {
         #expect(state.chartState.snapshot?.savedAt == clock.now)
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func anOlderFreshTotalRefreshesWithoutRefetchingTheFreshList() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -2094,7 +2099,8 @@ struct ChartCacheTests {
     }
 
     /// Repeated runtime deactivation must leave no late chart or capture work.
-    @Test func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws {
+    @Test
+    func runtimeDeactivateReactivateCyclesLeaveNoLateChartOrCaptureWork() async throws { // swiftlint:disable:this function_body_length
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
@@ -2334,5 +2340,3 @@ func chartWaitForDelivery(
     }
     return nil
 }
-
-// swiftlint:enable file_length function_body_length type_body_length

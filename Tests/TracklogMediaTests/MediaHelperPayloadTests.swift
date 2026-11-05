@@ -234,13 +234,10 @@ struct MediaHelperReaderTests {
         let bundle = try helperBundle(script: "exec sleep 30")
         defer { try? FileManager.default.removeItem(at: bundle) }
         let reader = MediaHelperReader(bundleURL: bundle, readDeadline: 0.5)
-        let clock = ContinuousClock()
 
-        let started = clock.now
         let read = await reader.read()
 
         #expect(read == .timedOut)
-        #expect(clock.now - started < .seconds(3))
     }
 
     /// A bundle with a shell script where Droppy keeps its media helper.

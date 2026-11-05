@@ -1,10 +1,11 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Loved browsing", .serialized, .timeLimit(.minutes(1)))
 @MainActor
+// swiftlint:disable:next type_body_length
 struct LovedBrowsingTests {
     private let base = Date(timeIntervalSince1970: 1_000_000)
 
@@ -1777,5 +1778,3 @@ struct LovedBrowsingTests {
         #expect(runtime.state.feedbackByTrack[ListenMetadata(track).identity] == nil)
     }
 }
-
-// swiftlint:enable file_length type_body_length

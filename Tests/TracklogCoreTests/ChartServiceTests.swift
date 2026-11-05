@@ -1,25 +1,30 @@
-// swiftlint:disable file_length function_body_length large_tuple type_body_length optional_data_string_conversion
+// swiftlint:disable file_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Chart service reads", .serialized)
 @MainActor
+// swiftlint:disable:next type_body_length
 struct ChartServiceTests {
     private let utc = TimeZone(identifier: "UTC")!
 
+    // swiftlint:disable:next function_body_length
     @Test func lastFMChartsUseRollingPeriodsAndProviderCounts() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let flags = ChartFlags()
+        // swiftlint:disable:next large_tuple
         let artists: [(String, String, Int, String)] = [
             ("Blondie", "", 42, "artist-mbid"),
             ("Missing MBID", "", 7, ""),
         ]
+        // swiftlint:disable:next large_tuple
         let albums: [(String, String, Int, String)] = [
             ("Parallel Lines", "Blondie", 30, "album-mbid"),
         ]
+        // swiftlint:disable:next large_tuple
         let tracks: [(String, String, Int, String)] = [
             ("Heart of Glass", "Blondie", 20, "track-mbid"),
         ]
@@ -122,6 +127,7 @@ struct ChartServiceTests {
         #expect(await transport.recordedRequests.filter { chartMethod($0) == "user.getInfo" }.count == 2)
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func listenBrainzChartsUseCompletedPeriodsAndReturnedDates() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -219,6 +225,7 @@ struct ChartServiceTests {
         #expect(chartQueryValue("count", in: statsRequest) == "50")
         #expect(chartQueryValue("offset", in: statsRequest) == "0")
 
+        // swiftlint:disable:next large_tuple
         let expectedBounds: [(ChartPeriod, String, Date, Date)] = [
             (.month, "month", chartDate(2026, 9, 1), chartDate(2026, 10, 1)),
             (.year, "year", chartDate(2025, 1, 1), chartDate(2026, 1, 1)),
@@ -247,6 +254,7 @@ struct ChartServiceTests {
 
         let payloads = try await SQLiteListenStore(url: database.url).chartCachePayloads()
         #expect(!payloads.contains { data in
+            // swiftlint:disable:next optional_data_string_conversion
             String(decoding: data, as: UTF8.self).contains("secret-token")
         }, "no credential enters a chart cache")
     }
@@ -475,6 +483,7 @@ struct ChartServiceTests {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
+        // swiftlint:disable:next large_tuple
         let rows: [(String, String, Int, String)] = (0 ..< 51).map { index in
             (
                 "Artist \(index + 1)",
@@ -523,12 +532,15 @@ struct ChartServiceTests {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
+        // swiftlint:disable:next large_tuple
         let artistRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
             ("Artist \(index + 1)", "", 100 - index, "artist-\(index + 1)")
         }
+        // swiftlint:disable:next large_tuple
         let albumRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
             ("Album \(index + 1)", "Artist \(index + 1)", 100 - index, "album-\(index + 1)")
         }
+        // swiftlint:disable:next large_tuple
         let trackRows: [(String, String, Int, String)] = (0 ..< 51).map { index in
             ("Track \(index + 1)", "Artist \(index + 1)", 100 - index, "track-\(index + 1)")
         }
@@ -1072,6 +1084,7 @@ struct ChartServiceTests {
         #expect(state.chartState.snapshot?.localTotal == nil)
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func listenBrainzChartMatrixKeepsOrderAndCapsEveryEntityAndPeriod() async throws {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
@@ -1090,6 +1103,7 @@ struct ChartServiceTests {
             let type: ChartType = path.contains("/artists")
                 ? .artists
                 : path.contains("/releases") ? .albums : .tracks
+            // swiftlint:disable:next large_tuple
             let rows: [(String, String, Int, String)] = (0 ..< 51).map { index in
                 (
                     "Entity \(index + 1)",
@@ -1437,5 +1451,3 @@ struct ChartServiceTests {
         return ServiceRead(state: state, runtime: runtime)
     }
 }
-
-// swiftlint:enable file_length function_body_length large_tuple type_body_length optional_data_string_conversion

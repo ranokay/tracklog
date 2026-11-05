@@ -6,8 +6,8 @@ swiftlint = "0.65.1"
 swiftformat = "0.64.1"
 
 [tasks.test]
-description = "Run the engine test suite"
-run = "swift test --package-path Tests"
+description = "Run the engine test suite under the process-tree timeout"
+run = "python3 scripts/run_with_timeout.py swift test --package-path Tests"
 
 [tasks.lint]
 description = "Run SwiftFormat, SwiftLint and jactionlint"
@@ -20,6 +20,10 @@ run = "hk fix --all"
 [tasks.hooks]
 description = "Install the hk Git hooks"
 run = "hk install"
+
+[tasks.verify]
+description = "Run the inner-loop checks without the surface shot matrix"
+run = "scripts/verify.sh"
 
 [tasks.gate]
 description = "Run the full pre-submission gate"

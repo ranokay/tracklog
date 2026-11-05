@@ -4,32 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if ! command -v droppykit >/dev/null 2>&1; then
-    echo "error: droppykit is not on PATH; see tracklog/README.md" >&2
-    exit 1
-fi
-
-if ! command -v hk >/dev/null 2>&1; then
-    echo "error: hk is not on PATH; run mise install" >&2
-    exit 1
-fi
-
-echo "==> license resources"
-for notice in LICENSE NOTICE THIRD_PARTY_NOTICES.txt; do
-    cmp "$notice" "tracklog/Assets/Licenses/$notice"
-done
-
-echo "==> lint"
-hk check --all
-
-echo "==> engine tests"
-swift test --package-path Tests
-
-echo "==> droplet build"
-(cd tracklog && droppykit build)
-
-echo "==> droplet validation"
-(cd tracklog && droppykit validate)
+"$ROOT/scripts/verify.sh"
 
 echo "==> surface shots"
 mkdir -p tracklog/shots

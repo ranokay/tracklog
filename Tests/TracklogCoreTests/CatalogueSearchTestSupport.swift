@@ -1,4 +1,3 @@
-// swiftlint:disable large_tuple
 import Foundation
 @testable import TracklogCore
 
@@ -103,6 +102,7 @@ func artistSearchResponse(_ entries: [(name: String, url: String?)]) -> HTTPResp
     return catalogueJSON(#"{"results":{"artistmatches":{"artist":[\#(rows)]}}}"#)
 }
 
+// swiftlint:disable:next large_tuple
 func albumSearchResponse(_ entries: [(name: String, artist: String, url: String?)]) -> HTTPResponse {
     let rows = entries.map { value -> String in
         let link = value.url.map { #""url":"\#($0)","# } ?? #""url":"","#
@@ -111,6 +111,7 @@ func albumSearchResponse(_ entries: [(name: String, artist: String, url: String?
     return catalogueJSON(#"{"results":{"albummatches":{"album":[\#(rows)]}}}"#)
 }
 
+// swiftlint:disable:next large_tuple
 func trackSearchResponse(_ entries: [(name: String, artist: String, url: String?)]) -> HTTPResponse {
     let rows = entries.map { value -> String in
         let link = value.url.map { #""url":"\#($0)","# } ?? #""url":"","#
@@ -120,6 +121,7 @@ func trackSearchResponse(_ entries: [(name: String, artist: String, url: String?
 }
 
 func lovedTracksResponse(
+    // swiftlint:disable:next large_tuple
     _ entries: [(title: String, artist: String, url: String?)],
     page: Int,
     totalPages: Int,
@@ -133,6 +135,7 @@ func lovedTracksResponse(
     )
 }
 
+// swiftlint:disable:next large_tuple
 func oneTrack(_ title: String, artist: String) -> [(name: String, artist: String, url: String?)] {
     [(name: title, artist: artist, url: "https://www.last.fm/music/\(artist)/_/\(title)")]
 }
@@ -141,6 +144,7 @@ func oneArtist(_ name: String) -> [(name: String, url: String?)] {
     [(name: name, url: "https://www.last.fm/music/\(name)")]
 }
 
+// swiftlint:disable:next large_tuple
 func oneAlbum(_ name: String, artist: String) -> [(name: String, artist: String, url: String?)] {
     [(name: name, artist: artist, url: "https://www.last.fm/music/\(artist)/\(name)")]
 }
@@ -171,5 +175,3 @@ func updateQueryAndAdvanceDebounce(_ clock: FakeClock, _ model: CatalogueSearchR
     }
     clock.advance(to: clock.now.addingTimeInterval(CatalogueSearchReadModel.debounce))
 }
-
-// swiftlint:enable large_tuple

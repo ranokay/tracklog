@@ -50,9 +50,10 @@ actor ScriptedLinkClient: LastFMLinkClient {
 @MainActor
 private func waitForLinkPhase(
     _ model: LastFMLinkModel,
-    timeout: Duration = .seconds(3),
+    timeout: Duration = .seconds(30),
+    sourceLocation: SourceLocation = #_sourceLocation,
     until: (LastFMLinkModel.Phase) -> Bool,
-) async -> LastFMLinkModel.Phase {
+) async throws -> LastFMLinkModel.Phase {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
     var phase = model.phase
@@ -60,6 +61,10 @@ private func waitForLinkPhase(
         try? await Task.sleep(for: .milliseconds(5))
         phase = model.phase
     }
+    try #require(
+        until(phase), "Timed out after \(timeout) waiting for a Last.fm link phase; last phase was \(phase)",
+        sourceLocation: sourceLocation,
+    )
     return phase
 }
 
@@ -67,8 +72,9 @@ private func waitForLinkPhase(
 private func waitForSessionRequests(
     _ client: ScriptedLinkClient,
     count: Int,
-    timeout: Duration = .seconds(3),
-) async -> Int {
+    timeout: Duration = .seconds(30),
+    sourceLocation: SourceLocation = #_sourceLocation,
+) async throws -> Int {
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
     var requests = await client.sessionRequests
@@ -76,18 +82,28 @@ private func waitForSessionRequests(
         try? await Task.sleep(for: .milliseconds(5))
         requests = await client.sessionRequests
     }
+    try #require(
+        requests >= count,
+        "Timed out after \(timeout) waiting for \(count) session request(s); last count was \(requests)", sourceLocation: sourceLocation,
+    )
     return requests
 }
 
 @MainActor
 private func waitForSleeper(
     _ clock: FakeClock,
-    timeout: Duration = .seconds(3),
-) async -> Bool {
+    timeout: Duration = .seconds(30),
+    sourceLocation: SourceLocation = #_sourceLocation,
+) async throws -> Bool {
     let deadline = ContinuousClock().now + timeout
     while clock.sleeperCount == 0, ContinuousClock().now < deadline {
         try? await Task.sleep(for: .milliseconds(5))
     }
+    try #require(
+        clock.sleeperCount > 0,
+        "Timed out after \(timeout) waiting for the poll's clock sleep; last sleeper count was \(clock.sleeperCount)",
+        sourceLocation: sourceLocation,
+    )
     return clock.sleeperCount > 0
 }
 
@@ -132,7 +148,7 @@ struct LastFMLinkTests {
         )
     }
 
-    @Test func startsWithATokenAndOpensTheAuthorizationPage() async {
+    @Test func startsWithATokenAndOpensTheAuthorizationPage() async throws {
         let client = ScriptedLinkClient(tokenAnswers: [.challenge(challenge)])
         var opened: [URL] = []
         let model = makeModel(client: client, opened: { url in
@@ -142,7 +158,7 @@ struct LastFMLinkTests {
 
         model.start()
 
-        let phase = await waitForLinkPhase(model) {
+        let phase = try await waitForLinkPhase(model) {
             if case .waiting = $0 {
                 return true
             }
@@ -153,7 +169,7 @@ struct LastFMLinkTests {
         #expect(await client.tokenRequests == 1)
     }
 
-    @Test func manualCheckLinksTheSessionAndHandsItToCompletion() async {
+    @Test func manualCheckLinksTheSessionAndHandsItToCompletion() async throws {
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
             sessionAnswers: [.session(session)],
@@ -165,7 +181,7 @@ struct LastFMLinkTests {
         )
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         await model.checkNow()
 
         #expect(completed == [session])
@@ -173,7 +189,7 @@ struct LastFMLinkTests {
         #expect(await client.sessionRequests == 1)
     }
 
-    @Test func pollsThroughAnUnauthorizedTokenAndThenLinks() async {
+    @Test func pollsThroughAnUnauthorizedTokenAndThenLinks() async throws {
         let clock = FakeClock(base)
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
@@ -185,14 +201,14 @@ struct LastFMLinkTests {
         let model = makeModel(client: client, clock: clock)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
 
         clock.advance(to: clock.now.addingTimeInterval(3))
-        #expect(await waitForSessionRequests(client, count: 1) == 1)
+        #expect(try await waitForSessionRequests(client, count: 1) == 1)
         #expect(model.phase == .waiting(challenge))
 
         clock.advance(to: clock.now.addingTimeInterval(3))
-        let phase = await waitForLinkPhase(model) {
+        let phase = try await waitForLinkPhase(model) {
             if case .linked = $0 {
                 return true
             }
@@ -204,7 +220,7 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test func aRetryableSessionFailureKeepsPolling() async {
+    @Test func aRetryableSessionFailureKeepsPolling() async throws {
         let clock = FakeClock(base)
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
@@ -213,15 +229,15 @@ struct LastFMLinkTests {
         let model = makeModel(client: client, clock: clock)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
 
         clock.advance(to: clock.now.addingTimeInterval(3))
-        #expect(await waitForSessionRequests(client, count: 1) == 1)
+        #expect(try await waitForSessionRequests(client, count: 1) == 1)
         #expect(model.phase == .waiting(challenge))
-        #expect(await waitForSleeper(clock))
+        #expect(try await waitForSleeper(clock))
 
         clock.advance(to: clock.now.addingTimeInterval(3))
-        let phase = await waitForLinkPhase(model) {
+        let phase = try await waitForLinkPhase(model) {
             if case .linked = $0 {
                 return true
             }
@@ -233,7 +249,7 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test func aRateLimitedSessionFailureHonorsTheRetryAfterHint() async {
+    @Test func aRateLimitedSessionFailureHonorsTheRetryAfterHint() async throws {
         let retryAfter: TimeInterval = 12
         let clock = FakeClock(base)
         let client = ScriptedLinkClient(
@@ -246,12 +262,12 @@ struct LastFMLinkTests {
         let model = makeModel(client: client, clock: clock)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
 
         clock.advance(to: clock.now.addingTimeInterval(3))
-        #expect(await waitForSessionRequests(client, count: 1) == 1)
+        #expect(try await waitForSessionRequests(client, count: 1) == 1)
         #expect(model.phase == .waiting(challenge))
-        #expect(await waitForSleeper(clock))
+        #expect(try await waitForSleeper(clock))
 
         // The next automatic check must wait for the server hint, not the
         // regular three-second cadence.
@@ -260,7 +276,7 @@ struct LastFMLinkTests {
         #expect(await client.sessionRequests == 1)
 
         clock.advance(to: clock.now.addingTimeInterval(1))
-        let phase = await waitForLinkPhase(model) {
+        let phase = try await waitForLinkPhase(model) {
             if case .linked = $0 {
                 return true
             }
@@ -272,7 +288,7 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test func aManualCheckExplainsATransientFailure() async {
+    @Test func aManualCheckExplainsATransientFailure() async throws {
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
             sessionAnswers: [.failure(.transport)],
@@ -280,7 +296,7 @@ struct LastFMLinkTests {
         let model = makeModel(client: client)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         await model.checkNow()
 
         #expect(model.phase == .waiting(challenge))
@@ -288,7 +304,7 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test func aManualCheckExplainsThatAuthorizationIsStillPending() async {
+    @Test func aManualCheckExplainsThatAuthorizationIsStillPending() async throws {
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
             sessionAnswers: [
@@ -298,7 +314,7 @@ struct LastFMLinkTests {
         let model = makeModel(client: client)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         await model.checkNow()
 
         #expect(model.phase == .waiting(challenge))
@@ -307,7 +323,7 @@ struct LastFMLinkTests {
         model.cancel()
     }
 
-    @Test func leavingThePageCancelsThePoll() async {
+    @Test func leavingThePageCancelsThePoll() async throws {
         let clock = FakeClock(base)
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
@@ -316,7 +332,7 @@ struct LastFMLinkTests {
         let model = makeModel(client: client, clock: clock)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         model.cancel()
         clock.advance(to: clock.now.addingTimeInterval(10))
         try? await Task.sleep(for: .milliseconds(50))
@@ -325,7 +341,7 @@ struct LastFMLinkTests {
         #expect(await client.sessionRequests == 0)
     }
 
-    @Test func anAppCredentialFailureIsInlineAndReported() async {
+    @Test func anAppCredentialFailureIsInlineAndReported() async throws {
         let client = ScriptedLinkClient(
             tokenAnswers: [.failure(.service(code: 10, message: "Invalid API key"))],
         )
@@ -334,7 +350,7 @@ struct LastFMLinkTests {
 
         model.start()
 
-        let phase = await waitForLinkPhase(model) {
+        let phase = try await waitForLinkPhase(model) {
             if case .failed = $0 {
                 return true
             }
@@ -349,7 +365,7 @@ struct LastFMLinkTests {
         #expect(reported == [.invalidKey])
     }
 
-    @Test func aFailedSessionIsInlineAndNeverLinked() async {
+    @Test func aFailedSessionIsInlineAndNeverLinked() async throws {
         let client = ScriptedLinkClient(
             tokenAnswers: [.challenge(challenge)],
             sessionAnswers: [.failure(.service(code: 15, message: "This token has expired."))],
@@ -357,7 +373,7 @@ struct LastFMLinkTests {
         let model = makeModel(client: client)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         await model.checkNow()
 
         #expect(model.phase != .linked(connection(session)))
@@ -368,12 +384,12 @@ struct LastFMLinkTests {
         #expect(message.contains("did not accept"))
     }
 
-    @Test func startIsIdempotentWhileWaiting() async {
+    @Test func startIsIdempotentWhileWaiting() async throws {
         let client = ScriptedLinkClient(tokenAnswers: [.challenge(challenge)])
         let model = makeModel(client: client)
 
         model.start()
-        _ = await waitForLinkPhase(model) { $0 == .waiting(challenge) }
+        _ = try await waitForLinkPhase(model) { $0 == .waiting(challenge) }
         model.start()
         try? await Task.sleep(for: .milliseconds(20))
 

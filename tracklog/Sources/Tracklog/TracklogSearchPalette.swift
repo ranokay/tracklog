@@ -1,4 +1,4 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import DroppyKit
 import SwiftUI
 import TracklogCore
@@ -37,6 +37,7 @@ enum SearchPaletteItem: Equatable {
     }
 }
 
+// swiftlint:disable:next type_body_length
 struct TracklogSearchPalette: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -781,5 +782,3 @@ struct TracklogSearchPalette: View {
         return "Return opens details. Option-Return plays. Command-Return opens the Last.fm page."
     }
 }
-
-// swiftlint:enable file_length type_body_length

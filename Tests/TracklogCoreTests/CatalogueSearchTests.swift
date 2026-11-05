@@ -1,10 +1,11 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Catalogue search composition")
 @MainActor
+// swiftlint:disable:next type_body_length
 struct CatalogueSearchCompositionTests: CaptureTestHelpers {
     @MainActor
     private struct Harness {
@@ -771,5 +772,3 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
         #expect(harness.search.group(.artists)?.phase == .ready)
     }
 }
-
-// swiftlint:enable file_length type_body_length

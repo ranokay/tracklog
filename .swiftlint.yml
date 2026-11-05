@@ -9,6 +9,9 @@ excluded:
   - Tests/.swiftpm
 disabled_rules:
   - trailing_comma
+opt_in_rules:
+  - blanket_disable_command
+  - superfluous_disable_command
 line_length:
   warning: 140
   error: 160

@@ -1,4 +1,3 @@
-// swiftlint:disable large_tuple
 import Foundation
 import Testing
 @testable import TracklogCore
@@ -11,6 +10,7 @@ struct ChartCalendarTests {
     @Test func standardWindowsStartAtTheAgreedLocalBoundaries() throws {
         let calendar = chartCalendar(utc)
         let now = chartDate(2026, 10, 31, 12)
+        // swiftlint:disable:next large_tuple
         let cases: [(ChartPeriod, Date, Date)] = [
             (.today, chartDate(2026, 10, 31), chartDate(2026, 11, 1)),
             (.week, chartDate(2026, 10, 26), chartDate(2026, 11, 2)),
@@ -129,5 +129,3 @@ struct ChartCalendarTests {
             == chartDate(2028, 2, 29) ..< chartDate(2028, 3, 1))
     }
 }
-
-// swiftlint:enable large_tuple

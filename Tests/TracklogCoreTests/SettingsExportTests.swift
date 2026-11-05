@@ -1,10 +1,10 @@
-// swiftlint:disable type_body_length
 import Foundation
 import Testing
 @testable import TracklogCore
 
 @Suite("Settings export")
 @MainActor
+// swiftlint:disable:next type_body_length
 struct SettingsExportTests: CaptureTestHelpers {
     private let pauseSentinel = Date(timeIntervalSince1970: 9_999_999)
     private let connectionSentinel = "EXCLUDED-connection-identity"
@@ -378,5 +378,3 @@ private actor FailingSimpleEditStore: SimpleEditStore {
         throw DatabaseError.unavailable("the edits table is unavailable")
     }
 }
-
-// swiftlint:enable type_body_length

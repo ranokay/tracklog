@@ -17,8 +17,14 @@ listening or the current service account.
 ```bash
 mise install
 mise run hooks
+mise run verify
 mise run gate
 ```
+
+`mise run verify` is the fix loop: the licence comparison, `hk check --all`,
+the bounded engine tests, `droppykit build` and `droppykit validate`, with no
+surface shots. Run the full `mise run gate` for approval and on the PR head;
+it runs `verify` and then the surface-shot matrix.
 
 `mise run lint` runs SwiftFormat, SwiftLint and jactionlint through `hk`; `mise run format` applies SwiftFormat. The same `hk check --all` runs in CI.
 

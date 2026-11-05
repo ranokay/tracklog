@@ -1,11 +1,11 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import DroppyKit
 import SwiftUI
 import TracklogCore
 
 /// The accepted Context rail: source, period and supported totals stay in a
 /// persistent left rail; the ranked list takes the remaining width.
-struct TracklogChartsView: View {
+struct TracklogChartsView: View { // swiftlint:disable:this type_body_length
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
 
@@ -873,5 +873,3 @@ struct ChartNoticeView: View {
         .accessibilityElement(children: .contain)
     }
 }
-
-// swiftlint:enable file_length type_body_length

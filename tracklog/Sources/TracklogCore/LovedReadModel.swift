@@ -1,9 +1,10 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import Foundation
 
 /// The one loved-list read model. It reads only the current connection, keeps
 /// no durable cache and never writes local history, deliveries or feedback.
 @MainActor
+// swiftlint:disable:next type_body_length
 public final class LovedReadModel {
     public nonisolated static let pageSize = 50
     /// A first page whose entries all lack metadata reads the next pages before
@@ -781,5 +782,3 @@ public final class LovedReadModel {
         ].joined(separator: "\u{1F}")
     }
 }
-
-// swiftlint:enable file_length type_body_length
