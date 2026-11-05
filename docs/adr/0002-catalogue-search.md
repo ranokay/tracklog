@@ -44,3 +44,11 @@ ADR-0003, as #86 recorded.
 The accepted brief also recorded that the Last.fm method details behind
 decisions 3 and 6 still needed checking against its API documentation during
 implementation.
+
+## Implementation note
+
+The shipped palette distinguishes ordinary close from action handoffs. Ordinary
+close, including row-detail navigation, and deactivation end the session and
+stop all work. Palette Play/Last.fm and Settings handoffs close the panel
+without ending the session: success ends it, and refusal reopens the palette
+with the same session.
