@@ -19,14 +19,14 @@ ISSUE_URL = re.compile(
 OWNER_REPO_ISSUE = re.compile(r"\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+")
 ISSUE = re.compile(r"#\d+")
 
-SENTENCE_SPLIT = re.compile(r"[.!?;]+")
+SENTENCE_SPLIT = re.compile(r"(?<!\d)[.!?;]+|[.!?;]+(?!\d)")
 BLOCK_START = re.compile(r"^(?:[-*+]|\d+\.)\s|^#+[ \t]|^>|^\|")
 EMPHASIS = re.compile(r"[*_~]+")
 CLOSING = re.compile(
     r"(?i)\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)"
     r"\s*(?::\s*)?\x00ISSUE\d+\x00"
 )
-NEGATION = re.compile(r"(?i)\b(?:not|never|without|cannot|[a-z]+n[’']t)\b")
+NEGATION = re.compile(r"(?i)\b(?:not|never|without|cannot|nothing|[a-z]+n[’']t)\b")
 
 
 def mask_references(body: str) -> tuple[str, dict[str, str]]:
