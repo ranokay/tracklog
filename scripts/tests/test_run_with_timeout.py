@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import selectors
 import signal
@@ -12,9 +13,15 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "run_with_timeout.py"
 WAIT_SECONDS = 60.0
+
+_SPEC = importlib.util.spec_from_file_location("run_with_timeout", str(SCRIPT))
+assert _SPEC is not None and _SPEC.loader is not None
+WRAPPER = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(WRAPPER)
 
 # The child ignores SIGTERM and starts a grandchild in its own session, so only
 # the snapshot plus SIGKILL escalation can remove both.
@@ -207,6 +214,58 @@ class RunWithTimeoutTests(unittest.TestCase):
                 _stdout, stderr = process.communicate(timeout=WAIT_SECONDS)
                 self.assertEqual(process.returncode, expected, stderr)
                 wait_gone(pids)
+
+    def test_kill_child_group_ignores_permission_error(self) -> None:
+        with mock.patch.object(
+            WRAPPER.os,
+            "killpg",
+            side_effect=PermissionError(1, "Operation not permitted"),
+        ):
+            WRAPPER.kill_child_group(os.getpid())
+
+    def test_signal_tree_survives_permission_error_from_getpgid(self) -> None:
+        calls: list[tuple[str, int, int]] = []
+
+        def getpgid(_pid: int) -> int:
+            raise PermissionError(1, "Operation not permitted")
+
+        def kill(pid: int, signum: int) -> None:
+            calls.append(("kill", pid, signum))
+
+        with mock.patch.object(WRAPPER.os, "getpgid", side_effect=getpgid):
+            with mock.patch.object(WRAPPER.os, "kill", side_effect=kill):
+                WRAPPER.signal_tree({101, 202}, signal.SIGTERM)
+
+        self.assertEqual(
+            set(calls),
+            {("kill", 101, signal.SIGTERM), ("kill", 202, signal.SIGTERM)},
+        )
+
+    def test_signal_tree_reaches_pids_after_killpg_permission_error(self) -> None:
+        calls: list[tuple[str, int, int]] = []
+
+        def getpgid(pid: int) -> int:
+            return 1000 + pid
+
+        def killpg(_group: int, signum: int) -> None:
+            calls.append(("killpg", _group, signum))
+            raise PermissionError(1, "Operation not permitted")
+
+        def kill(pid: int, signum: int) -> None:
+            calls.append(("kill", pid, signum))
+            if pid == 101:
+                raise PermissionError(1, "Operation not permitted")
+
+        with mock.patch.object(WRAPPER.os, "getpgid", side_effect=getpgid):
+            with mock.patch.object(WRAPPER.os, "killpg", side_effect=killpg):
+                with mock.patch.object(WRAPPER.os, "kill", side_effect=kill):
+                    WRAPPER.signal_tree({101, 202}, signal.SIGTERM)
+
+        self.assertEqual(
+            {call for call in calls if call[0] == "kill"},
+            {("kill", 101, signal.SIGTERM), ("kill", 202, signal.SIGTERM)},
+        )
+        self.assertEqual(len([call for call in calls if call[0] == "killpg"]), 2)
 
 
 if __name__ == "__main__":

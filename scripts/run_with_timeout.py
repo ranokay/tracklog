@@ -67,26 +67,34 @@ def is_alive(pid: int) -> bool:
 
 
 def signal_tree(pids: set[int], signum: int) -> None:
-    """Signal every pid and every group in the snapshot, except our own."""
+    """Signal every pid and every group in the snapshot, except our own.
+
+    macOS can report EPERM when a group holds only zombies. Treat that as
+    "nothing left to signal" and keep going to the per-PID targets.
+    """
     groups: set[int] = set()
     for pid in pids:
         try:
             groups.add(os.getpgid(pid))
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             continue
-    own_group = os.getpgid(0)
-    groups.discard(own_group)
+    try:
+        own_group = os.getpgid(0)
+    except (ProcessLookupError, PermissionError):
+        own_group = None
+    if own_group is not None:
+        groups.discard(own_group)
     for group in groups:
         try:
             os.killpg(group, signum)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
     for pid in pids:
         if pid == os.getpid():
             continue
         try:
             os.kill(pid, signum)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
 
 
@@ -109,7 +117,7 @@ def kill_child_group(pid: int) -> None:
     """Kill anything the child left in its process group after it exits."""
     try:
         os.killpg(pid, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
 
 
