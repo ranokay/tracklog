@@ -233,7 +233,14 @@ deletingAnotherTracksListenLeavesTheOpenTrackAlone and
 deletingAListenRefreshesItsOpenAlbumPage; the delete races are not
 reproduced through the harness.
 
-Gate receipt: exit 0, frozen true, clean before and after, 1417.3 s at
-2d1ea1e. Receipt:
-/Users/ranokay/.local/state/agent-tools/gates/20261105T021833Z-d6dee870fe0e.json
+The bounded remote-image read and the picker task ownership (25833c4)
+are structural changes: the transport ceiling is covered by the
+existing oversized-image composition test through the bounded default,
+and the picker guards were built, linted and gate-tested but not
+re-driven live on this head. The last live picker save was the
+19768f7 run above.
+
+Gate receipt: exit 0, frozen true, clean before and after, 1417.7 s at
+25833c4. Receipt:
+/Users/ranokay/.local/state/agent-tools/gates/20261105T030235Z-4c83c114df3e.json
 Log: the same path ending .log. It reports 796 tests in 106 suites.
