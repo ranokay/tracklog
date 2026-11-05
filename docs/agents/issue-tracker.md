@@ -14,6 +14,13 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Owner agreement
+
+When a ticket needs owner agreement, its body carries a recommended answer for
+each decision. An agent proceeds on those answers and records the accepted
+decisions as an ADR under `docs/adr/`. Stop for the owner only when a decision
+has no recommended answer, or when the owner marked the ticket `needs-info`.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
