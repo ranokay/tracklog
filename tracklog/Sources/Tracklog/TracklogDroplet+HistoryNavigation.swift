@@ -134,7 +134,14 @@ extension TracklogDroplet {
         case .track: EntityRequest.track(listen)
         }
         guard let request else { return }
-        openEntityDetail(request)
+        if state.entityDetail != nil {
+            // A track page's rows reach this too. The detail is already open,
+            // so the artist/album is an in-page push and Back returns to the
+            // track. A History feed row has no detail and opens a fresh page.
+            pushEntityDetail(request)
+        } else {
+            openEntityDetail(request)
+        }
     }
 
     func openEntityDetailFromChart(_ item: ChartItem) {

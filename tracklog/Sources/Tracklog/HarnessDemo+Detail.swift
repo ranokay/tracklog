@@ -82,10 +82,11 @@ enum HarnessDetailDemo {
             runtime.state.requestDeleteListen(listen)
             return
         }
-        if fixture == .override,
+        if fixture == .override || fixture == .corruptOverride,
            ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_SETTINGS_PAGE"] == "images" {
             // The gate's Images page shot shows the picker beginning of the
-            // Change image… flow, not only the saved list.
+            // Change image… flow, not only the saved list. The corrupt fixture
+            // also shows the unreadable-row copy next to that draft.
             runtime.beginImageOverride(request)
         }
     }

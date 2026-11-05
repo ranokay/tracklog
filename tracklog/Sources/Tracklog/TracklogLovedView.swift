@@ -246,7 +246,6 @@ struct TracklogLovedView: View {
                         row: row,
                         serviceName: serviceName,
                         canUnlove: state.lovedState.canUnlove,
-                        unavailableReason: state.lovedState.unloveUnavailableReason,
                         onOpen: {
                             droplet.openEntityDetailFromLoved(row, kind: .track)
                         },
@@ -360,7 +359,6 @@ private struct LovedRowView: View {
     let row: LovedRow
     let serviceName: String
     let canUnlove: Bool
-    let unavailableReason: String?
     let onOpen: () -> Void
     let onOpenArtist: () -> Void
     let onOpenAlbum: () -> Void
@@ -375,12 +373,14 @@ private struct LovedRowView: View {
             .contentShape(Rectangle())
             .accessibilityLabel(Text(rowLabel))
             .accessibilityValue(Text("Loved on \(serviceName)"))
-            .accessibilityHint(Text(canUnlove ? "Opens this track's page" : (unavailableReason ?? "")))
-            .accessibilityAction(named: Text("Open artist")) {
-                onOpenArtist()
-            }
-            .accessibilityAction(named: Text("Open album")) {
-                onOpenAlbum()
+            .accessibilityHint(Text("Opens this track's page"))
+            .accessibilityActions {
+                if !row.artist.isEmpty {
+                    Button("Open artist", action: onOpenArtist)
+                }
+                if !row.album.isEmpty {
+                    Button("Open album", action: onOpenAlbum)
+                }
             }
             .contextMenu {
                 Button("Open track", action: onOpen)
