@@ -202,7 +202,29 @@ draft changed to another entity before the save) are covered at the
 runtime's explicit saveImageOverride seam; the live run exercises the
 same save path through the real panel.
 
-Gate receipt: exit 0, frozen true, clean before and after, 1610.6 s at
-dfd72e5 (code head 19768f7). Receipt:
-/Users/ranokay/.local/state/agent-tools/gates/20261104T234837Z-1ffe2a829cc7.json
+Fifth pass (PR review comments)
+
+Environment: TracklogHarness rebuilt from 786d5e7 with `droppykit run`,
+TRACKLOG_HARNESS_DETAIL=track.
+
+- Expanded surface showed the Heart of Glass track page ("Blondie -
+  Parallel Lines", "Duration" section).
+- Row menu "Actions for Heart of Glass" -> "Open artist" opened the
+  Blondie artist detail.
+- The detail Back returned to the same track page: AXStaticText
+  "Blondie - Parallel Lines" and "Duration" were present after Back. The
+  track page stayed on the stack; before the fix Back closed the detail
+  to History.
+- Harness quit; no windows remain.
+
+The Images settings fixture change is covered by the gate run: the
+`corrupt-override` + `images` shot now shows "Chosen image" /
+"Talking Heads", "Choose image...", "Remove image", the unreadable
+Talking Heads saved row and the valid Blondie row. `images-settings.png`
+was refreshed from that run. The Loved row hint/action change is source
+and AX-label work; no separate live VoiceOver pass was run.
+
+Gate receipt: exit 0, frozen true, clean before and after, 1548.7 s at
+786d5e7. Receipt:
+/Users/ranokay/.local/state/agent-tools/gates/20261105T003222Z-8208178c8394.json
 Log: the same path ending .log. It reports 793 tests in 106 suites.

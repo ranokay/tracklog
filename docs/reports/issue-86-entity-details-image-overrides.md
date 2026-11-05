@@ -2,8 +2,8 @@
 
 - Base: started from `10e20840c8f71913cb8c492cb779cdb23cf36aac` (`feat: build loved browsing (#87) (#115)`).
 - Branch: `feat/entity-details-image-overrides-86`.
-- Code head: `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`.
-- State: implementation, composition tests, harness fixtures, glossary and checklist updates, the review-round-2 fixes for F12, F13 and F14, the F15 picker-entity fix, and the live F1, F2, F11, F12, F14 and F15 checks. The receipt-backed gate passed at `dfd72e5` and covers code head `19768f7`; the later commits are documentation and evidence only.
+- Code head: `786d5e7e462b6737b1d20aebcdf3f62efc0f980f`.
+- State: implementation, composition tests, harness fixtures, glossary and checklist updates, the review-round-2 fixes for F12, F13 and F14, the F15 picker-entity fix, the review-round-3 PR comment fixes, and the live F1, F2, F11, F12, F14 and F15 checks. The receipt-backed gate passed at `786d5e7`; the later commits are documentation and evidence only.
 - Scope: ticket 10 of the approved breakdown. This report does not close #76 and makes no Store or milestone-complete claim.
 
 ## Contract
@@ -93,7 +93,7 @@ Real temporary SQLite (reopened where persistence matters), `FakeClock`, the rea
 | settings export tests | Old export defaults the switch on; false round-trips; overrides absent. |
 | updated track-history tests | Track history now runs through the one entity surface. |
 
-Full suite at the `dfd72e5` gate: **793 tests in 106 suites**, exit `0` (51 media tests in 7 suites). The F15 focused run in the two entity suites is 53 tests, exit `0`.
+Full suite at the `786d5e7` gate: **793 tests in 106 suites**, exit `0` (51 media tests in 7 suites). The focused entity suites are 53 tests, exit `0`.
 
 ## Gate
 
@@ -103,11 +103,11 @@ Command:
 /Users/ranokay/.agents/tools/run gate_run -- mise run gate
 ```
 
-- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `dfd72e5d8081e6af7d5fef27cbfcb732b6bf173b`. The gate covers code head `19768f7014e5ce1b900c3b4bae929e9a3c4ca3ac`; `dfd72e5` is the documentation and evidence commit on top.
-  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261104T234837Z-1ffe2a829cc7.json`
-  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261104T234837Z-1ffe2a829cc7.log`
-  - Duration: 1610.6 seconds.
-  - `git_before` and `git_after` both report head `dfd72e5…`, empty porcelain status and the same tracked-content hash.
+- Result and receipt: exit `0`, frozen gate `true`, clean before and after, at head `786d5e7e462b6737b1d20aebcdf3f62efc0f980f`. The later commits are documentation and evidence only.
+  - Receipt: `/Users/ranokay/.local/state/agent-tools/gates/20261105T003222Z-8208178c8394.json`
+  - Log: `/Users/ranokay/.local/state/agent-tools/gates/20261105T003222Z-8208178c8394.log`
+  - Duration: 1548.7 seconds.
+  - `git_before` and `git_after` both report head `786d5e7…`, empty porcelain status and the same tracked-content hash.
 - `hk check --all`: SwiftFormat, SwiftLint and jactionlint clean; 0 violations in 336 files.
 - `swift test --package-path Tests`: 793 tests in 106 suites; 51 media tests in 7 suites.
 - `droppykit build`: universal, x86_64 + arm64, `kit.minAPI` 1.19.0 covers every call.
@@ -134,7 +134,7 @@ All images are in `docs/reports/issue-86/`.
 | Corrupt override | `corrupt-override` | Neutral sleeve, unreadable-copy sentence and `Remove`; `details-corrupt-override.png` |
 | Track delete confirmation | `track-delete` | Delete bar on the track page with Cancel/Delete; `details-track-delete.png` |
 | Long metadata | `long-names` | Long artist and track names stay inside the row and truncate/wrap without replacing the count; `details-long-names.png` |
-| Images settings | `corrupt-override` + settings page `images` | Chosen image, Choose image/Remove image, saved Blondie row with Remove, lookup switch and privacy note; `images-settings.png` |
+| Images settings | `corrupt-override` + settings page `images` | Pending `Chosen image` for Talking Heads with Choose image/Remove image, the unreadable Talking Heads saved row with Replace/Remove, the valid Blondie row, lookup switch and privacy note; `images-settings.png` |
 | Chart row override | `override` + Charts | Blondie's chart row uses the orange override; `charts-override.png` |
 | Increased contrast | `artist` + contrast override | Detail separators and borders strengthen; `details-contrast.png` |
 | History jump survives a detail | `history-jump-back` + `TRACKLOG_HARNESS_HISTORY=jump` | Back reveals the same `Showing from 3 Nov 2026 at 21:18` window; `history-jump-back.png` |
@@ -202,3 +202,11 @@ All eleven round-1 findings were addressed in `07a43cb`. Round 2 found three mor
 - **F13 — removing an album override restores the next source.** `removeOverride` restarts the album image path, and `maybeStartServiceImage` no longer drops a copy it already downloaded when precedence is not ready; the released page returns to `.service` without a second request, or fetches it when the override was up when the facts arrived. `removingAnAlbumOverrideRestoresTheServiceImage` asserts `.service` with exactly 1 request total; `removingAnAlbumOverrideStartsTheServiceImageThatArrivedUnderIt` asserts 0 before Remove and exactly 1 after. The Images copy now says "the page's next available image, or the neutral sleeve" instead of naming the captured cover only.
 - **F14 — the chosen image clears on the way out.** `finishImagesSettingsPage` is now called by the Images page's `onDisappear` (the unused `goBackInSettings` call is gone), a successful save clears only its own draft, and an explicit save copies the entity before the first suspension. `aSuccessfulSaveClearsItsOwnDraft`, `anExplicitSaveSurvivesTheDraftBeingClearedFirst`, `anExplicitSaveTargetsItsOwnEntityAndLeavesAnotherDraft` and `anExplicitSaveSurvivesTheDraftChangingDuringTheStoreWrite` cover the draft paths, the last with a held store write. Live: after the F1 save the section cleared on the spot; opening `Change image…` again, leaving the Settings pane and returning showed no `Chosen image`, while the saved list stayed.
 - **F15 — the picker saves to the entity it started with.** `chooseImageOverrideFile` now takes the draft and captures it before `runModal`, then passes that explicit entity through the off-main read to `saveImageOverride`. The page leaving during the read no longer makes the save throw `noSelection`, and Replace on another row no longer redirects the first file. `saveOverride` clears the draft only when it still names the saved entity, so the other entity's draft survives, and a failed save sets `state.imageOverrideError` even when the page has gone, where the next visit shows it. `saveSelectedImageOverride` and `selectOverrideImage` are removed and their tests moved to the explicit API. Live recheck on `19768f7`: `Change image…` → real panel → `Pictures` → `tracklog-issue86-panel-choice.png` → saved list `Blondie` with Replace/Remove; the reopened artist detail showed `Remove` and the chosen image (`live-f1-detail-override.png`, 4,533 sampled pixels). The panel's modal stall remains the runModal cause recorded in the live notes.
+
+### Review round 3 (PR comments)
+
+Three CodeRabbit "Minor · Functional" comments were verified against the source and fixed in `786d5e7`.
+
+- **The Images settings shot really starts a draft.** `HarnessDemo+Detail` began the pending draft only for the `override` fixture, while the gate's `images-settings` shot uses `corrupt-override`. The guard now includes both, so the shot shows `Chosen image` / `Talking Heads` with `Choose image…` and `Remove image` beside the unreadable Talking Heads row and the valid Blondie row. `images-settings.png` was refreshed from the gate run.
+- **A track page's Open artist/album pushes instead of replacing the stack.** `openEntityDetailFromHistory` called `openEntityDetail`, which replaces the stack with the new request, so Back from an artist or album opened on a track page closed the detail instead of returning to the track. It now pushes when a detail is already open and opens fresh only from the History feed. Live: the track page's row menu `Open artist` opened Blondie, and Back returned to the same track page (`Blondie — Parallel Lines`, `Duration`).
+- **Loved rows describe the track and only offer real actions.** The row hint is always `Opens this track's page`; the unlove-unavailable reason stays in `actionReasonBar` instead of replacing the hint, and the unused `unavailableReason` property is gone. The `Open artist` and `Open album` accessibility actions are exposed only when the row has that field, matching the context menu.
