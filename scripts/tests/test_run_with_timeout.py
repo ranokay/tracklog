@@ -107,7 +107,7 @@ class RunWithTimeoutTests(unittest.TestCase):
                 "10",
                 sys.executable,
                 "-c",
-                "print('streamed'); raise SystemExit(7)",
+                "import sys; print('streamed'); print('streamed-error', file=sys.stderr); raise SystemExit(7)",
             ],
             capture_output=True,
             text=True,
@@ -115,6 +115,7 @@ class RunWithTimeoutTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertIn("streamed", result.stdout)
+        self.assertIn("streamed-error", result.stderr)
 
     def test_timeout_kills_child_and_own_session_grandchild(self) -> None:
         process, pidfile = self.start_hanging("2")
