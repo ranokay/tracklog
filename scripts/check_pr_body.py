@@ -34,6 +34,7 @@ def mask_references(body: str) -> tuple[str, dict[str, str]]:
     mapping: dict[str, str] = {}
 
     def replace(match: re.Match[str]) -> str:
+        """Mask one issue reference and keep it for restoration."""
         token = f"\x00ISSUE{len(mapping)}\x00"
         mapping[token] = match.group(0)
         return token
@@ -44,6 +45,7 @@ def mask_references(body: str) -> tuple[str, dict[str, str]]:
 
 
 def restore(sentence: str, mapping: dict[str, str]) -> str:
+    """Put the original issue references back for the failure message."""
     for token, reference in mapping.items():
         sentence = sentence.replace(token, reference)
     return sentence
@@ -89,6 +91,7 @@ def closing_sentences(body: str) -> list[str]:
 
 
 def main() -> int:
+    """Read PR_BODY and return 1 when a negated closing statement is found."""
     body = os.environ.get("PR_BODY", "")
     offending = closing_sentences(body)
     if not offending:

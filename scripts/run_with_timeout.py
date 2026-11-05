@@ -61,6 +61,7 @@ def descendants(root: int) -> set[int]:
 
 
 def is_alive(pid: int) -> bool:
+    """Return True when the pid still exists; a permission error means it does."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -107,6 +108,7 @@ def wait_gone(
     timeout: float,
     child: subprocess.Popen | None = None,
 ) -> set[int]:
+    """Poll until the pids disappear or the timeout expires; return survivors."""
     deadline = time.monotonic() + timeout
     remaining = {pid for pid in pids if is_alive(pid)}
     while remaining and time.monotonic() < deadline:
@@ -149,6 +151,7 @@ def tear_down(child: subprocess.Popen, grace: float) -> set[int]:
 
 
 def main() -> int:
+    """Run the child under the bound and return its status or cleanup status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--timeout",
@@ -179,6 +182,7 @@ def main() -> int:
     received: int | None = None
 
     def handle(signum: int, _frame: object) -> None:
+        """Record the first termination signal for the main loop."""
         nonlocal received
         if received is None:
             received = signum
