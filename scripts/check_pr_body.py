@@ -19,7 +19,8 @@ ISSUE_URL = re.compile(
 OWNER_REPO_ISSUE = re.compile(r"\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+")
 ISSUE = re.compile(r"#\d+")
 
-SENTENCE_SPLIT = re.compile(r"[.!?;\n]+")
+SENTENCE_SPLIT = re.compile(r"[.!?;]+")
+BLOCK_START = re.compile(r"^(?:[-*+]|\d+\.)\s|^#\s|^>|^\|")
 EMPHASIS = re.compile(r"[*_~]+")
 CLOSING = re.compile(
     r"(?i)\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)"
@@ -48,15 +49,34 @@ def restore(sentence: str, mapping: dict[str, str]) -> str:
     return sentence
 
 
+def split_sentences(text: str) -> list[str]:
+    """Split on punctuation, and on newlines only before a new block."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    parts: list[str] = []
+    current: list[str] = []
+    for index, line in enumerate(lines):
+        current.append(line)
+        if index == len(lines) - 1:
+            break
+        next_line = lines[index + 1].strip()
+        if not next_line or BLOCK_START.match(next_line):
+            parts.append("\n".join(current))
+            current = []
+    if current:
+        parts.append("\n".join(current))
+    sentences: list[str] = []
+    for part in parts:
+        sentences.extend(SENTENCE_SPLIT.split(part))
+    return [sentence for sentence in sentences if sentence.strip()]
+
+
 def closing_sentences(body: str) -> list[str]:
     """Return sentences where a negation precedes a closing keyword."""
     if not body or not body.strip():
         return []
     masked, mapping = mask_references(body)
     offending: list[str] = []
-    for sentence in SENTENCE_SPLIT.split(masked):
-        if not sentence.strip():
-            continue
+    for sentence in split_sentences(masked):
         detect = EMPHASIS.sub("", sentence)
         for closing in CLOSING.finditer(detect):
             if any(

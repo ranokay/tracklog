@@ -59,6 +59,20 @@ class CheckPRBodyTests(unittest.TestCase):
         self.assert_passes("Closes #12 but not #13")
         self.assert_fails("Closes #12 and does not close #13")
 
+    def test_hard_wrapped_negations_fail(self) -> None:
+        self.assert_fails("this does not\nclose #76")
+        self.assert_fails("does **not**\nclose #80")
+        self.assert_fails("Does not touch charts\nCloses #5")
+
+    def test_newlines_before_a_new_block_bound_a_sentence(self) -> None:
+        self.assert_passes("- does not touch charts\n- Closes #5")
+        self.assert_passes("Does not touch charts.\nCloses #5")
+        self.assert_passes("> does not touch charts\n> Closes #5")
+        self.assert_passes("| does not touch charts\n| Closes #5")
+
+    def test_a_heading_is_not_an_issue_reference(self) -> None:
+        self.assert_passes("# Summary\nPart of #76")
+
     def test_cli_fails_with_the_offending_sentence(self) -> None:
         import subprocess
 
