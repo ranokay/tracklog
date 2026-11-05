@@ -19,7 +19,7 @@ ISSUE_URL = re.compile(
 OWNER_REPO_ISSUE = re.compile(r"\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+")
 ISSUE = re.compile(r"#\d+")
 
-SENTENCE_SPLIT = re.compile(r"(?<!\d)[.!?;]+|[.!?;]+(?!\d)")
+SENTENCE_SPLIT = re.compile(r"(?<!\d)[.!?;]+|[!?;]+|\.(?!\d)")
 BLOCK_START = re.compile(r"^(?:[-*+]|\d+\.)\s|^#{1,6}(?:[ \t]|\Z)|^>|^\|")
 EMPHASIS = re.compile(r"[*_~]+")
 CLOSING = re.compile(

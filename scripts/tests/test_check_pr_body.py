@@ -66,6 +66,9 @@ class CheckPRBodyTests(unittest.TestCase):
 
     def test_decimal_points_do_not_split_a_sentence(self) -> None:
         self.assert_fails("This does not yet, as of v1.2, close #76")
+        self.assert_passes("Does not affect v1;2 fixes #5")
+        self.assert_passes("Does not affect v1!2 fixes #5")
+        self.assert_passes("Does not affect v1?2 fixes #5")
 
     def test_nothing_is_a_negation(self) -> None:
         self.assert_fails("This PR does nothing to fix #76")
