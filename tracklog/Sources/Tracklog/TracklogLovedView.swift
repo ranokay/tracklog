@@ -1,4 +1,4 @@
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable file_length
 import DroppyKit
 import SwiftUI
 import TracklogCore
@@ -6,6 +6,7 @@ import TracklogCore
 /// The Loved section: the current connection's currently-loved tracks, read
 /// fresh each time the section opens. The list never mixes accounts and never
 /// claims a range total.
+// swiftlint:disable:next type_body_length
 struct TracklogLovedView: View {
     let droplet: TracklogDroplet
     @ObservedObject var state: TracklogAppState
@@ -486,5 +487,3 @@ private struct LovedNoticeBar: View {
         .padding(.bottom, DroppySpacing.xs)
     }
 }
-
-// swiftlint:enable file_length type_body_length
