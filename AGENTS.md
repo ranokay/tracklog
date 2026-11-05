@@ -11,3 +11,7 @@ Default vocabulary: each label string equals its role name. See `docs/agents/tri
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Tests
+
+See `docs/agents/tests.md` for the composition, bounded-wait and live-service rules.
