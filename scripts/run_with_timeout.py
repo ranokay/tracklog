@@ -150,6 +150,11 @@ def tear_down(child: subprocess.Popen, grace: float) -> set[int]:
     return set()
 
 
+def signal_wins(received: int | None, signal_before_completion: bool) -> bool:
+    """Return True when a signal arrived before the child's exit was observed."""
+    return received is not None and signal_before_completion
+
+
 def main() -> int:
     """Run the child under the bound and return its status or cleanup status."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -180,12 +185,15 @@ def main() -> int:
         parser.error("--timeout must be positive")
 
     received: int | None = None
+    observed_exit = False
+    signal_before_completion = False
 
     def handle(signum: int, _frame: object) -> None:
-        """Record the first termination signal for the main loop."""
-        nonlocal received
+        """Record the first termination signal and whether exit was observed."""
+        nonlocal received, signal_before_completion
         if received is None:
             received = signum
+            signal_before_completion = not observed_exit
 
     signal.signal(signal.SIGTERM, handle)
     signal.signal(signal.SIGINT, handle)
@@ -198,6 +206,7 @@ def main() -> int:
     while True:
         code = child.poll()
         if code is not None:
+            observed_exit = True
             break
         if received is not None:
             break
@@ -206,9 +215,9 @@ def main() -> int:
             break
         time.sleep(POLL_SECONDS)
 
-    # A completed child wins over a signal that arrived just after it exited;
-    # the normal path still cleans the group and passes the status through.
-    if received is not None and code is None:
+    # A signal that arrived before the exit was observed wins; a signal after
+    # observed completion keeps the child's status and group cleanup.
+    if signal_wins(received, signal_before_completion):
         print(
             f"run_with_timeout: received SIG{received}; tearing down the process tree",
             file=sys.stderr,

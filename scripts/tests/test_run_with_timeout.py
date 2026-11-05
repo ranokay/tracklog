@@ -242,6 +242,11 @@ class RunWithTimeoutTests(unittest.TestCase):
                 self.assertEqual(process.returncode, expected, stderr)
                 wait_gone(pids)
 
+    def test_signal_before_completion_wins(self) -> None:
+        self.assertTrue(WRAPPER.signal_wins(15, True))
+        self.assertFalse(WRAPPER.signal_wins(15, False))
+        self.assertFalse(WRAPPER.signal_wins(None, True))
+
     def test_kill_child_group_ignores_permission_error(self) -> None:
         with mock.patch.object(
             WRAPPER.os,
