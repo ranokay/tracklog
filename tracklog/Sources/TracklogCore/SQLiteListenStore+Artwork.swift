@@ -39,12 +39,20 @@ extension SQLiteListenStore: ArtworkStore {
         return text(statement, 0)
     }
 
+    /// Content-addressed artwork is normally identical for the same hash. The
+    /// upsert repairs a stored row whose bytes were damaged; without it a
+    /// re-saved override would keep its unreadable copy after the next launch.
     func insertArtwork(_ artwork: StoredArtwork, handle: OpaquePointer) throws {
         let statement = try prepare(
             handle,
             """
-            INSERT OR IGNORE INTO artwork (hash, data, pixel_width, pixel_height, stored_at)
+            INSERT INTO artwork (hash, data, pixel_width, pixel_height, stored_at)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(hash) DO UPDATE SET
+                data = excluded.data,
+                pixel_width = excluded.pixel_width,
+                pixel_height = excluded.pixel_height,
+                stored_at = excluded.stored_at
             """,
         )
         defer { sqlite3_finalize(statement) }

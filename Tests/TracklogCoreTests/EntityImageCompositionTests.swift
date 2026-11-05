@@ -217,6 +217,43 @@ struct EntityImageCompositionTests {
         #expect(await reopened.transport.itunesRequests().isEmpty)
     }
 
+    @Test func savingTheSameImageAgainRepairsAnUnreadableStoredCopy() async throws {
+        let database = try TemporaryDatabase()
+        let composition = try await entityComposition(database: database) { _ in
+            entityLastFMArtistInfo()
+        }
+        try await linkLastFM(composition)
+        let request = try artistRequest()
+        let bytes = try image(red: 0.4)
+        let override = try await saveArtistOverride(composition, data: bytes)
+        try await composition.store.replaceArtworkDataForTest(
+            hash: override.artworkHash,
+            data: Data("not an image".utf8),
+        )
+
+        // Replacing an unreadable override with the same file normalizes to
+        // the same hash, so the artwork row must be rewritten rather than
+        // ignored if the repaired copy is to survive the next launch.
+        try await composition.runtime.saveImageOverride(
+            kind: request.kind,
+            key: request.key,
+            title: request.title,
+            subtitle: request.subtitle,
+            data: bytes,
+        )
+
+        composition.runtime.stop()
+        await composition.store.close()
+        let reopened = try await entityComposition(database: database) { _ in
+            entityLastFMArtistInfo()
+        }
+        let storedData = try await reopened.store.artwork(for: override.artworkHash)
+        let stored = try #require(storedData)
+        let expected = try #require(ArtworkNormalizer.normalize(bytes)?.data)
+        #expect(ArtworkNormalizer.isReadable(stored), "the repaired copy survives a restart")
+        #expect(stored == expected)
+    }
+
     @Test func anUnreadableAlbumOverrideBeatsACapturedCoverAndTheServiceImage() async throws {
         let database = try TemporaryDatabase()
         let capturedBytes = try image(red: 0.9)
