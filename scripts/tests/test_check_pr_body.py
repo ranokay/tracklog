@@ -73,6 +73,11 @@ class CheckPRBodyTests(unittest.TestCase):
     def test_nothing_is_a_negation(self) -> None:
         self.assert_fails("This PR does nothing to fix #76")
 
+    def test_extended_negations_fail(self) -> None:
+        self.assert_fails("This no longer closes #76")
+        self.assert_fails("Neither fixes #76 nor #77")
+        self.assert_fails("This doesnt fix #76")
+
     def test_newlines_before_a_new_block_bound_a_sentence(self) -> None:
         self.assert_passes("- does not touch charts\n- Closes #5")
         self.assert_passes("Does not touch charts.\nCloses #5")

@@ -26,7 +26,10 @@ CLOSING = re.compile(
     r"(?i)\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)"
     r"\s*(?::\s*)?\x00ISSUE\d+\x00"
 )
-NEGATION = re.compile(r"(?i)\b(?:not|never|without|cannot|nothing|[a-z]+n[’']t)\b")
+NEGATION = re.compile(
+    r"(?i)\b(?:not|never|without|cannot|nothing|neither|no\s+longer|"
+    r"(?:does|do|did|is|was|were|wo|ca|could|should|would|are|have|has|had|must|need)n[’']?t)\b"
+)
 
 
 def mask_references(body: str) -> tuple[str, dict[str, str]]:
