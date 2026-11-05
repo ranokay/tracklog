@@ -105,6 +105,14 @@ def wait_gone(
     return remaining
 
 
+def kill_child_group(pid: int) -> None:
+    """Kill anything the child left in its process group after it exits."""
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def tear_down(child: subprocess.Popen, grace: float) -> set[int]:
     """Snapshot, SIGTERM, re-snapshot after the grace, SIGKILL, then wait."""
     root = child.pid
@@ -202,6 +210,9 @@ def main() -> int:
         return 124
 
     assert code is not None
+    # A normal exit does not prove the child's group is empty: a test helper
+    # that outlives the runner in the same group would be orphaned.
+    kill_child_group(child.pid)
     return code if code >= 0 else 128 - code
 
 
