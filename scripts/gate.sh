@@ -147,5 +147,8 @@ echo "==> surface shots: charts-override"
 (cd tracklog && TRACKLOG_DEMO_STATE=playing TRACKLOG_HARNESS_DETAIL=override TRACKLOG_HARNESS_SECTION=charts droppykit run -- --shots ./shots/charts-override --report ./shots/charts-override/report.json --shot-height 1900)
 python3 scripts/check_shot_report.py tracklog/shots/charts-override/report.json tracklog/shots/charts-override
 
+echo "==> palette panel contract"
+"$ROOT/scripts/panel_check.sh"
+
 echo "==> gate passed"
 echo "manual: run the live Last.fm/ListenBrainz smoke test before bumping the version"

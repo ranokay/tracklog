@@ -16,9 +16,48 @@ final class TracklogSearchPaletteController {
     private var keyMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var activeObserver: NSObjectProtocol?
+    private var pendingPresentation: DispatchWorkItem?
+    private var isPreparing = false
 
     var isOpen: Bool {
         panel?.isVisible == true
+    }
+
+    /// Whether a session is prepared or a panel is up. The takeover's search
+    /// button prepares inside the click's gesture and presents on the next
+    /// run-loop turn; a second summon while that turn is pending closes it.
+    var isPrepared: Bool {
+        isPreparing || panel != nil
+    }
+
+    /// What the harness's panel contract check reads. It is not used by the
+    /// droplet's own surfaces.
+    struct ContractSnapshot {
+        let panelExists: Bool
+        let isVisible: Bool
+        let isKey: Bool
+        let isMain: Bool
+        let appActive: Bool
+        let canBecomeKey: Bool
+        let canBecomeMain: Bool
+        let activationBegan: Bool
+        let monitorsInstalled: Bool
+    }
+
+    var contract: ContractSnapshot {
+        ContractSnapshot(
+            panelExists: panel != nil,
+            isVisible: panel?.isVisible == true,
+            isKey: panel?.isKeyWindow == true,
+            isMain: panel?.isMainWindow == true,
+            appActive: NSApp.isActive,
+            canBecomeKey: panel?.canBecomeKey == true,
+            canBecomeMain: panel?.canBecomeMain == true,
+            activationBegan: activation != nil,
+            monitorsInstalled: keyMonitor != nil
+                && resignObserver != nil
+                && activeObserver != nil,
+        )
     }
 
     init(droplet: TracklogDroplet) {
@@ -28,7 +67,16 @@ final class TracklogSearchPaletteController {
     // MARK: - Opening
 
     func open(reusingSession: Bool = false, notice: String? = nil) {
-        guard let droplet, droplet.host != nil, panel == nil else { return }
+        prepare(reusingSession: reusingSession, notice: notice)
+        present()
+    }
+
+    /// Starts the session and fills the model without ordering a window
+    /// front. The takeover's search button runs this inside the click's
+    /// gesture; `presentAfterGesture()` orders the panel front on the next
+    /// run-loop turn, after that gesture has returned.
+    func prepare(reusingSession: Bool = false, notice: String? = nil) {
+        guard let droplet, droplet.host != nil, !isPrepared else { return }
 
         model.collapsed = []
         model.expanded = []
@@ -40,6 +88,15 @@ final class TracklogSearchPaletteController {
             droplet.runtime?.catalogueSearch?.beginSession()
             model.query = ""
         }
+        isPreparing = true
+    }
+
+    /// Orders the prepared panel front. A refusal that reopens the palette
+    /// calls this synchronously; the takeover's search button defers it.
+    func present() {
+        guard let droplet, droplet.host != nil, isPreparing, panel == nil else { return }
+        isPreparing = false
+        pendingPresentation = nil
 
         let size = paletteSize()
         let panel = PalettePanel(
@@ -49,7 +106,9 @@ final class TracklogSearchPaletteController {
             defer: false,
         )
         panel.isFloatingPanel = true
-        panel.level = .floating
+        // Droppy's shelf is a NotchWindow above .floating. The palette has to
+        // sit above it, or the shelf covers the search field.
+        panel.level = .popUpMenu
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -81,13 +140,35 @@ final class TracklogSearchPaletteController {
             for: panel,
             returningTo: NSWorkspace.shared.frontmostApplication,
         )
+        // The host's activation makes the panel key and main; keep the level
+        // above the shelf in case the host ordered its own window meanwhile.
+        panel.level = .popUpMenu
+        if !panel.isKeyWindow {
+            panel.makeKey()
+        }
         installMonitors(for: panel)
+    }
+
+    /// Presents the prepared panel on the next run-loop turn. The click's
+    /// gesture must return before a droplet's panel is ordered front, so the
+    /// host's panel activation never runs inside that gesture.
+    func presentAfterGesture() {
+        guard isPrepared else { return }
+        pendingPresentation?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.present()
+        }
+        pendingPresentation = item
+        DispatchQueue.main.async(execute: item)
     }
 
     // MARK: - Closing
 
     func close(endingSearch: Bool = true) {
-        guard panel != nil else { return }
+        guard isPrepared else { return }
+        pendingPresentation?.cancel()
+        pendingPresentation = nil
+        isPreparing = false
 
         removeMonitors()
         if endingSearch {
@@ -214,14 +295,16 @@ final class TracklogSearchPaletteController {
     }
 }
 
-/// A borderless panel still has to become key so the field can take typing
-/// and the local key monitor can address it.
+/// A borderless panel still has to become key and main so the field can take
+/// typing, the local key monitor can address it, and `DroppyPanelActivation`
+/// can make it main. A panel that refuses main makes the host raise
+/// `NSInternalInconsistencyException` from `_changeJustMain` and terminate.
 private final class PalettePanel: NSPanel {
     override var canBecomeKey: Bool {
         true
     }
 
     override var canBecomeMain: Bool {
-        false
+        true
     }
 }
