@@ -5,7 +5,11 @@
 - Scope: the real-host search palette crash and the input, artwork, shelf and
   reopen findings that followed it. This report does not close #76.
 
-## Root cause
+Provenance labels: **head** means the run was on the head commit named in the
+section. **b1fbef9** means the supervisor's real-host run or an earlier worker's
+run on that commit or the base. Those were not re-run here.
+
+## Root cause (from the Droppy exceptions log, read in an earlier run)
 
 `~/Library/Logs/Droppy/exceptions.log` records both real-click crashes with the
 same exception:
@@ -29,8 +33,8 @@ presentation also leaves the gesture.
 
 ## Harness fixture
 
-The harness passed this before because `DroppyPanelActivation.begin` returns
-`nil` there. The fixture installs the host contract through
+The harness passed the crash check before because `DroppyPanelActivation.begin`
+returns `nil` there. The fixture installs the host contract through
 `DroppyKitSurfaceBridge.installPanelActivationProvider`, gated on
 `host.environment.isHarness` and `TRACKLOG_HARNESS_HOST_PANEL_ACTIVATION=1`:
 
@@ -40,13 +44,14 @@ The harness passed this before because `DroppyPanelActivation.begin` returns
 
 `TracklogDroplet.runPaletteContractCheck()` drives the palette through
 `openSearchPalette()` and asserts the panel is key and main, the activation
-began, the key monitor and observers are installed, and close clears the panel
-so a second open works. `scripts/panel_check.sh` runs it; `scripts/gate.sh`
-calls that script after the surface shots.
+began, the key monitor and observers are installed, close clears the panel so a
+second open works, and the frame clears the shelf clearance. A passing run
+prints the frame. `scripts/panel_check.sh` runs it; `scripts/gate.sh` calls that
+script after the surface shots.
 
-## Unfixed run
+## Unfixed run (base `0b38416`, **b1fbef9**)
 
-Scripted check:
+Scripted check, from the earlier worker's run on the base:
 
 ```text
 *** Terminating app due to uncaught exception 'NSInternalInconsistencyException',
@@ -58,135 +63,124 @@ Scripted check:
 exit=134
 ```
 
-Accessibility press, no real pointer, through the takeover's search button:
+Accessibility press through the takeover's search button, from the same earlier
+run: the panel window existed but WindowServer reported `is_on_screen: false`, and
+its accessibility tree was empty. The supervisor's real-host run on `b1fbef9`
+then showed the crash gone and typed keys reaching the field (see below).
 
-- The panel window existed (680 × 560, layer 3, title “Search and play”) but
-  WindowServer reported `is_on_screen: false`, and its accessibility tree was
-  empty (`degraded_reason: ax_window_unresolved`).
-- The same `fn+b`, `fn+l`, `fn+o` key events used on the fixed build
-  (`cua-driver.hotkey`, route `synthetic_events`) typed “blo” into the main
-  harness window's sidebar field (`AXTextField = "blo"`), not the palette. The
-  palette stayed at “Type at least two characters”; every group stayed
-  “Not searched”.
-- Rows rendered after the press: the takeover was switched from History to
-  Charts and back, which rebuilt the History rows. The rebuilt rows still showed
-  their covers. The issue's row symptom did not reproduce in this fixture.
-- The shelf widget page, rendered after the press, showed the neutral note
-  sleeve. The mechanism is an inference: the exception leaves the panel set and
-  the activation nil, and the widget's decode produced no image. The
-  `ArtworkSleeve` decode path was not logged, so this is not a proven `onAppear`
-  failure.
-- The palette could not be closed through accessibility because it had no AX
-  surface, so the widget-row reopen could not be observed in this run.
+## Fixed run (head `1e2db5d`, **head**)
 
-## Fixed run
-
-Scripted check:
+Scripted check, `scripts/panel_check.sh` with `TRACKLOG_HARNESS_HOST_PANEL_ACTIVATION=1`,
+on the source commit `1e2db5d`:
 
 ```text
-panel check: passed
-exit=0
+panel check: passed (frame Optional((560.0, 294.0, 680.0, 560.0)), visible Optional((0.0, 0.0, 1800.0, 1130.0)), shelf clearance 264.0pt, 1280×600 frame (300.0, 16.0, 680.0, 308.0))
 ```
 
-Accessibility press, no real pointer:
+`frame` is AppKit coordinates. Top-left origin, the palette's top edge is at
+y 315 on the 1169pt screen (1169 − (294 + 560)); its visible frame's top is at
+y 39.
 
-- The panel window was 680 × 560 at layer 3 (`.floating`), on screen, with an
-  accessibility tree containing the field, the close button and the groups. Its
-  frame was x 560, y 315: below the host's measured shelf extent, whose page pill
-  bottom is 258. The harness has no real shelf; the contract check asserts the
-  frame clears the computed shelf clearance and still fits a 1280 × 600 screen.
-- The same `fn+b`, `fn+l`, `fn+o` key events used on the unfixed build
-  (`cua-driver.hotkey`, route `synthetic_events`) typed “blo” into the palette
-  field. The sidebar field stayed empty (`AXTextField = "Search"`), and the
-  groups left “Not searched”: Artists, Albums and Tracks each showed 10 results.
-  An accessibility-set value also ran the search; the view's existing
-  `onChange` is enough once the exception is gone.
-- Rows rendered after the press: the takeover was switched from History to
-  Charts and back, which rebuilt the History rows. The rebuilt rows kept their
-  covers.
-- The close button closed the panel; the window list then contained only the
-  main harness window.
-- The shelf widget page showed the red cover, not the neutral sleeve.
-- Pressing the widget row after the palette closed recorded
-  `present "history"` at 16:51:34.228 on the Activity page.
+Harness window, host-contract fixture on, head `1e2db5d` built into the harness
+app. Driven with accessibility presses and synthetic keys, never the real
+pointer:
 
-No `ArtworkSleeve` change was made. The unfixed fixture did not reproduce the
-row symptom, so the row half is left to the real host. The widget's neutral
-sleeve and the fixed cover are consistent with the exception being the cause,
-but the widget mechanism remains an inference because the decode path was not
-logged.
+- Pressing the takeover's search button ("Search and play") opened the panel:
+  680 × 560 at (560, 315), layer 3, on screen. Its accessibility tree had the
+  field, the close button, the four groups and the "Last.fm app credentials are
+  missing" banner, because that run had no Last.fm credentials.
+- With `TRACKLOG_HARNESS_PALETTE=normal`, the palette opened at launch at the same
+  frame. The fixture set the query to `blo` by value. The search ran: Artists,
+  Albums and Tracks each read "Expanded. 10 results", Loved read "8 results". No
+  group stayed "Not searched".
+
+Not verified on head:
+
+- Typed keys reaching the field. Synthetic `b`, `l`, `o` key events did not
+  reach a palette that stayed open. The palette closed during the key events,
+  while another session's harness shared the desktop, and the cause was not
+  isolated. Typed keys were proven on the real host at `b1fbef9` only.
+- The close button, widget-row reopen, artwork on rows and on the shelf widget
+  after the palette opens and closes. None was re-run on head, so no claim about
+  them stands here.
 
 ## Shelf placement
 
-The supervisor's real-host run on `b1fbef9` showed the palette at layer 101 and
-the shelf at layer 100, with the palette's z_index higher, and the shelf still
-composited on top: the widget card covered the middle of the search field and
-the page pill sat over the first result row. The shelf stayed open while the
-palette was up and collapsed only after the palette closed. A higher window
-level is therefore not the fix.
+Observed on the real host at `b1fbef9` by the supervisor: the palette was at
+layer 101 and the shelf at layer 100, the shelf still drew over the palette's
+field and first result row, and the shelf stayed open while the palette was up.
+The mechanism is not known. A higher window level is not treated as the fix.
 
-The palette is now placed below the shelf instead:
+Measured on the real host at `b1fbef9`, in screen points, top-left origin: the
+shelf window at x 450, y 0, 900 wide (its height was not measured); the shell
+bottom at about y 216; the page pill bottom at about y 258, spanning x about 672
+to 1128.
 
-- The real-host shelf measured the shell bottom at about 216 and the page pill
-  bottom at about 258, with the shelf window at x 450 and 900 wide.
-- `shelfClearance` computes the shell from `DroppyShellMetrics`: top inset
-  (`closedHeight + 10` on a notch, 16 on an island) + the Tracklog widget's
-  150pt card + the 1.5pt slot on both edges + the 16pt bottom inset, plus 48pt
-  for the page pill. With a 32pt notch this is 259, matching the measured 258.
-- The palette starts `shelfClearance + 12` below the visible frame top. On the
-  owner's 1800 × 1169 screen the visible frame top is 44, so the frame is
-  x 560, y 315, 680 × 560. The measured page pill bottom is 258; the palette
-  starts 57pt below it, and the field and results follow.
-- The height is clamped to the space below the clearance and the frame to the
-  visible frame. On a synthetic 1280 × 600 screen the contract check gets a
-  680 × 313 frame starting at y 271, inside the screen and below the clearance;
-  the palette's own minimum is 320 × 240.
+Computed on head, from DroppyKit 1.22.0 metrics and the Tracklog widget's
+declared `.fixed(150)` height:
+
+- `shelfClearance` = top inset 47 + widget 150 + slot 1.5 × 2 + bottom inset 16
+  = 216 (shell bottom), + 48 for the page pill = **264**. The top inset is the
+  notch height plus 10, with notch height 37 (`DroppyShellMetrics.physicalNotchHeight`,
+  the harness's fixture). The 216 matches the shell bottom measured on the real
+  host; a 32pt notch would give 211, so the earlier "259 matching 258" was wrong.
+  The owner's real notch height is not measured directly.
+- The palette starts `clearance + 12` below the visible frame's top. The visible
+  top is 39pt below the screen top on this display: the Music window's bounds are
+  y 39, height 1130, on a 1169pt screen, and the harness reports visible frame
+  `(0, 0, 1800, 1130)`. So the palette's top edge is 39 + 276 = 315, 57pt below the
+  measured pill bottom at 258.
+- The clearance is measured from the screen's top, where the shelf window starts,
+  but the placement is measured from the visible top. The 39pt menu bar is extra
+  margin, not part of the 264.
+- On a synthetic 1280 × 600 screen the frame is (300, 16, 680, 308) in AppKit
+  coordinates, which is top-left y 276 to 584, inside the screen and 12pt below
+  the clearance.
+
+What is not yet known about the real shelf: its window height, and whether a
+second widget on the same shelf page can be taller than 150pt. The clearance
+counts only the Tracklog card, so a taller widget would move the shelf's extent
+below the palette's top.
 
 ## What changed
 
-- `TracklogSearchPaletteController`: `canBecomeMain = true`; the palette is
-  placed below the host shelf's extent instead of relying on the window level.
-  `shelfClearance` is the shell's top inset, this droplet's 150pt widget card,
-  the slot and bottom inset, plus 48pt for the host's page pill below the shell.
-  The palette height is clamped to the space below that clearance, and the frame
-  is clamped to the visible frame. `prepare()` / `present()` /
-  `presentAfterGesture()` split with a cancellable pending presentation;
-  harness contract snapshot with the frame.
-- `TracklogDroplet+Search`: `openSearchPalette()` prepares inside the gesture
-  and presents on the next run-loop turn; a second summon closes a prepared or
-  open palette.
+- `TracklogSearchPaletteController`: `canBecomeMain = true`. The panel level is
+  `.floating` (was `.popUpMenu` at `b1fbef9`). The palette is placed below the
+  host shelf's extent by `shelfClearance`, clamped to the space below it and the
+  visible frame. `prepare()` / `present()` / `presentAfterGesture()` split with a
+  cancellable pending presentation. The `shelfClearance` doc comment states what
+  was observed and what is not known.
+- `TracklogDroplet+Search`: `openSearchPalette()` prepares inside the gesture and
+  presents on the next run-loop turn; a second summon closes a prepared or open
+  palette.
 - `TracklogHarness`: host-contract provider and `--panel-check`.
-- `TracklogDroplet+HarnessPalette`: harness-only contract check.
+- `TracklogDroplet+HarnessPalette`: harness-only contract check. The frame and
+  shelf checks, and the passing line that prints the measured frame.
 - `scripts/panel_check.sh`, `scripts/gate.sh`: the regression guard runs in the
   gate after the surface shots.
 
 ## Checks
 
-- `mise run gate` — passed on the change; the palette contract section printed
-  `panel check: passed` before `==> gate passed`.
-- The palette contract check asserts the panel frame is inside the visible frame,
-  starts at least `shelfClearance` below its top, and stays inside a synthetic
-  1280 × 600 screen below the same clearance.
-- `mise run test` — 796 tests in 106 suites passed.
-- `mise run lint` — SwiftLint, SwiftFormat and jactionlint clean.
+- `scripts/panel_check.sh` — exit 0 on `1e2db5d`, output above.
+- `hk check --all` (SwiftLint, SwiftFormat) — exit 0 on `1e2db5d`.
+- `mise run gate` — run on the final head; see the REPORT for the commit and exit.
 
 ## Real host still has to prove
 
 The harness has no real Droppy shelf and no real notch surface, so the
 coordinator's real-host check still owns:
 
-- A real click on the takeover's search button does not abort the Playground.
-- The shelf no longer covers the search field or the first result row at the
-  new frame. The supervisor's real-host run measured the shelf page pill bottom
-  at 258 and the palette now starts at y 315; the shelf stays open while the
-  palette is up, so the check has to confirm the visible separation.
-- The window level is not the mechanism: the real host showed the shelf still
-  compositing above a layer-101 palette at layer 100. The palette is now at
-  `.floating` and placed clear of the shelf.
-- Once the panel is really key, the palette closes on resign key and the shelf
-  closes on a click outside it.
-- Real typed keys reach the field (the harness proves the panel is key and
-  focused and that an accessibility-set value runs the search).
-- Artwork stays on rows and the shelf widget after the palette opens and
-  closes.
-- The real widget row reopens the takeover after the palette closes.
+1. Conditions 1, 3, 4 and 5 on this head. The real-host run at `b1fbef9` passed
+   them with the `.popUpMenu` level. The head uses `.floating` and a different
+   placement, so they have to be checked again.
+2. The shelf no longer covers the search field or the first result row. With the
+   Tracklog widget showing, the field and first result should start at about y 315
+   on a notched 1800 × 1169 screen, below the page pill's measured bottom of 258.
+   The shelf window's height is not measured.
+3. The palette closes on resign key and the shelf closes on a click outside it,
+   with the panel really key.
+4. Typed keys reach the field and a typed query runs a search.
+5. Artwork stays on rows and on the widget after the palette opens and closes.
+6. The real widget row reopens the takeover after the palette closes.
+7. The notch height on the owner's display, which sets the clearance: 37 is
+   assumed from the measured shell bottom.
