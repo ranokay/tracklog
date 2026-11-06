@@ -10,3 +10,10 @@ Package.resolved
 .env.*
 lastfm.json
 .scratch/
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+
+# Codacy local analysis files
+.codacy/
