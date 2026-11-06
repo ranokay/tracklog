@@ -276,15 +276,26 @@ final class TracklogSearchPaletteController {
 extension TracklogSearchPaletteController {
     // MARK: - Geometry
 
-    /// How far below the visible frame's top the palette has to start to clear
-    /// the host's shelf.
+    /// The distance from the top of the screen to the bottom of the host's
+    /// shelf, which the palette has to start below.
     ///
-    /// The host composites its shelf above a droplet panel even when the panel
-    /// is at a higher window level: the real host showed the shelf on top of a
-    /// layer-101 palette at layer 100. The shelf's extent is the shell's top
-    /// inset, this droplet's widget card, the slot and bottom inset, plus the
-    /// host's page pill below the shell. The real host measured the page pill
-    /// 42pt below the shell with this widget at Regular; 48 leaves the gap.
+    /// Observed on the real host at `b1fbef9`: with the palette at layer 101
+    /// and the shelf at layer 100, the shelf still drew over the palette's field
+    /// and first result row, and it stayed open while the palette was up. Why
+    /// the shelf wins is not known, so the palette is placed clear of the
+    /// shelf's extent rather than relying on the window level.
+    ///
+    /// The shelf window starts at the screen's top edge. Its extent is the
+    /// shell's top inset (the notch height plus 10, or 16 on an island), this
+    /// droplet's widget card (`.fixed(150)`), the slot and bottom insets, and
+    /// the host's page pill below the shell. A 37pt notch (DroppyKit's
+    /// `physicalNotchHeight`) makes the shell 216pt, the shell bottom the real
+    /// host measured; a 32pt notch would make it 211. The page pill bottom
+    /// measured 258pt, 42pt below the shell; 48 keeps 6pt more.
+    ///
+    /// `frame(for:in:)` measures from the visible frame's top, which sits
+    /// lower than the screen's top by the menu bar's height. That extra height
+    /// is margin on top of this number, not part of it.
     var shelfClearance: CGFloat {
         let geometry = droplet?.host?.environment.notchGeometry
         let usesNotch = geometry?.isHardwareNotch == true

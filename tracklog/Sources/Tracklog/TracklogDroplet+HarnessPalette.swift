@@ -4,15 +4,19 @@ import DroppyKit
 /// Harness-only result of the palette's host contract check.
 public struct TracklogPaletteContract: Sendable {
     public let failures: [String]
+    /// The open palette's frame and the clearance it was checked against. A
+    /// passing run prints it, so the numbers in the report come from that run.
+    public var measurement: String?
 
     public var passed: Bool {
         failures.isEmpty
     }
 
     public var summary: String {
-        passed
-            ? "panel check: passed"
-            : "panel check: " + failures.joined(separator: "; ")
+        if !passed {
+            return "panel check: " + failures.joined(separator: "; ")
+        }
+        return "panel check: passed" + (measurement.map { " (\($0))" } ?? "")
     }
 }
 
@@ -37,6 +41,7 @@ extension TracklogDroplet {
         }
         _ = await waitForKeyAndMain()
         appendContractFailures("the open palette", to: &failures)
+        let measurement = paletteMeasurement()
 
         searchPaletteController.close()
         let closed = searchPaletteController.contract
@@ -58,7 +63,16 @@ extension TracklogDroplet {
         _ = await waitForKeyAndMain()
         appendContractFailures("the reopened palette", to: &failures)
         searchPaletteController.close()
-        return TracklogPaletteContract(failures: failures)
+        return TracklogPaletteContract(failures: failures, measurement: measurement)
+    }
+
+    private func paletteMeasurement() -> String {
+        let contract = searchPaletteController.contract
+        let smallScreen = NSRect(x: 0, y: 0, width: 1280, height: 600)
+        return "frame \(String(describing: contract.frame)), "
+            + "visible \(String(describing: contract.visibleFrame)), "
+            + "shelf clearance \(searchPaletteController.shelfClearance)pt, "
+            + "1280×600 frame \(searchPaletteController.paletteFrame(in: smallScreen))"
     }
 
     private func appendContractFailures(_ label: String, to failures: inout [String]) {
