@@ -165,22 +165,43 @@ below the palette's top.
 - `hk check --all` (SwiftLint, SwiftFormat) — exit 0 on `1e2db5d`.
 - `mise run gate` — run on the final head; see the REPORT for the commit and exit.
 
-## Real host still has to prove
+## Real-host results on `1477b9e`
 
-The harness has no real Droppy shelf and no real notch surface, so the
-coordinator's real-host check still owns:
+The supervisor ran these in the real Droppy Playground, with the real pointer
+and real key events, on a macOS display of 1800 × 1169. The worker did not run
+them. Each item states what was seen. Nothing was run on the Playground from the
+worker's thread.
 
-1. Conditions 1, 3, 4 and 5 on this head. The real-host run at `b1fbef9` passed
-   them with the `.popUpMenu` level. The head uses `.floating` and a different
-   placement, so they have to be checked again.
-2. The shelf no longer covers the search field or the first result row. With the
-   Tracklog widget showing, the field and first result should start at about y 315
-   on a notched 1800 × 1169 screen, below the page pill's measured bottom of 258.
-   The shelf window's height is not measured.
-3. The palette closes on resign key and the shelf closes on a click outside it,
-   with the panel really key.
-4. Typed keys reach the field and a typed query runs a search.
-5. Artwork stays on rows and on the widget after the palette opens and closes.
-6. The real widget row reopens the takeover after the palette closes.
-7. The notch height on the owner's display, which sets the clearance: 37 is
-   assumed from the measured shell bottom.
+- A real click on the takeover's search button did not crash the host. No new
+  entry in `~/Library/Logs/Droppy/exceptions.log` and no new crash report.
+- The panel was 680 × 560 at x 560, y 316, layer 3. The shelf window was at
+  layer 100. The shell bottom measured about y 216 and the page pill bottom about
+  y 258, so nothing overlapped the field or the results. The shelf stayed open at
+  first, then closed by itself after a real click inside the palette with the
+  pointer moved away. The palette stayed open and key.
+- Real typed `blo` reached the field and ran a search: Artists read "Expanded.
+  10 results", and the other groups returned results too. A real click in the
+  field placed the caret, and the next key gave `blno` with new results. These
+  were live, unauthenticated, read-only Last.fm catalogue searches through the
+  Playground. Queries: `blo`, `blno`.
+- The first Escape cleared the query and the second closed the palette.
+- After closing, the shelf widget kept its cover. A real click on the widget row
+  reopened the takeover with covers on every row. The issue's neutral-sleeve
+  symptom did not appear with this fix installed. This is "not reproduced", not a
+  proven mechanism.
+- Opened again, a real click outside the palette closed it, closed the shelf and
+  returned the foreground to the other app.
+- Database row counts were unchanged across the retest: 52 listens, 156
+  deliveries, integrity check ok.
+
+## Still untested on the real host
+
+- The shelf overflow entry.
+- The rebindable shortcut.
+- Return, Option-Return and Command-Return on a result.
+- Input-method composition.
+- A second widget on the same shelf page that is taller than Tracklog's card.
+  The clearance does not account for it, so the palette could sit under that
+  shelf's extent.
+- The notch height on other displays. 37 is assumed from the measured shell
+  bottom, which the owner's display matched.
