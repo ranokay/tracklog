@@ -13,4 +13,7 @@ Three rules apply to every test and harness fixture. The seams they name are
    fixed sleep; a loaded runner crosses those budgets. A bounded wait fails
    the test loudly with what was awaited and the last observed value.
 3. **No live services.** No test or harness code calls a live service. Use a
-   scripted transport or a temporary local store instead.
+   scripted transport or a temporary local store instead. An agent checking how
+   a service behaves may make unauthenticated, read-only catalogue calls, and
+   lists each one in the PR. Credentials, writes and endpoints for a named user
+   account need the owner.
