@@ -41,6 +41,16 @@ public enum ArtistImageLookup {
     public static let searchLimit = 10
     public static let hitLifetime: TimeInterval = 30 * 24 * 60 * 60
     public static let missLifetime: TimeInterval = 24 * 60 * 60
+    /// The artist page's circle is 84 points, so the search API's 100-pixel
+    /// thumbnail is not enough on a Retina display. iTunes serves any size in
+    /// the artwork file name; the store caps the stored copy at 512 pixels.
+    public static let requestedArtworkSize = 600
+
+    /// A cache key scoped to the requested size, so a thumbnail stored by an
+    /// older build is not reused after the request grows.
+    public static func cacheKey(forArtist key: String) -> String {
+        "\(key)\u{1F}\(requestedArtworkSize)"
+    }
 
     public enum Resolution: Equatable, Sendable {
         case image(URL)
@@ -158,13 +168,26 @@ public struct ITunesSearchClient: ArtistImageSearching {
         return payload.results.compactMap { result in
             let artistName = result.artistName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !artistName.isEmpty else { return nil }
-            let artwork = result.artworkUrl100.flatMap { URL(string: $0) }
+            let artwork = result.artworkUrl100.flatMap { Self.artworkURL(from: $0) }
             return ArtistImageAlbum(
                 artistID: result.artistId.map(String.init) ?? "",
                 artistName: artistName,
                 artworkURL: artwork,
             )
         }
+    }
+
+    /// The search API answers with a `100x100bb` thumbnail. Replace the size
+    /// segment so the download is large enough for the artist page; a URL
+    /// without one is left alone.
+    private static func artworkURL(from thumbnail: String) -> URL? {
+        let size = ArtistImageLookup.requestedArtworkSize
+        let scaled = thumbnail.replacingOccurrences(
+            of: #"\d+x\d+bb"#,
+            with: "\(size)x\(size)bb",
+            options: .regularExpression,
+        )
+        return URL(string: scaled)
     }
 
     private struct SearchPayload: Decodable {

@@ -755,6 +755,60 @@ struct EntityImageCompositionTests {
         #expect(try await composition.store.artistImageCacheCount() == 1)
     }
 
+    @Test func anApproximateArtistImageAsksForArtworkSharpEnoughForTheArtistPage() async throws {
+        let composition = try await entityComposition { request in
+            if request.url.host == "itunes.apple.com" {
+                return entityITunesResponse([
+                    ("1012882", "Blondie", "https://images.example/cover/100x100bb.jpg"),
+                ])
+            }
+            if request.url.path.hasSuffix("600x600bb.jpg") {
+                return entityImageResponse(try? testImageData(red: 0.3, green: 0.8, blue: 0.4))
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(artistRequest())
+        #expect(await waitForEntityImage(composition.state, source: .approximate))
+
+        let requests = await composition.transport.requests(pathEndingWith: "600x600bb.jpg")
+        let request = try #require(requests.first)
+        #expect(request.url.absoluteString == "https://images.example/cover/600x600bb.jpg")
+    }
+
+    @Test func anOlderThumbnailCacheEntryDoesNotBlockTheLargerRequest() async throws {
+        let composition = try await entityComposition { request in
+            if request.url.host == "itunes.apple.com" {
+                return entityITunesResponse([
+                    ("1012882", "Blondie", "https://images.example/cover/100x100bb.jpg"),
+                ])
+            }
+            if request.url.path.hasSuffix("600x600bb.jpg") {
+                return entityImageResponse(try? testImageData(red: 0.4, green: 0.5, blue: 0.6))
+            }
+            return entityLastFMError(3, message: "Invalid Method")
+        }
+        try await linkLastFM(composition)
+
+        let key = try #require(LocalArtistIdentity.key(name: "Blondie"))
+        let old = try #require(ArtworkNormalizer.normalize(image(red: 0.9)))
+        try await composition.store.saveArtistImageCache(
+            ArtistImageCacheEntry(
+                artistKey: key,
+                artworkHash: old.hash,
+                outcome: .hit,
+                checkedAt: composition.clock.now,
+            ),
+            artwork: old,
+        )
+
+        try await composition.runtime.openEntityDetail(artistRequest())
+        #expect(await waitForEntityImage(composition.state, source: .approximate))
+        #expect(await composition.transport.itunesRequests().count == 1, "the old thumbnail hit is not reused")
+        #expect(await composition.transport.requests(pathEndingWith: "600x600bb.jpg").count == 1)
+        #expect(try await composition.store.artistImageCacheCount() == 2, "the larger image is cached under the new key")
+    }
+
     @Test func twoArtistIDsWithTheSameNameUseTheNeutralSleeve() async throws {
         let composition = try await entityComposition(
             handler: artistSearchHandler([
@@ -916,7 +970,8 @@ struct EntityImageCompositionTests {
             return entityLastFMError(3, message: "Invalid Method")
         }
         try await linkLastFM(composition)
-        let key = try #require(LocalArtistIdentity.key(name: "Blondie"))
+        let artistKey = try #require(LocalArtistIdentity.key(name: "Blondie"))
+        let key = ArtistImageLookup.cacheKey(forArtist: artistKey)
         try await composition.runtime.openEntityDetail(artistRequest())
         #expect(await waitForEntityImage(composition.state, source: .approximate))
         let first = try #require(try await composition.store.artistImageCache(forArtist: key))

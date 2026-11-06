@@ -60,6 +60,9 @@ public final class ScrobbleEngine {
         var submittedTrack: Track
         var startedAt: Date
         var lastSampleAt: Date
+        /// The last position observed while playing. A paused observation does
+        /// not move it, so a seek made while paused is still visible when
+        /// playback resumes.
         var lastElapsed: TimeInterval
         var played: TimeInterval
         /// When the last now-playing call went out, or `nil` if none has.
@@ -116,7 +119,8 @@ public final class ScrobbleEngine {
 
         var effects: [ScrobbleEffect] = []
 
-        if let current = session, current.rawTrack.identity != sample.track.identity {
+        if let current = session,
+           current.rawTrack.identity != sample.track.identity || isRestart(current, with: sample) {
             effects += finalize(at: now)
             session = nil
         }
@@ -215,32 +219,34 @@ public final class ScrobbleEngine {
         )
     }
 
+    /// A playing observation that lands near the start after a backward jump
+    /// is a new play, not a seek within the current one. The player resets its
+    /// report time on a seek or resume, so the position at that report
+    /// separates a true start from a late observation of a rewind.
+    private func isRestart(_ session: Session, with sample: MediaSample) -> Bool {
+        guard sample.isPlaying,
+              sample.elapsed + 3 < session.lastElapsed
+        else { return false }
+        let sinceReport = sample.observedAt.timeIntervalSince(sample.timestamp)
+        guard sinceReport <= configuration.leadIn else { return false }
+        let positionAtReport = sample.elapsed - played(over: sinceReport, at: sample)
+        return positionAtReport < 3
+    }
+
     private func advance(
         _ session: Session,
         with sample: MediaSample,
         submitted: Track?,
         at now: Date,
     ) -> Session {
-        // A jump back to the first seconds of the same track is a restart,
-        // not a seek: start a fresh session so a repeat can scrobble again.
-        if sample.elapsed + 3 < session.lastElapsed, sample.elapsed < 3 {
-            return makeSession(
-                sample,
-                submitted: submitted,
-                startedAt: now,
-                played: max(0, sample.elapsed),
-                at: now,
-            )
-        }
-
         var current = session
         current.submittedTrack = submitted ?? current.submittedTrack
         if sample.isPlaying {
             let gap = max(0, min(now.timeIntervalSince(current.lastSampleAt), configuration.maxSampleGap))
             current.played += played(over: gap, at: sample)
+            current.lastElapsed = sample.elapsed
         }
         current.lastSampleAt = now
-        current.lastElapsed = sample.elapsed
         current.isPlaying = sample.isPlaying
         return current
     }
