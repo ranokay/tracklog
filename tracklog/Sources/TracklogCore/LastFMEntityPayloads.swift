@@ -155,9 +155,9 @@ struct LastFMTrackInfoPayload: Decodable {
 }
 
 private extension KeyedDecodingContainer {
-    /// Last.fm documents a field, then sometimes sends an empty string or
-    /// another shape in its place. An unreadable optional value becomes
-    /// absent, so one odd field cannot discard the facts around it.
+    /// A field can arrive in a shape other than the documented one. An
+    /// unreadable optional value becomes absent, so that field is tolerated
+    /// without discarding the facts around it.
     func lenient<Value: Decodable>(_ type: Value.Type, forKey key: Key) -> Value? {
         try? decodeIfPresent(type, forKey: key)
     }

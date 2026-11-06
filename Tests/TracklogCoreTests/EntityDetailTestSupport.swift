@@ -113,8 +113,9 @@ func entityLastFMArtistInfo(
     )
 }
 
-/// Known behaviour: counts can be numbers, an absent count can arrive as an
-/// empty string, and `image`/`tags` can be `""` instead of an array/object.
+/// Tolerated variant, not observed in a real answer: counts can be numbers, an
+/// absent count can arrive as an empty string, and `image`/`tags` can be `""`
+/// instead of an array/object.
 func entityLastFMArtistInfoVariant() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
@@ -128,13 +129,25 @@ func entityLastFMArtistInfoVariant() -> HTTPResponse {
     )
 }
 
-/// A link with no counts still has something to show.
+/// A link with no counts (`stats` as `""`) still has something to show.
 func entityLastFMArtistInfoLinkOnly() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
         body: Data(
             #"""
             {"artist":{"url":"https://www.last.fm/music/Blondie","stats":""}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// Tolerated shape with the optional keys absent: no `stats` and no `image`.
+func entityLastFMArtistInfoMissingOptionals() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"artist":{"url":"https://www.last.fm/music/Blondie"}}
             """#.utf8,
         ),
     )
@@ -169,8 +182,8 @@ func entityLastFMAlbumInfo(
     )
 }
 
-/// Known behaviour: counts as numbers, `image`/`tracks`/`tags` as `""`, and a
-/// missing MBID and release date.
+/// Tolerated variant, not observed in a real answer: counts as numbers,
+/// `image`/`tracks`/`tags` as `""`, and a missing MBID and release date.
 func entityLastFMAlbumInfoVariant() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
@@ -185,7 +198,8 @@ func entityLastFMAlbumInfoVariant() -> HTTPResponse {
     )
 }
 
-/// A link and an artwork URL with no counts still have something to show.
+/// A link with no counts or artwork (`image` and `releasedate` as `""`) still
+/// has something to show.
 func entityLastFMAlbumInfoLinkOnly() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
@@ -193,6 +207,20 @@ func entityLastFMAlbumInfoLinkOnly() -> HTTPResponse {
             #"""
             {"album":{"url":"https://www.last.fm/music/Blondie/Parallel+Lines",
             "releasedate":"","image":"","tracks":""}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// Tolerated shape with the optional keys absent: no `releasedate` and no
+/// `image`.
+func entityLastFMAlbumInfoMissingOptionals() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"album":{"url":"https://www.last.fm/music/Blondie/Parallel+Lines",
+            "listeners":"100","playcount":"200","userplaycount":"7"}}
             """#.utf8,
         ),
     )
@@ -223,8 +251,9 @@ func entityLastFMTrackInfo(userPlays: Int = 9) -> HTTPResponse {
     )
 }
 
-/// Known behaviour: a numeric duration and counts, `toptags` as `""`, the
-/// track `artist` as a plain string, and no `album` object.
+/// Tolerated variant, not observed in a real answer: a numeric duration and
+/// counts, `toptags` as `""`, the track `artist` as a plain string, and
+/// `album` as `""`.
 func entityLastFMTrackInfoVariant() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
@@ -238,7 +267,7 @@ func entityLastFMTrackInfoVariant() -> HTTPResponse {
     )
 }
 
-/// A link with no duration and no counts still has something to show.
+/// A link with no duration, counts or album still has something to show.
 func entityLastFMTrackInfoLinkOnly() -> HTTPResponse {
     HTTPResponse(
         statusCode: 200,
@@ -251,10 +280,28 @@ func entityLastFMTrackInfoLinkOnly() -> HTTPResponse {
     )
 }
 
+/// Tolerated shape with no `album` key and no track artist.
+func entityLastFMTrackInfoMissingAlbum() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"track":{"url":"https://www.last.fm/music/Blondie/_/Heart+of+Glass",
+            "duration":"234000","listeners":"100","playcount":"200","userplaycount":"9"}}
+            """#.utf8,
+        ),
+    )
+}
+
 /// A decoded entity object whose read fields are all absent. It must not be
 /// reported as a successful, empty service section.
 func entityLastFMEmptyEntity(_ key: String) -> HTTPResponse {
     HTTPResponse(statusCode: 200, body: Data(#"{"\#(key)":{"foo":1}}"#.utf8))
+}
+
+/// The entity slot holds an empty string instead of an object.
+func entityLastFMEmptyEntityString(_ key: String) -> HTTPResponse {
+    HTTPResponse(statusCode: 200, body: Data(#"{"\#(key)":""}"#.utf8))
 }
 
 func entityLastFMError(_ code: Int, message: String) -> HTTPResponse {
@@ -305,6 +352,7 @@ func entityComposition(
         apiKey: "api-key",
         sharedSecret: "secret",
     ),
+    appCredentialsProvider: (any LastFMAppCredentialsProviding)? = nil,
     extraAdapters: [any ServiceAdapter] = [],
     listenBrainzAdapter: Bool = false,
     existingStore: SQLiteListenStore? = nil,
@@ -320,9 +368,12 @@ func entityComposition(
         try SQLiteListenStore(url: database.url)
     }
     let transport = EntityTransport(hold: hold, handler: handler)
-    var adapters: [any ServiceAdapter] = [
-        LastFMAdapter(transport: transport, appCredentials: appCredentials),
-    ]
+    let lastFMAdapter = if let appCredentialsProvider {
+        LastFMAdapter(transport: transport, appCredentials: appCredentialsProvider)
+    } else {
+        LastFMAdapter(transport: transport, appCredentials: appCredentials)
+    }
+    var adapters: [any ServiceAdapter] = [lastFMAdapter]
     if listenBrainzAdapter {
         adapters.append(ListenBrainzAdapter(transport: transport))
     }
