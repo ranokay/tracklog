@@ -287,7 +287,7 @@ extension TracklogSearchPaletteController {
     /// 42pt below the shell with this widget at Regular; 48 leaves the gap.
     var shelfClearance: CGFloat {
         let geometry = droplet?.host?.environment.notchGeometry
-        let usesNotch = geometry?.cutout == .notch
+        let usesNotch = geometry?.isHardwareNotch == true
         let notchHeight = geometry?.closedHeight ?? 32
         let insets = DroppyShellMetrics.shelfContentInsets(
             usesNotchStyle: usesNotch,
@@ -298,6 +298,7 @@ extension TracklogSearchPaletteController {
             switch descriptor.layoutTraits.contentHeight {
             case .standard: DroppyShellMetrics.shelfWidgetStandardContentHeight
             case let .fixed(height): height
+            @unknown default: DroppyShellMetrics.shelfWidgetStandardContentHeight
             }
         } else {
             150
