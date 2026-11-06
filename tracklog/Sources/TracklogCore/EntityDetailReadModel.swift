@@ -441,7 +441,7 @@ public final class EntityDetailReadModel {
                 } catch let failure as EntityServiceFailure {
                     return ServiceRead.failure(failure)
                 } catch {
-                    return ServiceRead.failure(.offline)
+                    return ServiceRead.failure(.unexpected)
                 }
             }
             guard isActive, serviceGeneration == token, var detail = state.entityDetail else {

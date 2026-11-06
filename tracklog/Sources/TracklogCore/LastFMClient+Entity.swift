@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Last.fm getInfo
 
 extension LastFMClient {
-    func artistInfo(artist: String, username: String?) async throws -> LastFMArtistInfoPayload.Value {
+    func artistInfo(artist: String, username: String?) async throws -> LastFMArtistInfoValue {
         let data = try await perform(
             method: "artist.getInfo",
             parameters: identityParameters(artist: artist, username: username),
@@ -13,7 +13,7 @@ extension LastFMClient {
         return value
     }
 
-    func albumInfo(album: String, artist: String, username: String?) async throws -> LastFMAlbumInfoPayload.Value {
+    func albumInfo(album: String, artist: String, username: String?) async throws -> LastFMAlbumInfoValue {
         var parameters = try identityParameters(artist: artist, username: username)
         parameters["album"] = album.trimmingCharacters(in: .whitespacesAndNewlines)
         let data = try await perform(method: "album.getInfo", parameters: parameters)
@@ -22,7 +22,7 @@ extension LastFMClient {
         return value
     }
 
-    func trackInfo(track: String, artist: String, username: String?) async throws -> LastFMTrackInfoPayload.Value {
+    func trackInfo(track: String, artist: String, username: String?) async throws -> LastFMTrackInfoValue {
         var parameters = try identityParameters(artist: artist, username: username)
         parameters["track"] = track.trimmingCharacters(in: .whitespacesAndNewlines)
         let data = try await perform(method: "track.getInfo", parameters: parameters)
@@ -43,71 +43,6 @@ extension LastFMClient {
         }
         return parameters
     }
-}
-
-// MARK: - Payloads
-
-struct LastFMImageValue: Decodable {
-    let text: String?
-    let size: String?
-
-    enum CodingKeys: String, CodingKey {
-        case text = "#text"
-        case size
-    }
-}
-
-struct LastFMStatsValue: Decodable {
-    let listeners: LastFMFlexibleInt?
-    let playcount: LastFMFlexibleInt?
-    let userplaycount: LastFMFlexibleInt?
-}
-
-struct LastFMArtistInfoPayload: Decodable {
-    struct Value: Decodable {
-        let name: String?
-        let mbid: String?
-        let url: String?
-        let image: [LastFMImageValue]?
-        let stats: LastFMStatsValue?
-    }
-
-    let artist: Value?
-}
-
-struct LastFMAlbumInfoPayload: Decodable {
-    struct Value: Decodable {
-        let name: String?
-        let artist: String?
-        let url: String?
-        let releasedate: String?
-        let image: [LastFMImageValue]?
-        let listeners: LastFMFlexibleInt?
-        let playcount: LastFMFlexibleInt?
-        let userplaycount: LastFMFlexibleInt?
-    }
-
-    let album: Value?
-}
-
-struct LastFMTrackAlbumValue: Decodable {
-    let title: String?
-    let image: [LastFMImageValue]?
-}
-
-struct LastFMTrackInfoPayload: Decodable {
-    struct Value: Decodable {
-        let name: String?
-        let url: String?
-        let duration: LastFMFlexibleInt?
-        let listeners: LastFMFlexibleInt?
-        let playcount: LastFMFlexibleInt?
-        let userplaycount: LastFMFlexibleInt?
-        let artist: LastFMChartArtistValue?
-        let album: LastFMTrackAlbumValue?
-    }
-
-    let track: Value?
 }
 
 // MARK: - Service adapter
@@ -145,12 +80,12 @@ extension LastFMAdapter: EntityServiceReading {
         appendCount(info.stats?.listeners, label: "Listeners on Last.fm", to: &facts)
         appendCount(info.stats?.playcount, label: "Plays on Last.fm", to: &facts)
         appendCount(info.stats?.userplaycount, label: "Your plays", to: &facts)
-        return EntityServiceFacts(
+        return try usable(EntityServiceFacts(
             serviceName: "Last.fm",
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        )
+        ))
     }
 
     private func albumDetails(
@@ -169,13 +104,13 @@ extension LastFMAdapter: EntityServiceReading {
         appendCount(info.listeners, label: "Listeners on Last.fm", to: &facts)
         appendCount(info.playcount, label: "Plays on Last.fm", to: &facts)
         appendCount(info.userplaycount, label: "Your plays", to: &facts)
-        return EntityServiceFacts(
+        return try usable(EntityServiceFacts(
             serviceName: "Last.fm",
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
             artworkURL: largestImage(info.image),
-        )
+        ))
     }
 
     private func trackDetails(
@@ -194,12 +129,22 @@ extension LastFMAdapter: EntityServiceReading {
         appendCount(info.listeners, label: "Listeners on Last.fm", to: &facts)
         appendCount(info.playcount, label: "Plays on Last.fm", to: &facts)
         appendCount(info.userplaycount, label: "Your plays", to: &facts)
-        return EntityServiceFacts(
+        return try usable(EntityServiceFacts(
             serviceName: "Last.fm",
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        )
+        ))
+    }
+
+    /// A decoded entity object that carries no fact and no link is not a
+    /// success: it would draw an empty service section and hide a shape
+    /// change. Treat it as an unreadable answer instead.
+    private func usable(_ facts: EntityServiceFacts) throws -> EntityServiceFacts {
+        guard !facts.facts.isEmpty || facts.link != nil else {
+            throw EntityServiceFailure.unreadable
+        }
+        return facts
     }
 
     private func appendCount(
@@ -266,8 +211,37 @@ extension LastFMAdapter: EntityServiceReading {
         if let failure = error as? EntityServiceFailure {
             return failure
         }
-        guard let lastFM = error as? LastFMError else { return error }
-        switch lastFM.serviceFailure {
+        guard let lastFM = error as? LastFMError else {
+            return EntityServiceFailure.unexpected
+        }
+        if let failure = concreteFailure(for: lastFM) {
+            return failure
+        }
+        return classifiedFailure(for: lastFM)
+    }
+
+    /// Classify the concrete error before `serviceFailure`: transport,
+    /// credential storage, malformed answers and 5xx all collapse into
+    /// `.retryable` there, and the page must not call them all unreachable.
+    private static func concreteFailure(for error: LastFMError) -> EntityServiceFailure? {
+        switch error {
+        case .transport:
+            .offline
+        case .credentialStorage:
+            .credentialsUnavailable
+        case .malformedResponse:
+            .unreadable
+        case let .http(statusCode, _) where (500 ..< 600).contains(statusCode):
+            .serviceUnavailable
+        case let .service(code, _) where [8, 11, 16].contains(code):
+            .serviceUnavailable
+        default:
+            nil
+        }
+    }
+
+    private static func classifiedFailure(for error: LastFMError) -> any Error {
+        switch error.serviceFailure {
         case let .appCredentialAuth(problem):
             return EntityServiceFailure.appCredentials(problem)
         case .auth:
@@ -275,9 +249,10 @@ extension LastFMAdapter: EntityServiceReading {
         case let .rateLimited(retryAfter):
             return EntityServiceFailure.rateLimited(retryAfter: retryAfter)
         case .retryable:
-            // The existing classification treats transport and 5xx answers as
-            // retryable, which every other read surface reports as offline.
-            return EntityServiceFailure.offline
+            // Transport, credential storage, malformed answers and 5xx are
+            // handled above. What remains retryable is an HTTP status the
+            // transport refused, such as a redirect that would drop HTTPS.
+            return EntityServiceFailure.serviceUnavailable
         case let .rejected(message):
             if isNotFound(message) {
                 return EntityServiceReadError.missing

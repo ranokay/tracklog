@@ -236,8 +236,20 @@ public enum EntityServiceFailure: Error, Equatable, Sendable {
     case appCredentials(AppCredentialProblem)
     case needsSignIn
     case rateLimited(retryAfter: TimeInterval?)
+    /// The transport could not deliver the request. This is the only case
+    /// that may say the service could not be reached.
     case offline
     case timedOut
+    /// An answer arrived but its readable fields could not be interpreted, or
+    /// the entity object carried no facts and no link.
+    case unreadable
+    /// The service answered with its own trouble: a 5xx, a temporary service
+    /// code, or an HTTP status the transport refused.
+    case serviceUnavailable
+    /// The stored app credentials could not be read.
+    case credentialsUnavailable
+    /// A failure the entity mapping does not recognize.
+    case unexpected
     case service(String?)
 
     public var needsSettings: Bool {
@@ -263,6 +275,14 @@ public enum EntityServiceFailure: Error, Equatable, Sendable {
             "Last.fm could not be reached. Service details are unavailable."
         case .timedOut:
             "Last.fm took too long to answer. Service details are unavailable."
+        case .unreadable:
+            "Last.fm sent an answer this app could not read. Service details are unavailable."
+        case .serviceUnavailable:
+            "Last.fm is having trouble answering. Service details are unavailable."
+        case .credentialsUnavailable:
+            "Last.fm credentials could not be read. Service details are unavailable."
+        case .unexpected:
+            "Last.fm service details could not be loaded. Try again."
         case let .service(message):
             message ?? "Last.fm rejected the detail request."
         }

@@ -97,8 +97,44 @@ func entityLastFMArtistInfo(
         statusCode: 200,
         body: Data(
             #"""
-            {"artist":{"name":"Blondie","mbid":"","url":"https://www.last.fm/music/Blondie",
-            "stats":{"listeners":"\#(listeners)","playcount":"\#(plays)","userplaycount":"\#(userPlays)"}}}
+            {"artist":{"name":"Blondie","mbid":"9dc9f41a-4d0e-4d6b-9f7f-1a2b3c4d5e6f",
+            "url":"https://www.last.fm/music/Blondie",
+            "image":[{"#text":"https://images.example/artist-small.jpg","size":"small"},
+            {"#text":"https://images.example/artist-mega.jpg","size":"mega"}],
+            "streamable":"1","ontour":"0",
+            "stats":{"listeners":"\#(listeners)","playcount":"\#(plays)","userplaycount":"\#(userPlays)"},
+            "similar":{"artist":[{"name":"Talking Heads","url":"https://www.last.fm/music/Talking+Heads",
+            "image":[{"#text":"https://images.example/similar.jpg","size":"small"}]}]},
+            "tags":{"tag":[{"name":"new wave","url":"https://www.last.fm/tag/new+wave"}]},
+            "bio":{"published":"01 Jan 2005, 00:00","summary":"Blondie are an American rock band.",
+            "content":"Blondie are an American rock band formed in New York City in 1974."}}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// Known behaviour: counts can be numbers, an absent count can arrive as an
+/// empty string, and `image`/`tags` can be `""` instead of an array/object.
+func entityLastFMArtistInfoVariant() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"artist":{"name":"Blondie","url":"https://www.last.fm/music/Blondie",
+            "image":"","tags":"","similar":"",
+            "stats":{"listeners":"","playcount":1599101,"userplaycount":12}}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// A link with no counts still has something to show.
+func entityLastFMArtistInfoLinkOnly() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"artist":{"url":"https://www.last.fm/music/Blondie","stats":""}}
             """#.utf8,
         ),
     )
@@ -109,15 +145,54 @@ func entityLastFMAlbumInfo(
     image: String? = "https://images.example/album.jpg",
 ) -> HTTPResponse {
     let images = image.map {
-        ##"[{"#text":"\##($0)","size":"extralarge"}]"##
+        ##"[{"#text":"\##($0)","size":"small"},{"#text":"\##($0)","size":"extralarge"}]"##
     } ?? ##"[{"#text":"","size":"extralarge"}]"##
     return HTTPResponse(
         statusCode: 200,
         body: Data(
             #"""
-            {"album":{"name":"Parallel Lines","artist":"Blondie","url":"https://www.last.fm/music/Blondie/Parallel+Lines",
-            "releasedate":"23 Sep 1978, 00:00","listeners":"100","playcount":"200","userplaycount":"\#(userPlays)",
-            "image":\#(images)}}
+            {"album":{"name":"Parallel Lines","artist":"Blondie","id":"2026126",
+            "mbid":"61bf0388-b8a9-48f4-81d1-7eb02706dfb0",
+            "url":"https://www.last.fm/music/Blondie/Parallel+Lines",
+            "releasedate":"23 Sep 1978, 00:00",
+            "image":\#(images),"listeners":"100","playcount":"200","userplaycount":"\#(userPlays)",
+            "toptags":{"tag":[{"name":"new wave","url":"https://www.last.fm/tag/new+wave"}]},
+            "tracks":{"track":[{"rank":1,"name":"Hanging on the Telephone","duration":142,
+            "mbid":"","url":"https://www.last.fm/music/Blondie/_/Hanging+on+the+Telephone",
+            "streamable":{"#text":"1","fulltrack":"0"},
+            "artist":{"name":"Blondie","mbid":"9dc9f41a-4d0e-4d6b-9f7f-1a2b3c4d5e6f",
+            "url":"https://www.last.fm/music/Blondie"}}]},
+            "wiki":{"published":"01 Jan 2005, 00:00","summary":"Parallel Lines is the third album.",
+            "content":"Parallel Lines is the third studio album by Blondie."}}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// Known behaviour: counts as numbers, `image`/`tracks`/`tags` as `""`, and a
+/// missing MBID and release date.
+func entityLastFMAlbumInfoVariant() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"album":{"name":"Parallel Lines","artist":"Blondie",
+            "url":"https://www.last.fm/music/Blondie/Parallel+Lines",
+            "image":"","tracks":"","tags":"","toptags":"",
+            "listeners":100,"playcount":200,"userplaycount":7}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// A link and an artwork URL with no counts still have something to show.
+func entityLastFMAlbumInfoLinkOnly() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"album":{"url":"https://www.last.fm/music/Blondie/Parallel+Lines",
+            "releasedate":"","image":"","tracks":""}}
             """#.utf8,
         ),
     )
@@ -128,11 +203,58 @@ func entityLastFMTrackInfo(userPlays: Int = 9) -> HTTPResponse {
         statusCode: 200,
         body: Data(
             #"""
-            {"track":{"name":"Heart of Glass","url":"https://www.last.fm/music/Blondie/_/Heart+of+Glass",
-            "duration":"234000","listeners":"100","playcount":"200","userplaycount":"\#(userPlays)"}}
+            {"track":{"id":"1019817","name":"Heart of Glass","mbid":"",
+            "url":"https://www.last.fm/music/Blondie/_/Heart+of+Glass",
+            "duration":"234000","streamable":{"#text":"1","fulltrack":"1"},
+            "listeners":"100","playcount":"200","userplaycount":"\#(userPlays)",
+            "artist":{"name":"Blondie","mbid":"9dc9f41a-4d0e-4d6b-9f7f-1a2b3c4d5e6f",
+            "url":"https://www.last.fm/music/Blondie"},
+            "album":{"artist":"Blondie","title":"Parallel Lines",
+            "mbid":"61bf0388-b8a9-48f4-81d1-7eb02706dfb0",
+            "url":"https://www.last.fm/music/Blondie/Parallel+Lines",
+            "image":[{"#text":"https://images.example/album.jpg","size":"large"}],
+            "@attr":{"position":"1"}},
+            "toptags":{"tag":[{"name":"new wave","url":"https://www.last.fm/tag/new+wave"}]},
+            "wiki":{"published":"01 Jan 2005, 00:00","summary":"Heart of Glass is a song.",
+            "content":"Heart of Glass is a song by Blondie."},
+            "userloved":"1"}}
             """#.utf8,
         ),
     )
+}
+
+/// Known behaviour: a numeric duration and counts, `toptags` as `""`, the
+/// track `artist` as a plain string, and no `album` object.
+func entityLastFMTrackInfoVariant() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"track":{"name":"Heart of Glass","url":"https://www.last.fm/music/Blondie/_/Heart+of+Glass",
+            "duration":234000,"listeners":100,"playcount":200,"userplaycount":9,
+            "artist":"Blondie","album":"","toptags":""}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// A link with no duration and no counts still has something to show.
+func entityLastFMTrackInfoLinkOnly() -> HTTPResponse {
+    HTTPResponse(
+        statusCode: 200,
+        body: Data(
+            #"""
+            {"track":{"url":"https://www.last.fm/music/Blondie/_/Heart+of+Glass",
+            "artist":"Blondie","album":"","duration":""}}
+            """#.utf8,
+        ),
+    )
+}
+
+/// A decoded entity object whose read fields are all absent. It must not be
+/// reported as a successful, empty service section.
+func entityLastFMEmptyEntity(_ key: String) -> HTTPResponse {
+    HTTPResponse(statusCode: 200, body: Data(#"{"\#(key)":{"foo":1}}"#.utf8))
 }
 
 func entityLastFMError(_ code: Int, message: String) -> HTTPResponse {
