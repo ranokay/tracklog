@@ -42,6 +42,8 @@ final class TracklogSearchPaletteController {
         let canBecomeMain: Bool
         let activationBegan: Bool
         let monitorsInstalled: Bool
+        let frame: NSRect?
+        let visibleFrame: NSRect?
     }
 
     var contract: ContractSnapshot {
@@ -57,6 +59,8 @@ final class TracklogSearchPaletteController {
             monitorsInstalled: keyMonitor != nil
                 && resignObserver != nil
                 && activeObserver != nil,
+            frame: panel?.frame,
+            visibleFrame: NSScreen.main?.visibleFrame,
         )
     }
 
@@ -106,9 +110,7 @@ final class TracklogSearchPaletteController {
             defer: false,
         )
         panel.isFloatingPanel = true
-        // Droppy's shelf is a NotchWindow above .floating. The palette has to
-        // sit above it, or the shelf covers the search field.
-        panel.level = .popUpMenu
+        panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -140,9 +142,6 @@ final class TracklogSearchPaletteController {
             for: panel,
             returningTo: NSWorkspace.shared.frontmostApplication,
         )
-        // The host's activation makes the panel key and main; keep the level
-        // above the shelf in case the host ordered its own window meanwhile.
-        panel.level = .popUpMenu
         if !panel.isKeyWindow {
             panel.makeKey()
         }
@@ -272,16 +271,53 @@ final class TracklogSearchPaletteController {
             return nil
         }
     }
+}
 
+extension TracklogSearchPaletteController {
     // MARK: - Geometry
 
+    /// How far below the visible frame's top the palette has to start to clear
+    /// the host's shelf.
+    ///
+    /// The host composites its shelf above a droplet panel even when the panel
+    /// is at a higher window level: the real host showed the shelf on top of a
+    /// layer-101 palette at layer 100. The shelf's extent is the shell's top
+    /// inset, this droplet's widget card, the slot and bottom inset, plus the
+    /// host's page pill below the shell. The real host measured the page pill
+    /// 42pt below the shell with this widget at Regular; 48 leaves the gap.
+    var shelfClearance: CGFloat {
+        let geometry = droplet?.host?.environment.notchGeometry
+        let usesNotch = geometry?.cutout == .notch
+        let notchHeight = geometry?.closedHeight ?? 32
+        let insets = DroppyShellMetrics.shelfContentInsets(
+            usesNotchStyle: usesNotch,
+            notchHeight: notchHeight,
+        )
+        let widgetHeight: CGFloat = if let descriptor = droplet?.widgetDescriptors
+            .first(where: { $0.id == "tracklog" }) {
+            switch descriptor.layoutTraits.contentHeight {
+            case .standard: DroppyShellMetrics.shelfWidgetStandardContentHeight
+            case let .fixed(height): height
+            }
+        } else {
+            150
+        }
+        let shell = insets.top + widgetHeight
+            + DroppyShellMetrics.shelfWidgetSlotInset * 2 + insets.bottom
+        return shell + 48
+    }
+
     private func paletteSize() -> NSSize {
-        let screen = NSScreen.main?.visibleFrame
+        paletteSize(for: NSScreen.main?.visibleFrame)
+    }
+
+    private func paletteSize(for screen: NSRect?) -> NSSize {
         let maximumWidth = max(320, (screen?.width ?? 900) - 48)
         let maximumHeight = max(240, (screen?.height ?? 700) - 48)
+        let belowShelf = max(240, (screen?.height ?? 700) - shelfClearance - 12 - 16)
         return NSSize(
             width: min(680, maximumWidth),
-            height: min(560, maximumHeight),
+            height: min(560, min(maximumHeight, belowShelf)),
         )
     }
 
@@ -289,9 +325,21 @@ final class TracklogSearchPaletteController {
         guard let screen = NSScreen.main?.visibleFrame else {
             return NSRect(x: 200, y: 200, width: size.width, height: size.height)
         }
+        return frame(for: size, in: screen)
+    }
+
+    private func frame(for size: NSSize, in screen: NSRect) -> NSRect {
         let originX = screen.midX - size.width / 2
-        let originY = screen.maxY - size.height - min(80, screen.height * 0.12)
+        let clearance = shelfClearance + 12
+        let topOffset = min(clearance, max(0, screen.height - size.height - 16))
+        let originY = screen.maxY - size.height - topOffset
         return NSRect(x: originX, y: originY, width: size.width, height: size.height)
+    }
+
+    /// The frame the palette takes in `screen`. The harness uses a synthetic
+    /// small screen to prove the layout still fits and clears the shelf there.
+    func paletteFrame(in screen: NSRect) -> NSRect {
+        frame(for: paletteSize(for: screen), in: screen)
     }
 }
 

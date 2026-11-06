@@ -1,3 +1,4 @@
+import AppKit
 import DroppyKit
 
 /// Harness-only result of the palette's host contract check.
@@ -75,6 +76,44 @@ extension TracklogDroplet {
         }
         if !contract.monitorsInstalled {
             failures.append("\(label) has no key monitor and observers")
+        }
+        appendFrameFailures(label, contract: contract, to: &failures)
+    }
+
+    private func appendFrameFailures(
+        _ label: String,
+        contract: TracklogSearchPaletteController.ContractSnapshot,
+        to failures: inout [String],
+    ) {
+        guard let frame = contract.frame, let visible = contract.visibleFrame else {
+            failures.append("\(label) has no frame to check")
+            return
+        }
+        let clearance = searchPaletteController.shelfClearance
+        let topOffset = visible.maxY - frame.maxY
+        if topOffset < clearance {
+            failures.append(
+                "\(label) starts \(topOffset)pt below the visible frame top; "
+                    + "the shelf needs \(clearance)pt",
+            )
+        }
+        if !visible.contains(frame) {
+            failures.append("\(label) frame \(frame) is not inside the visible frame \(visible)")
+        }
+        if frame.width < 320 || frame.height < 240 {
+            failures.append("\(label) frame \(frame) is smaller than the minimum palette")
+        }
+
+        let smallScreen = NSRect(x: 0, y: 0, width: 1280, height: 600)
+        let smallFrame = searchPaletteController.paletteFrame(in: smallScreen)
+        if !smallScreen.contains(smallFrame) {
+            failures.append("\(label) does not fit a 1280×600 screen: \(smallFrame)")
+        }
+        if smallScreen.maxY - smallFrame.maxY < clearance {
+            failures.append("\(label) overlaps the shelf on a 1280×600 screen: \(smallFrame)")
+        }
+        if smallFrame.width < 320 || smallFrame.height < 240 {
+            failures.append("\(label) is smaller than the minimum palette on a 1280×600 screen")
         }
     }
 
