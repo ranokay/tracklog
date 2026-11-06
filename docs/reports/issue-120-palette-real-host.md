@@ -63,12 +63,19 @@ Accessibility press, no real pointer, through the takeover's search button:
 - The panel window existed (680 × 560, layer 3, title “Search and play”) but
   WindowServer reported `is_on_screen: false`, and its accessibility tree was
   empty (`degraded_reason: ax_window_unresolved`).
-- Typing “blo” reached the main harness window's sidebar field
-  (`AXTextField = "blo"`), not the palette. The palette stayed at “Type at least
-  two characters”; every group stayed “Not searched”.
-- The shelf widget page showed the neutral note sleeve while the History rows
-  kept their covers. The rows were already rendered before the exception; the
-  widget appeared afterwards and never ran its decode.
+- The same `fn+b`, `fn+l`, `fn+o` key events used on the fixed build
+  (`cua-driver.hotkey`, route `synthetic_events`) typed “blo” into the main
+  harness window's sidebar field (`AXTextField = "blo"`), not the palette. The
+  palette stayed at “Type at least two characters”; every group stayed
+  “Not searched”.
+- Rows rendered after the press: the takeover was switched from History to
+  Charts and back, which rebuilt the History rows. The rebuilt rows still showed
+  their covers. The issue's row symptom did not reproduce in this fixture.
+- The shelf widget page, rendered after the press, showed the neutral note
+  sleeve. The mechanism is an inference: the exception leaves the panel set and
+  the activation nil, and the widget's decode produced no image. The
+  `ArtworkSleeve` decode path was not logged, so this is not a proven `onAppear`
+  failure.
 - The palette could not be closed through accessibility because it had no AX
   surface, so the widget-row reopen could not be observed in this run.
 
@@ -85,17 +92,26 @@ Accessibility press, no real pointer:
 
 - The panel window was 680 × 560 at layer 101 (`.popUpMenu`), on screen, with an
   accessibility tree containing the field, the close button and the groups.
-- An accessibility-set value “blo” reached the field and ran the search:
-  Artists, Albums and Tracks each showed 10 results; no query seam was needed.
-  The view's existing `onChange` is enough once the exception is gone.
+- The same `fn+b`, `fn+l`, `fn+o` key events used on the unfixed build
+  (`cua-driver.hotkey`, route `synthetic_events`) typed “blo” into the palette
+  field. The sidebar field stayed empty (`AXTextField = "Search"`), and the
+  groups left “Not searched”: Artists, Albums and Tracks each showed 10 results.
+  An accessibility-set value also ran the search; the view's existing
+  `onChange` is enough once the exception is gone.
+- Rows rendered after the press: the takeover was switched from History to
+  Charts and back, which rebuilt the History rows. The rebuilt rows kept their
+  covers.
 - The close button closed the panel; the window list then contained only the
   main harness window.
 - The shelf widget page showed the red cover, not the neutral sleeve.
 - Pressing the widget row after the palette closed recorded
   `present "history"` at 16:51:34.228 on the Activity page.
 
-No `ArtworkSleeve` change was made: the unfixed neutral widget and the fixed
-cover are explained by the exception, not by a decode defect of their own.
+No `ArtworkSleeve` change was made. The unfixed fixture did not reproduce the
+row symptom, so the row half is left to the real host. The widget's neutral
+sleeve and the fixed cover are consistent with the exception being the cause,
+but the widget mechanism remains an inference because the decode path was not
+logged.
 
 ## What changed
 
