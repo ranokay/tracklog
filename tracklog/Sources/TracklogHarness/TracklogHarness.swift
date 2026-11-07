@@ -14,6 +14,16 @@ import Tracklog
 @main
 struct TracklogHarness: DropletHarnessApp {
     static func makeDroplet() -> any Droplet {
-        TracklogDroplet()
+        TracklogHostPanelActivation.installIfRequested()
+        return TracklogDroplet()
+    }
+
+    @MainActor
+    static func main() {
+        TracklogHostPanelActivation.installIfRequested()
+        if CommandLine.arguments.contains("--panel-check") {
+            TracklogPanelCheck.run()
+        }
+        DropletHarness.run(makeDroplet(), manifestURL: manifestURL)
     }
 }

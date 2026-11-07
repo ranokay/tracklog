@@ -7,16 +7,22 @@ import TracklogCore
 
 extension TracklogDroplet {
     /// One surface at a time: the takeover is dismissed before the panel is
-    /// presented. A second summon while the panel is open closes it.
+    /// presented. A second summon while the panel is open or about to open
+    /// closes it.
+    ///
+    /// The session is prepared here and the panel is ordered front on the next
+    /// run-loop turn, so the click's gesture returns before the host's panel
+    /// activation runs.
     func openSearchPalette() {
         guard host != nil else { return }
-        if searchPaletteController.isOpen {
+        if searchPaletteController.isPrepared {
             searchPaletteController.close()
             return
         }
         dismissTakeoverForSettings()
         state.setSearchRefusal(nil)
-        searchPaletteController.open()
+        searchPaletteController.prepare()
+        searchPaletteController.presentAfterGesture()
     }
 
     func paletteQueryChanged(_ text: String) {

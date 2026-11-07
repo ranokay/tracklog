@@ -16,9 +16,52 @@ final class TracklogSearchPaletteController {
     private var keyMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var activeObserver: NSObjectProtocol?
+    private var pendingPresentation: DispatchWorkItem?
+    private var isPreparing = false
 
     var isOpen: Bool {
         panel?.isVisible == true
+    }
+
+    /// Whether a session is prepared or a panel is up. The takeover's search
+    /// button prepares inside the click's gesture and presents on the next
+    /// run-loop turn; a second summon while that turn is pending closes it.
+    var isPrepared: Bool {
+        isPreparing || panel != nil
+    }
+
+    /// What the harness's panel contract check reads. It is not used by the
+    /// droplet's own surfaces.
+    struct ContractSnapshot {
+        let panelExists: Bool
+        let isVisible: Bool
+        let isKey: Bool
+        let isMain: Bool
+        let appActive: Bool
+        let canBecomeKey: Bool
+        let canBecomeMain: Bool
+        let activationBegan: Bool
+        let monitorsInstalled: Bool
+        let frame: NSRect?
+        let visibleFrame: NSRect?
+    }
+
+    var contract: ContractSnapshot {
+        ContractSnapshot(
+            panelExists: panel != nil,
+            isVisible: panel?.isVisible == true,
+            isKey: panel?.isKeyWindow == true,
+            isMain: panel?.isMainWindow == true,
+            appActive: NSApp.isActive,
+            canBecomeKey: panel?.canBecomeKey == true,
+            canBecomeMain: panel?.canBecomeMain == true,
+            activationBegan: activation != nil,
+            monitorsInstalled: keyMonitor != nil
+                && resignObserver != nil
+                && activeObserver != nil,
+            frame: panel?.frame,
+            visibleFrame: NSScreen.main?.visibleFrame,
+        )
     }
 
     init(droplet: TracklogDroplet) {
@@ -28,7 +71,16 @@ final class TracklogSearchPaletteController {
     // MARK: - Opening
 
     func open(reusingSession: Bool = false, notice: String? = nil) {
-        guard let droplet, droplet.host != nil, panel == nil else { return }
+        prepare(reusingSession: reusingSession, notice: notice)
+        present()
+    }
+
+    /// Starts the session and fills the model without ordering a window
+    /// front. The takeover's search button runs this inside the click's
+    /// gesture; `presentAfterGesture()` orders the panel front on the next
+    /// run-loop turn, after that gesture has returned.
+    func prepare(reusingSession: Bool = false, notice: String? = nil) {
+        guard let droplet, droplet.host != nil, !isPrepared else { return }
 
         model.collapsed = []
         model.expanded = []
@@ -40,6 +92,15 @@ final class TracklogSearchPaletteController {
             droplet.runtime?.catalogueSearch?.beginSession()
             model.query = ""
         }
+        isPreparing = true
+    }
+
+    /// Orders the prepared panel front. A refusal that reopens the palette
+    /// calls this synchronously; the takeover's search button defers it.
+    func present() {
+        guard let droplet, droplet.host != nil, isPreparing, panel == nil else { return }
+        isPreparing = false
+        pendingPresentation = nil
 
         let size = paletteSize()
         let panel = PalettePanel(
@@ -81,13 +142,32 @@ final class TracklogSearchPaletteController {
             for: panel,
             returningTo: NSWorkspace.shared.frontmostApplication,
         )
+        if !panel.isKeyWindow {
+            panel.makeKey()
+        }
         installMonitors(for: panel)
+    }
+
+    /// Presents the prepared panel on the next run-loop turn. The click's
+    /// gesture must return before a droplet's panel is ordered front, so the
+    /// host's panel activation never runs inside that gesture.
+    func presentAfterGesture() {
+        guard isPrepared else { return }
+        pendingPresentation?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.present()
+        }
+        pendingPresentation = item
+        DispatchQueue.main.async(execute: item)
     }
 
     // MARK: - Closing
 
     func close(endingSearch: Bool = true) {
-        guard panel != nil else { return }
+        guard isPrepared else { return }
+        pendingPresentation?.cancel()
+        pendingPresentation = nil
+        isPreparing = false
 
         removeMonitors()
         if endingSearch {
@@ -191,16 +271,69 @@ final class TracklogSearchPaletteController {
             return nil
         }
     }
+}
 
+extension TracklogSearchPaletteController {
     // MARK: - Geometry
 
+    /// The distance from the top of the screen to the bottom of the host's
+    /// shelf, which the palette has to start below.
+    ///
+    /// Observed on the real host at `b1fbef9`: with the palette at layer 101
+    /// and the shelf at layer 100, the shelf still drew over the palette's field
+    /// and first result row, and it stayed open while the palette was up. Why
+    /// the shelf wins is not known, so the palette is placed clear of the
+    /// shelf's extent rather than relying on the window level.
+    ///
+    /// The shelf window starts at the screen's top edge. Its extent is the
+    /// shell's top inset (the notch height plus 10, or 16 on an island), this
+    /// droplet's widget card (`.fixed(150)`), the slot and bottom insets, and
+    /// the host's page pill below the shell. A 37pt notch (DroppyKit's
+    /// `physicalNotchHeight`) makes the shell 216pt, the shell bottom the real
+    /// host measured; a 32pt notch would make it 211. The page pill bottom
+    /// measured 258pt, 42pt below the shell; 48 keeps 6pt more.
+    ///
+    /// `frame(for:in:)` measures from the visible frame's top, which sits
+    /// lower than the screen's top by the menu bar's height. That extra height
+    /// is margin on top of this number, not part of it.
+    var shelfClearance: CGFloat {
+        let geometry = droplet?.host?.environment.notchGeometry
+        let usesNotch = geometry?.isHardwareNotch == true
+        let notchHeight = geometry?.closedHeight ?? 32
+        let insets = DroppyShellMetrics.shelfContentInsets(
+            usesNotchStyle: usesNotch,
+            notchHeight: notchHeight,
+        )
+        let widgetHeight: CGFloat = if let descriptor = droplet?.widgetDescriptors
+            .first(where: { $0.id == "tracklog" }) {
+            switch descriptor.layoutTraits.contentHeight {
+            case .standard: DroppyShellMetrics.shelfWidgetStandardContentHeight
+            case let .fixed(height): height
+            @unknown default: DroppyShellMetrics.shelfWidgetStandardContentHeight
+            }
+        } else {
+            150
+        }
+        let shell = insets.top + widgetHeight
+            + DroppyShellMetrics.shelfWidgetSlotInset * 2 + insets.bottom
+        return shell + 48
+    }
+
     private func paletteSize() -> NSSize {
-        let screen = NSScreen.main?.visibleFrame
+        paletteSize(for: NSScreen.main?.visibleFrame)
+    }
+
+    /// The palette's size in `screen`. Its height is what fits below the shelf
+    /// clearance, so a short screen gets a shorter palette rather than one that
+    /// starts inside the shelf. The floor only keeps the height positive on a
+    /// screen too short for both; there the palette can overlap the shelf.
+    private func paletteSize(for screen: NSRect?) -> NSSize {
         let maximumWidth = max(320, (screen?.width ?? 900) - 48)
         let maximumHeight = max(240, (screen?.height ?? 700) - 48)
+        let belowShelf = max(120, (screen?.height ?? 700) - shelfClearance - 12 - 16)
         return NSSize(
             width: min(680, maximumWidth),
-            height: min(560, maximumHeight),
+            height: min(560, min(maximumHeight, belowShelf)),
         )
     }
 
@@ -208,20 +341,34 @@ final class TracklogSearchPaletteController {
         guard let screen = NSScreen.main?.visibleFrame else {
             return NSRect(x: 200, y: 200, width: size.width, height: size.height)
         }
+        return frame(for: size, in: screen)
+    }
+
+    private func frame(for size: NSSize, in screen: NSRect) -> NSRect {
         let originX = screen.midX - size.width / 2
-        let originY = screen.maxY - size.height - min(80, screen.height * 0.12)
+        let clearance = shelfClearance + 12
+        let topOffset = min(clearance, max(0, screen.height - size.height - 16))
+        let originY = screen.maxY - size.height - topOffset
         return NSRect(x: originX, y: originY, width: size.width, height: size.height)
+    }
+
+    /// The frame the palette takes in `screen`. The harness uses a synthetic
+    /// small screen to prove the layout still fits and clears the shelf there.
+    func paletteFrame(in screen: NSRect) -> NSRect {
+        frame(for: paletteSize(for: screen), in: screen)
     }
 }
 
-/// A borderless panel still has to become key so the field can take typing
-/// and the local key monitor can address it.
+/// A borderless panel still has to become key and main so the field can take
+/// typing, the local key monitor can address it, and `DroppyPanelActivation`
+/// can make it main. A panel that refuses main makes the host raise
+/// `NSInternalInconsistencyException` from `_changeJustMain` and terminate.
 private final class PalettePanel: NSPanel {
     override var canBecomeKey: Bool {
         true
     }
 
     override var canBecomeMain: Bool {
-        false
+        true
     }
 }
