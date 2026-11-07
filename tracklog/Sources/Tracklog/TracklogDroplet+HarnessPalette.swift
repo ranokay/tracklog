@@ -66,6 +66,8 @@ extension TracklogDroplet {
         return TracklogPaletteContract(failures: failures, measurement: measurement)
     }
 
+    /// The open palette's frame, the shelf clearance and the synthetic 1280×600
+    /// frame, as text for the passing run's summary.
     private func paletteMeasurement() -> String {
         let contract = searchPaletteController.contract
         let smallScreen = NSRect(x: 0, y: 0, width: 1280, height: 600)
@@ -94,6 +96,8 @@ extension TracklogDroplet {
         appendFrameFailures(label, contract: contract, to: &failures)
     }
 
+    /// Appends failures when the open palette's frame does not clear the shelf
+    /// clearance, leaves its visible frame, or fails to fit the synthetic screens.
     private func appendFrameFailures(
         _ label: String,
         contract: TracklogSearchPaletteController.ContractSnapshot,
@@ -128,6 +132,17 @@ extension TracklogDroplet {
         }
         if smallFrame.width < 320 || smallFrame.height < 240 {
             failures.append("\(label) is smaller than the minimum palette on a 1280×600 screen")
+        }
+
+        // A shorter screen shrinks the palette rather than letting its minimum
+        // height pull it under the shelf clearance.
+        let shortScreen = NSRect(x: 0, y: 0, width: 1280, height: 420)
+        let shortFrame = searchPaletteController.paletteFrame(in: shortScreen)
+        if !shortScreen.contains(shortFrame) {
+            failures.append("\(label) does not fit a 1280×420 screen: \(shortFrame)")
+        }
+        if shortScreen.maxY - shortFrame.maxY < clearance {
+            failures.append("\(label) overlaps the shelf on a 1280×420 screen: \(shortFrame)")
         }
     }
 

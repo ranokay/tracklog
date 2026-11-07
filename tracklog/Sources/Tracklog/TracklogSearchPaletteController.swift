@@ -323,10 +323,14 @@ extension TracklogSearchPaletteController {
         paletteSize(for: NSScreen.main?.visibleFrame)
     }
 
+    /// The palette's size in `screen`. Its height is what fits below the shelf
+    /// clearance, so a short screen gets a shorter palette rather than one that
+    /// starts inside the shelf. The floor only keeps the height positive on a
+    /// screen too short for both; there the palette can overlap the shelf.
     private func paletteSize(for screen: NSRect?) -> NSSize {
         let maximumWidth = max(320, (screen?.width ?? 900) - 48)
         let maximumHeight = max(240, (screen?.height ?? 700) - 48)
-        let belowShelf = max(240, (screen?.height ?? 700) - shelfClearance - 12 - 16)
+        let belowShelf = max(120, (screen?.height ?? 700) - shelfClearance - 12 - 16)
         return NSSize(
             width: min(680, maximumWidth),
             height: min(560, min(maximumHeight, belowShelf)),
