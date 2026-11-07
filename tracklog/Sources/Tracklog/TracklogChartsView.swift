@@ -709,12 +709,13 @@ struct ChartRankRow: View {
     @Environment(\.colorSchemeContrast) private var colorContrast
 
     var body: some View {
+        // A real button keeps the button trait and its default press action.
+        // The custom Search and play action stays separate, as on a History row.
         Button(action: onOpen) {
             rowContent
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityValue(Text(ChartCopy.rowAccessibilityValue(source: sourceLabel, period: periodLabel)))
         .accessibilityHint(Text("Opens this \(type.displayName.lowercased()) page"))

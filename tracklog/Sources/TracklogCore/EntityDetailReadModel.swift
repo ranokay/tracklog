@@ -554,7 +554,7 @@ public final class EntityDetailReadModel {
         let store = store
         let clock = clock
         let timeout = timeout
-        let key = request.key
+        let key = ArtistImageLookup.cacheKey(forArtist: request.key)
         let artist = request.title
         imageTask = Task { [weak self] in
             guard let self else { return }

@@ -157,7 +157,7 @@ Expected structure:
 
 - The section control names `History` and `Charts`; reopening the takeover starts at History.
 - The Charts rail holds Service / On this Mac, the period choices, the source note and the supported total. The current-connection read switcher sits at the trailing end of the section row.
-- Each ranked row is one element: `Rank <n>, <title>, <subtitle>, <count> listens` (or `plays`), with the source and period as its value.
+- Each ranked row is one button: `Rank <n>, <title>, <subtitle>, <count> listens` (or `plays`), with the source and period as its value. Pressing it opens that artist, album or track page; its accessibility actions also include `Search and play`.
 - Saved age and Refresh are separate controls; Refresh has a 24 pt target and says what it reloads.
 - Empty, statistics-not-ready, loading, no-connection, offline-with-saved-data and failed-without-data are separate spoken states with their own actions.
 - Libre.fm says it has no charts API and names the local history fallback.
@@ -165,6 +165,7 @@ Expected structure:
 Checks:
 
 - Source, period and chart-type controls expose their selected state, not only a fill.
+- A ranked row exposes the button trait, a default press action and a separate `Search and play` action. Pressing the row opens that entity's page.
 - The range total is named as local listens or as an account total; an unavailable total is spoken as unavailable, never zero.
 - `Custom` dismisses the takeover and opens the Settings page; no text field exists in the takeover.
 - Saved rows remain with their original age after a failed refresh.
