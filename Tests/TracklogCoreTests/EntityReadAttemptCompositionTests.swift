@@ -88,6 +88,7 @@ struct EntityReadAttemptCompositionTests {
     private func openTrack(
         _ composition: EntityTestComposition,
         identity: String = "listener",
+        request: EntityRequest? = nil,
     ) async throws -> EntityServiceSection {
         try await seedEntityHistory(composition.store)
         _ = try await composition.runtime.linkVerified(
@@ -95,7 +96,7 @@ struct EntityReadAttemptCompositionTests {
             credential: "session",
             identity: ServiceIdentity(name: identity),
         )
-        try await composition.runtime.openEntityDetail(trackRequest())
+        try await composition.runtime.openEntityDetail(request ?? trackRequest())
         #expect(await waitForEntityService(composition.state) { $0 != .loading })
         return try #require(composition.state.entityDetail?.service)
     }
@@ -255,6 +256,34 @@ struct EntityReadAttemptCompositionTests {
         #expect(sent.map(\.method) == [.post])
         #expect(log.lines.count == 1)
         #expect(log.lines.first?.hasSuffix("rendered=yes") == true)
+    }
+
+    @Test func aGetVariantCarriesEveryCharacterIntactAndASignatureOverItsParameters() async throws {
+        // Spaces, `&`, `+`, `=`, `#`, `/` and non-ASCII text in both names.
+        let title = "Rock & Roll + Blues = #1 / Mötley 日本"
+        let artist = "Mötley & Crüe + 日本 = #2 / Blues"
+        let request = try #require(EntityRequest.track(title: title, artist: artist))
+        let composition = try await entityComposition(
+            handler: trackAnswers("get", with: entityLastFMTrackInfo(userPlays: 9)),
+        )
+
+        _ = try await openTrack(composition, request: request)
+
+        let sent = await lastFMRequests(composition)
+        #expect(sent.map(\.method) == [.post, .get])
+        let get = try #require(sent.last)
+        let components = try #require(URLComponents(url: get.url, resolvingAgainstBaseURL: false))
+        let items = components.queryItems ?? []
+        let query = items.reduce(into: [String: String]()) { $0[$1.name] = $1.value ?? "" }
+        #expect(query["track"] == title)
+        #expect(query["artist"] == artist)
+
+        // The signature in the query is the one computed over the same
+        // parameters, without the signature itself.
+        let signature = try #require(query["api_sig"])
+        var signed = query
+        signed["api_sig"] = nil
+        #expect(signature == LastFMSignature.signature(parameters: signed, sharedSecret: "secret"))
     }
 
     @Test func theWholeSequenceFitsTheServiceBudget() async throws {
