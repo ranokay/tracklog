@@ -359,6 +359,7 @@ func entityComposition(
     runtimeStore: (any ListenStore & EntityDetailStore)? = nil,
     hold: @escaping @Sendable (HTTPRequest) -> Bool = { _ in false },
     timeout: TimeInterval = 0.2,
+    entityDiagnostics: (@Sendable (String) -> Void)? = nil,
     handler: @escaping @Sendable (HTTPRequest) throws -> HTTPResponse,
 ) async throws -> EntityTestComposition {
     let database = try database ?? TemporaryDatabase()
@@ -369,9 +370,17 @@ func entityComposition(
     }
     let transport = EntityTransport(hold: hold, handler: handler)
     let lastFMAdapter = if let appCredentialsProvider {
-        LastFMAdapter(transport: transport, appCredentials: appCredentialsProvider)
+        LastFMAdapter(
+            transport: transport,
+            appCredentials: appCredentialsProvider,
+            entityDiagnostics: entityDiagnostics,
+        )
     } else {
-        LastFMAdapter(transport: transport, appCredentials: appCredentials)
+        LastFMAdapter(
+            transport: transport,
+            appCredentials: appCredentials,
+            entityDiagnostics: entityDiagnostics,
+        )
     }
     var adapters: [any ServiceAdapter] = [lastFMAdapter]
     if listenBrainzAdapter {

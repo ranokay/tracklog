@@ -19,7 +19,7 @@ private final class LogSink: @unchecked Sendable {
 
 @Suite("Last.fm entity answer diagnostics")
 struct LastFMEntityDiagnosticsTests {
-    // Sentinels that must never reach the diagnostic line.
+    // Sentinels that must never reach a diagnostic line.
     private static let apiKey = "KEYSECRETAAA"
     private static let sharedSecret = "SHAREDSECRETBBB"
     private static let username = "USERNAMECCC"
@@ -66,9 +66,9 @@ struct LastFMEntityDiagnosticsTests {
 
         #expect(outcome.failure == .unreadable)
         let expected = [
-            "Last.fm track.getInfo answer unreadable:",
+            "Last.fm track.getInfo attempt: variant=post",
             "status=200 bytes=\(body.count) content-type=application/json json=yes",
-            "keys=none entity=absent decode=typeMismatch@root empty-entity=no",
+            "keys=none entity=absent present=no decode=typeMismatch@root rendered=no",
         ].joined(separator: " ")
         #expect(outcome.lines == [expected])
     }
@@ -84,9 +84,10 @@ struct LastFMEntityDiagnosticsTests {
         let line = try #require(outcome.lines.first)
         #expect(outcome.lines.count == 1)
         #expect(line.contains("keys=track"))
-        #expect(line.contains("entity=string"))
+        #expect(line.contains("entity=string present=no"))
         #expect(line.contains("decode=ok"))
-        #expect(line.contains("empty-entity=no"))
+        #expect(line.hasSuffix("rendered=no"))
+        #expect(!line.contains("empty-entity"))
     }
 
     @Test func anEmptyEntityObjectLogsThatTheEmptyCheckRejectedIt() async throws {
@@ -100,9 +101,9 @@ struct LastFMEntityDiagnosticsTests {
         let line = try #require(outcome.lines.first)
         #expect(outcome.lines.count == 1)
         #expect(line.contains("keys=track"))
-        #expect(line.contains("entity=object"))
+        #expect(line.contains("entity=object present=yes"))
         #expect(line.contains("decode=ok"))
-        #expect(line.contains("empty-entity=yes"))
+        #expect(line.contains("empty-entity=yes rendered=no"))
     }
 
     @Test func aNonJSONBodyLogsItsMediaTypeAndTheCharsetIsNotKept() async throws {
@@ -129,19 +130,20 @@ struct LastFMEntityDiagnosticsTests {
         ]
         for response in scenarios {
             let outcome = try await run(response)
-            let line = try #require(outcome.lines.first)
             let signature = formParameters(outcome.request)["api_sig"] ?? ""
             #expect(!signature.isEmpty)
-            for secret in [Self.apiKey, Self.sharedSecret, Self.username, Self.bodyValue, signature] {
-                #expect(!line.contains(secret), "The diagnostic line contains a protected value.")
+            for line in outcome.lines {
+                for secret in [Self.apiKey, Self.sharedSecret, Self.username, Self.bodyValue, signature] {
+                    #expect(!line.contains(secret), "The diagnostic line contains a protected value.")
+                }
+                #expect(!line.contains("https://"))
+                #expect(!line.contains("api_key"))
+                #expect(!line.contains("ws.audioscrobbler"))
             }
-            #expect(!line.contains("https://"))
-            #expect(!line.contains("api_key"))
-            #expect(!line.contains("ws.audioscrobbler"))
         }
     }
 
-    @Test func aReadableAnswerLogsNothing() async throws {
+    @Test func aReadableAnswerLogsOneRenderedLine() async throws {
         let outcome = try await run(HTTPResponse(
             statusCode: 200,
             headers: jsonHeaders(),
@@ -149,6 +151,10 @@ struct LastFMEntityDiagnosticsTests {
         ))
 
         #expect(outcome.failure == nil)
-        #expect(outcome.lines.isEmpty)
+        let line = try #require(outcome.lines.first)
+        #expect(outcome.lines.count == 1)
+        #expect(line.contains("variant=post"))
+        #expect(line.contains("entity=object present=yes"))
+        #expect(line.hasSuffix("rendered=yes"))
     }
 }

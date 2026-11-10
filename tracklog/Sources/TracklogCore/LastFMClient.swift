@@ -288,12 +288,14 @@ extension LastFMClient {
         parameters: [String: String],
         sessionKey: String?,
         credentials: LastFMAppCredentials,
+        verb: HTTPMethod = .post,
     ) async throws -> HTTPResponse {
         let request = try makeRequest(
             method: method,
             parameters: parameters,
             sessionKey: sessionKey,
             credentials: credentials,
+            verb: verb,
         )
         let response: HTTPResponse
         do {
@@ -339,6 +341,7 @@ extension LastFMClient {
         parameters: [String: String],
         sessionKey: String?,
         credentials: LastFMAppCredentials,
+        verb: HTTPMethod,
     ) throws -> HTTPRequest {
         let appKey = credentials.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = credentials.sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -361,6 +364,17 @@ extension LastFMClient {
             form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
         }
 
+        // The same parameters, signature included, travel either as a form
+        // body or as the query. Both use the strict encoder, so a value that
+        // holds `&`, `+`, `=`, `#` or `/` arrives decoded intact.
+        let encoded = Self.formEncode(form)
+        let headers = ["User-Agent": userAgent, "Accept": "application/json"]
+        if verb == .get {
+            guard let url = URL(string: "\(endpoint.description)/2.0/?\(encoded)") else {
+                throw LastFMError.malformedResponse
+            }
+            return HTTPRequest(method: .get, url: url, headers: headers)
+        }
         guard let url = URL(string: "\(endpoint.description)/2.0/") else {
             throw LastFMError.malformedResponse
         }
@@ -372,7 +386,7 @@ extension LastFMClient {
                 "User-Agent": userAgent,
                 "Accept": "application/json",
             ],
-            body: Data(Self.formEncode(form).utf8),
+            body: Data(encoded.utf8),
         )
     }
 }

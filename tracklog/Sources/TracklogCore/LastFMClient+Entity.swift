@@ -2,12 +2,18 @@ import Foundation
 
 // MARK: - Last.fm getInfo
 
-/// One `getInfo` answer. `value` is nil when the body did not decode to the
-/// entity object; `trace` describes the answer's shape either way, so the
-/// adapter can log what an unreadable answer looked like.
+/// One entity read: the value when the entity decoded, and every attempt made
+/// to get it, in order. `value` is nil when the last answer held no entity.
 struct LastFMEntityRead<Value> {
     let value: Value?
-    let trace: LastFMEntityAnswerTrace
+    let attempts: [LastFMEntityAttempt]
+}
+
+/// A read that stopped on a refused attempt. The attempts so far travel with
+/// the error, so the adapter can log them before it classifies the error.
+struct LastFMEntityReadFailure: Error {
+    let underlying: any Error
+    let attempts: [LastFMEntityAttempt]
 }
 
 extension LastFMClient {
@@ -56,29 +62,106 @@ extension LastFMClient {
         )
     }
 
-    /// Sends one unsigned-session read and decodes its entity. A body that
-    /// does not decode is a read with no value, not a thrown error, so the
-    /// caller can log the shape before it classifies the answer.
+    /// Reads one entity. The original signed POST goes first. Only an answer
+    /// that is an empty JSON object retries, through the variants in order, and
+    /// the first answer that is not an empty object ends the sequence. A refused
+    /// attempt throws, so the service's own classification still applies.
     private func entityRead<Payload: Decodable, Value>(
         method: String,
         entityKey: String,
         parameters: [String: String],
-        payload _: Payload.Type,
+        payload: Payload.Type,
         value: KeyPath<Payload, Value?>,
     ) async throws -> LastFMEntityRead<Value> {
         let credentials = try await resolvedCredentials()
-        let response = try await checkedResponse(
-            method: method,
-            parameters: parameters,
-            sessionKey: nil,
-            credentials: credentials,
-        )
-        let trace = LastFMEntityAnswerTrace(method: method, entityKey: entityKey, response: response)
+        var attempts: [LastFMEntityAttempt] = []
+        for (variant, sent) in Self.entityVariants(parameters) {
+            let response: HTTPResponse
+            do {
+                response = try await checkedResponse(
+                    method: method,
+                    parameters: sent,
+                    sessionKey: nil,
+                    credentials: credentials,
+                    verb: variant.verb,
+                )
+            } catch {
+                attempts.append(LastFMEntityAttempt(
+                    method: method,
+                    variant: variant,
+                    answer: nil,
+                    refusal: Self.refusal(for: error),
+                ))
+                throw LastFMEntityReadFailure(underlying: error, attempts: attempts)
+            }
+            let (answer, decoded) = Self.decodeEntity(
+                response,
+                method: method,
+                entityKey: entityKey,
+                payload: payload,
+                value: value,
+            )
+            attempts.append(LastFMEntityAttempt(
+                method: method,
+                variant: variant,
+                answer: answer,
+                refusal: nil,
+            ))
+            if !answer.emptyObject {
+                return LastFMEntityRead(value: decoded, attempts: attempts)
+            }
+        }
+        return LastFMEntityRead(value: nil, attempts: attempts)
+    }
+
+    /// The attempts in the order they are made. Without a `username` there is
+    /// nothing to drop, so only the signed POST and its GET twin run.
+    private static func entityVariants(
+        _ parameters: [String: String],
+    ) -> [(LastFMEntityVariant, [String: String])] {
+        guard parameters["username"] != nil else {
+            return [(.post, parameters), (.get, parameters)]
+        }
+        var withoutUsername = parameters
+        withoutUsername["username"] = nil
+        return [
+            (.post, parameters),
+            (.get, parameters),
+            (.postNoUsername, withoutUsername),
+            (.getNoUsername, withoutUsername),
+        ]
+    }
+
+    /// The answer's shape, and the decoded entity when it decodes. A body that
+    /// does not decode is an answer with no value, not a thrown error.
+    private static func decodeEntity<Payload: Decodable, Value>(
+        _ response: HTTPResponse,
+        method: String,
+        entityKey: String,
+        payload: Payload.Type,
+        value: KeyPath<Payload, Value?>,
+    ) -> (LastFMEntityAnswerTrace, Value?) {
+        let answer = LastFMEntityAnswerTrace(method: method, entityKey: entityKey, response: response)
         do {
-            let decoded = try JSONDecoder().decode(Payload.self, from: response.body)
-            return LastFMEntityRead(value: decoded[keyPath: value], trace: trace)
+            let decoded = try JSONDecoder().decode(payload, from: response.body)
+            return (answer, decoded[keyPath: value])
         } catch {
-            return LastFMEntityRead(value: nil, trace: trace.recordingDecodeFailure(error))
+            return (answer.recordingDecodeFailure(error), nil)
+        }
+    }
+
+    /// The reason a refused attempt gives. It names the service's code or the
+    /// HTTP status, never the message or the body.
+    private static func refusal(for error: any Error) -> String {
+        guard let lastFM = error as? LastFMError else { return "other" }
+        switch lastFM {
+        case let .http(statusCode, _): return "http-\(statusCode)"
+        case let .service(code, _): return "service-\(code)"
+        case .transport: return "transport"
+        case .credentialStorage: return "credentials"
+        case .malformedResponse: return "malformed"
+        case .missingAppCredentials: return "app-credentials"
+        case .missingSessionKey: return "session-key"
         }
     }
 
@@ -114,6 +197,9 @@ extension LastFMAdapter: EntityServiceReading {
             case .track:
                 return try await trackDetails(request, connection: connection)
             }
+        } catch let failure as LastFMEntityReadFailure {
+            record(failure.attempts, renderedLast: false)
+            throw Self.entityServiceError(for: failure.underlying)
         } catch {
             throw Self.entityServiceError(for: error)
         }
@@ -127,7 +213,7 @@ extension LastFMAdapter: EntityServiceReading {
             artist: request.title,
             username: connection.identity,
         )
-        guard let info = read.value else { throw unreadable(read.trace) }
+        guard let info = read.value else { throw unreadable(read) }
         var facts: [EntityFact] = []
         appendCount(info.stats?.listeners, label: "Listeners on Last.fm", to: &facts)
         appendCount(info.stats?.playcount, label: "Plays on Last.fm", to: &facts)
@@ -137,7 +223,7 @@ extension LastFMAdapter: EntityServiceReading {
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        ), trace: read.trace)
+        ), read: read)
     }
 
     private func albumDetails(
@@ -149,7 +235,7 @@ extension LastFMAdapter: EntityServiceReading {
             artist: request.subtitle,
             username: connection.identity,
         )
-        guard let info = read.value else { throw unreadable(read.trace) }
+        guard let info = read.value else { throw unreadable(read) }
         var facts: [EntityFact] = []
         if let released = releaseDate(info.releasedate) {
             facts.append(EntityFact(label: "Released", value: released))
@@ -163,7 +249,7 @@ extension LastFMAdapter: EntityServiceReading {
             facts: facts,
             link: httpsURL(info.url),
             artworkURL: largestImage(info.image),
-        ), trace: read.trace)
+        ), read: read)
     }
 
     private func trackDetails(
@@ -175,7 +261,7 @@ extension LastFMAdapter: EntityServiceReading {
             artist: request.subtitle,
             username: connection.identity,
         )
-        guard let info = read.value else { throw unreadable(read.trace) }
+        guard let info = read.value else { throw unreadable(read) }
         var facts: [EntityFact] = []
         if let duration = info.duration?.value, duration > 0 {
             facts.append(EntityFact(label: "Duration", value: durationText(milliseconds: duration)))
@@ -188,7 +274,7 @@ extension LastFMAdapter: EntityServiceReading {
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        ), trace: read.trace)
+        ), read: read)
     }
 
     /// A decoded entity object that carries no fact and no link is not a
@@ -196,19 +282,39 @@ extension LastFMAdapter: EntityServiceReading {
     /// change. Treat it as an unreadable answer instead.
     private func usable(
         _ facts: EntityServiceFacts,
-        trace: LastFMEntityAnswerTrace,
+        read: LastFMEntityRead<some Any>,
     ) throws -> EntityServiceFacts {
         guard !facts.facts.isEmpty || facts.link != nil else {
-            throw unreadable(trace.rejectingEmptyEntity())
+            throw unreadable(read, emptyEntityRejected: true)
         }
+        record(read.attempts, renderedLast: true)
         return facts
     }
 
-    /// Logs the answer's shape through the diagnostics sink, then returns the
-    /// failure the page shows. Only an unreadable answer is logged.
-    private func unreadable(_ trace: LastFMEntityAnswerTrace) -> EntityServiceFailure {
-        entityDiagnostics?(trace.logLine)
+    /// Logs every attempt, then returns the failure the page shows.
+    private func unreadable(
+        _ read: LastFMEntityRead<some Any>,
+        emptyEntityRejected: Bool = false,
+    ) -> EntityServiceFailure {
+        record(read.attempts, renderedLast: false, emptyEntityRejected: emptyEntityRejected)
         return .unreadable
+    }
+
+    /// One line per attempt through the diagnostics sink. Only the last attempt
+    /// can be the rendered one, and only when the page shows its entity.
+    private func record(
+        _ attempts: [LastFMEntityAttempt],
+        renderedLast: Bool,
+        emptyEntityRejected: Bool = false,
+    ) {
+        guard let entityDiagnostics else { return }
+        for (index, attempt) in attempts.enumerated() {
+            let isLast = index == attempts.count - 1
+            entityDiagnostics(attempt.logLine(
+                rendered: renderedLast && isLast,
+                emptyEntityRejected: emptyEntityRejected && isLast,
+            ))
+        }
     }
 
     private func appendCount(
