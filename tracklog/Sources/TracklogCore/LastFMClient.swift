@@ -281,7 +281,7 @@ extension LastFMClient {
 
     /// Reads the effective pair. A credential-store failure is its own error:
     /// falling back to the compiled pair could sign with the wrong account.
-    private func resolvedCredentials() async throws -> LastFMAppCredentials {
+    func resolvedCredentials() async throws -> LastFMAppCredentials {
         do {
             return try await credentialsProvider.appCredentials()
         } catch {
@@ -309,6 +309,23 @@ extension LastFMClient {
         sessionKey: String?,
         credentials: LastFMAppCredentials,
     ) async throws -> Data {
+        try await checkedResponse(
+            method: method,
+            parameters: parameters,
+            sessionKey: sessionKey,
+            credentials: credentials,
+        ).body
+    }
+
+    /// Sends one signed call and returns its successful response. Every
+    /// service-level failure throws here, so a returned response is a 2xx the
+    /// service did not reject in its body.
+    func checkedResponse(
+        method: String,
+        parameters: [String: String],
+        sessionKey: String?,
+        credentials: LastFMAppCredentials,
+    ) async throws -> HTTPResponse {
         let request = try makeRequest(
             method: method,
             parameters: parameters,
@@ -346,7 +363,7 @@ extension LastFMClient {
         }
 
         if (200 ..< 300).contains(response.statusCode) {
-            return response.body
+            return response
         }
         throw LastFMError.http(
             statusCode: response.statusCode,

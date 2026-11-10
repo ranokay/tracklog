@@ -101,7 +101,11 @@ extension TracklogDroplet {
             credentials: credentials,
             serviceAdapters: [
                 ListenBrainzAdapter(transport: transport),
-                LastFMAdapter(transport: transport, appCredentials: appCredentials),
+                LastFMAdapter(
+                    transport: transport,
+                    appCredentials: appCredentials,
+                    entityDiagnostics: { host.log.notice($0) },
+                ),
                 libreFM,
             ],
             connectionLog: { event in

@@ -2,33 +2,84 @@ import Foundation
 
 // MARK: - Last.fm getInfo
 
+/// One `getInfo` answer. `value` is nil when the body did not decode to the
+/// entity object; `trace` describes the answer's shape either way, so the
+/// adapter can log what an unreadable answer looked like.
+struct LastFMEntityRead<Value> {
+    let value: Value?
+    let trace: LastFMEntityAnswerTrace
+}
+
 extension LastFMClient {
-    func artistInfo(artist: String, username: String?) async throws -> LastFMArtistInfoValue {
-        let data = try await perform(
+    func artistInfo(
+        artist: String,
+        username: String?,
+    ) async throws -> LastFMEntityRead<LastFMArtistInfoValue> {
+        try await entityRead(
             method: "artist.getInfo",
+            entityKey: "artist",
             parameters: identityParameters(artist: artist, username: username),
+            payload: LastFMArtistInfoPayload.self,
+            value: \.artist,
         )
-        guard let value = try? JSONDecoder().decode(LastFMArtistInfoPayload.self, from: data).artist
-        else { throw LastFMError.malformedResponse }
-        return value
     }
 
-    func albumInfo(album: String, artist: String, username: String?) async throws -> LastFMAlbumInfoValue {
+    func albumInfo(
+        album: String,
+        artist: String,
+        username: String?,
+    ) async throws -> LastFMEntityRead<LastFMAlbumInfoValue> {
         var parameters = try identityParameters(artist: artist, username: username)
         parameters["album"] = album.trimmingCharacters(in: .whitespacesAndNewlines)
-        let data = try await perform(method: "album.getInfo", parameters: parameters)
-        guard let value = try? JSONDecoder().decode(LastFMAlbumInfoPayload.self, from: data).album
-        else { throw LastFMError.malformedResponse }
-        return value
+        return try await entityRead(
+            method: "album.getInfo",
+            entityKey: "album",
+            parameters: parameters,
+            payload: LastFMAlbumInfoPayload.self,
+            value: \.album,
+        )
     }
 
-    func trackInfo(track: String, artist: String, username: String?) async throws -> LastFMTrackInfoValue {
+    func trackInfo(
+        track: String,
+        artist: String,
+        username: String?,
+    ) async throws -> LastFMEntityRead<LastFMTrackInfoValue> {
         var parameters = try identityParameters(artist: artist, username: username)
         parameters["track"] = track.trimmingCharacters(in: .whitespacesAndNewlines)
-        let data = try await perform(method: "track.getInfo", parameters: parameters)
-        guard let value = try? JSONDecoder().decode(LastFMTrackInfoPayload.self, from: data).track
-        else { throw LastFMError.malformedResponse }
-        return value
+        return try await entityRead(
+            method: "track.getInfo",
+            entityKey: "track",
+            parameters: parameters,
+            payload: LastFMTrackInfoPayload.self,
+            value: \.track,
+        )
+    }
+
+    /// Sends one unsigned-session read and decodes its entity. A body that
+    /// does not decode is a read with no value, not a thrown error, so the
+    /// caller can log the shape before it classifies the answer.
+    private func entityRead<Payload: Decodable, Value>(
+        method: String,
+        entityKey: String,
+        parameters: [String: String],
+        payload _: Payload.Type,
+        value: KeyPath<Payload, Value?>,
+    ) async throws -> LastFMEntityRead<Value> {
+        let credentials = try await resolvedCredentials()
+        let response = try await checkedResponse(
+            method: method,
+            parameters: parameters,
+            sessionKey: nil,
+            credentials: credentials,
+        )
+        let trace = LastFMEntityAnswerTrace(method: method, entityKey: entityKey, response: response)
+        do {
+            let decoded = try JSONDecoder().decode(Payload.self, from: response.body)
+            return LastFMEntityRead(value: decoded[keyPath: value], trace: trace)
+        } catch {
+            return LastFMEntityRead(value: nil, trace: trace.recordingDecodeFailure(error))
+        }
     }
 
     private func identityParameters(artist: String, username: String?) throws -> [String: String] {
@@ -72,10 +123,11 @@ extension LastFMAdapter: EntityServiceReading {
         _ request: EntityRequest,
         connection: Connection,
     ) async throws -> EntityServiceFacts {
-        let info = try await client.artistInfo(
+        let read = try await client.artistInfo(
             artist: request.title,
             username: connection.identity,
         )
+        guard let info = read.value else { throw unreadable(read.trace) }
         var facts: [EntityFact] = []
         appendCount(info.stats?.listeners, label: "Listeners on Last.fm", to: &facts)
         appendCount(info.stats?.playcount, label: "Plays on Last.fm", to: &facts)
@@ -85,18 +137,19 @@ extension LastFMAdapter: EntityServiceReading {
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        ))
+        ), trace: read.trace)
     }
 
     private func albumDetails(
         _ request: EntityRequest,
         connection: Connection,
     ) async throws -> EntityServiceFacts {
-        let info = try await client.albumInfo(
+        let read = try await client.albumInfo(
             album: request.title,
             artist: request.subtitle,
             username: connection.identity,
         )
+        guard let info = read.value else { throw unreadable(read.trace) }
         var facts: [EntityFact] = []
         if let released = releaseDate(info.releasedate) {
             facts.append(EntityFact(label: "Released", value: released))
@@ -110,18 +163,19 @@ extension LastFMAdapter: EntityServiceReading {
             facts: facts,
             link: httpsURL(info.url),
             artworkURL: largestImage(info.image),
-        ))
+        ), trace: read.trace)
     }
 
     private func trackDetails(
         _ request: EntityRequest,
         connection: Connection,
     ) async throws -> EntityServiceFacts {
-        let info = try await client.trackInfo(
+        let read = try await client.trackInfo(
             track: request.title,
             artist: request.subtitle,
             username: connection.identity,
         )
+        guard let info = read.value else { throw unreadable(read.trace) }
         var facts: [EntityFact] = []
         if let duration = info.duration?.value, duration > 0 {
             facts.append(EntityFact(label: "Duration", value: durationText(milliseconds: duration)))
@@ -134,17 +188,27 @@ extension LastFMAdapter: EntityServiceReading {
             accountName: connection.displayName,
             facts: facts,
             link: httpsURL(info.url),
-        ))
+        ), trace: read.trace)
     }
 
     /// A decoded entity object that carries no fact and no link is not a
     /// success: it would draw an empty service section and hide a shape
     /// change. Treat it as an unreadable answer instead.
-    private func usable(_ facts: EntityServiceFacts) throws -> EntityServiceFacts {
+    private func usable(
+        _ facts: EntityServiceFacts,
+        trace: LastFMEntityAnswerTrace,
+    ) throws -> EntityServiceFacts {
         guard !facts.facts.isEmpty || facts.link != nil else {
-            throw EntityServiceFailure.unreadable
+            throw unreadable(trace.rejectingEmptyEntity())
         }
         return facts
+    }
+
+    /// Logs the answer's shape through the diagnostics sink, then returns the
+    /// failure the page shows. Only an unreadable answer is logged.
+    private func unreadable(_ trace: LastFMEntityAnswerTrace) -> EntityServiceFailure {
+        entityDiagnostics?(trace.logLine)
+        return .unreadable
     }
 
     private func appendCount(

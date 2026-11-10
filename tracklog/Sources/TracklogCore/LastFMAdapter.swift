@@ -26,6 +26,9 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
 
     private let transport: any HTTPTransport
     private let userAgent: String
+    /// Receives one shape line when an entity answer is unreadable. Nil keeps
+    /// the adapter silent. The line never carries a value from the answer.
+    let entityDiagnostics: (@Sendable (String) -> Void)?
 
     /// Last.fm's endpoint is fixed; only the transport and the app credentials
     /// are injected.
@@ -33,9 +36,11 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
         transport: any HTTPTransport,
         appCredentials: LastFMAppCredentials,
         userAgent: String = TracklogHTTP.userAgent,
+        entityDiagnostics: (@Sendable (String) -> Void)? = nil,
     ) {
         self.transport = transport
         self.userAgent = userAgent
+        self.entityDiagnostics = entityDiagnostics
         client = LastFMClient(
             transport: transport,
             appCredentials: appCredentials,
@@ -49,9 +54,11 @@ public struct LastFMAdapter: DeliveryAdapter, LastFMLinkClient, LastFMAppCredent
         transport: any HTTPTransport,
         appCredentials provider: any LastFMAppCredentialsProviding,
         userAgent: String = TracklogHTTP.userAgent,
+        entityDiagnostics: (@Sendable (String) -> Void)? = nil,
     ) {
         self.transport = transport
         self.userAgent = userAgent
+        self.entityDiagnostics = entityDiagnostics
         client = LastFMClient(
             transport: transport,
             appCredentials: provider,
