@@ -104,7 +104,9 @@ extension TracklogDroplet {
                 LastFMAdapter(
                     transport: transport,
                     appCredentials: appCredentials,
-                    entityDiagnostics: { host.log.notice($0) },
+                    entityDiagnostics: { line in
+                        Task { @MainActor in host.log.notice(line) }
+                    },
                 ),
                 libreFM,
             ],
