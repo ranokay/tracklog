@@ -60,15 +60,28 @@ struct LastFMEntityDiagnosticsTests {
         ["Content-Type": "application/json; charset=utf-8"]
     }
 
+    @Test func anEmptyObjectIsNotRetriedAndLogsItsShape() async throws {
+        let outcome = try await run(HTTPResponse(
+            statusCode: 200,
+            headers: jsonHeaders(),
+            body: Data("{}".utf8),
+        ))
+
+        #expect(outcome.failure == .unreadable)
+        #expect(outcome.lines == [
+            "Last.fm track.getInfo answer unreadable: status=200 bytes=2 content-type=application/json json=yes keys=none entity=absent decode=ok empty-entity=no",
+        ])
+    }
+
     @Test func aTopLevelArrayLogsTheDecodingFailureWithoutItsValues() async throws {
         let body = Data(#"[{"track":"\#(Self.bodyValue)"}]"#.utf8)
         let outcome = try await run(HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: body))
 
         #expect(outcome.failure == .unreadable)
         let expected = [
-            "Last.fm track.getInfo attempt: variant=post",
+            "Last.fm track.getInfo answer unreadable:",
             "status=200 bytes=\(body.count) content-type=application/json json=yes",
-            "keys=none entity=absent present=no decode=typeMismatch@root rendered=no",
+            "keys=none entity=absent decode=typeMismatch@root empty-entity=no",
         ].joined(separator: " ")
         #expect(outcome.lines == [expected])
     }
@@ -84,10 +97,9 @@ struct LastFMEntityDiagnosticsTests {
         let line = try #require(outcome.lines.first)
         #expect(outcome.lines.count == 1)
         #expect(line.contains("keys=track"))
-        #expect(line.contains("entity=string present=no"))
+        #expect(line.contains("entity=string"))
         #expect(line.contains("decode=ok"))
-        #expect(line.hasSuffix("rendered=no"))
-        #expect(!line.contains("empty-entity"))
+        #expect(line.hasSuffix("empty-entity=no"))
     }
 
     @Test func anEmptyEntityObjectLogsThatTheEmptyCheckRejectedIt() async throws {
@@ -101,9 +113,9 @@ struct LastFMEntityDiagnosticsTests {
         let line = try #require(outcome.lines.first)
         #expect(outcome.lines.count == 1)
         #expect(line.contains("keys=track"))
-        #expect(line.contains("entity=object present=yes"))
+        #expect(line.contains("entity=object"))
         #expect(line.contains("decode=ok"))
-        #expect(line.contains("empty-entity=yes rendered=no"))
+        #expect(line.hasSuffix("empty-entity=yes"))
     }
 
     @Test func aNonJSONBodyLogsItsMediaTypeAndTheCharsetIsNotKept() async throws {
@@ -123,6 +135,7 @@ struct LastFMEntityDiagnosticsTests {
 
     @Test func theLineNeverCarriesASecretOrAValueFromTheAnswer() async throws {
         let scenarios = [
+            HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: Data("{}".utf8)),
             HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: Data(#"[{"track":"\#(Self.bodyValue)"}]"#.utf8)),
             HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: Data(#"{"track":"\#(Self.bodyValue)"}"#.utf8)),
             HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: Data(#"{"track":{"foo":"\#(Self.bodyValue)"}}"#.utf8)),
@@ -132,6 +145,7 @@ struct LastFMEntityDiagnosticsTests {
             let outcome = try await run(response)
             let signature = formParameters(outcome.request)["api_sig"] ?? ""
             #expect(!signature.isEmpty)
+            #expect(outcome.lines.count == 1)
             for line in outcome.lines {
                 for secret in [Self.apiKey, Self.sharedSecret, Self.username, Self.bodyValue, signature] {
                     #expect(!line.contains(secret), "The diagnostic line contains a protected value.")
@@ -139,11 +153,13 @@ struct LastFMEntityDiagnosticsTests {
                 #expect(!line.contains("https://"))
                 #expect(!line.contains("api_key"))
                 #expect(!line.contains("ws.audioscrobbler"))
+                #expect(!line.contains("track=DRIP"))
+                #expect(!line.contains("BABYMONSTER"))
             }
         }
     }
 
-    @Test func aReadableAnswerLogsOneRenderedLine() async throws {
+    @Test func aReadableAnswerLogsNothing() async throws {
         let outcome = try await run(HTTPResponse(
             statusCode: 200,
             headers: jsonHeaders(),
@@ -151,10 +167,6 @@ struct LastFMEntityDiagnosticsTests {
         ))
 
         #expect(outcome.failure == nil)
-        let line = try #require(outcome.lines.first)
-        #expect(outcome.lines.count == 1)
-        #expect(line.contains("variant=post"))
-        #expect(line.contains("entity=object present=yes"))
-        #expect(line.hasSuffix("rendered=yes"))
+        #expect(outcome.lines.isEmpty)
     }
 }

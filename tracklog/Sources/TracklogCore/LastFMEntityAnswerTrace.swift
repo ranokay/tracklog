@@ -1,55 +1,17 @@
 import Foundation
 
-/// How one entity `getInfo` attempt was sent. The variants are tried in this
-/// order, and only after an earlier attempt answered an empty object.
-enum LastFMEntityVariant: String, Equatable, Sendable {
-    case post
-    case get
-    case postNoUsername = "post-no-username"
-    case getNoUsername = "get-no-username"
-
-    var verb: HTTPMethod {
-        switch self {
-        case .post, .postNoUsername: .post
-        case .get, .getNoUsername: .get
-        }
-    }
-}
-
-/// One attempt at an entity read, as the host log records it. A refused
-/// attempt has no answer, only the reason the service or transport gave.
-struct LastFMEntityAttempt: Equatable, Sendable {
-    let method: String
-    let variant: LastFMEntityVariant
-    let answer: LastFMEntityAnswerTrace?
-    let refusal: String?
-
-    /// The one line the host log receives for this attempt. It names the
-    /// shape only: no value from the answer, no parameter, key, signature or
-    /// URL.
-    func logLine(rendered: Bool, emptyEntityRejected: Bool) -> String {
-        var fields = ["Last.fm \(method) attempt: variant=\(variant.rawValue)"]
-        if let answer {
-            fields += answer.fields
-        } else {
-            fields.append("refused=\(refusal ?? "other")")
-        }
-        if emptyEntityRejected {
-            fields.append("empty-entity=yes")
-        }
-        fields.append("rendered=\(rendered ? "yes" : "no")")
-        return fields.joined(separator: " ")
-    }
-}
-
-/// The shape of one entity `getInfo` answer. Every field describes the
-/// answer's shape, never a value from it, so the line is safe to log.
+/// The shape of one entity `getInfo` answer, kept when the app cannot read it.
+///
+/// Every field describes the answer's shape, never a value from it: the body's
+/// values, the signed parameters, the session key, the signature and the
+/// request URL stay out of the line by construction.
 struct LastFMEntityAnswerTrace: Equatable, Sendable {
     /// Longest media type the line keeps. A real `Content-Type` is far shorter.
     private static let mediaTypeLimit = 64
     /// Most top-level key names the line keeps.
     private static let keyLimit = 16
 
+    let method: String
     let statusCode: Int
     let bodyBytes: Int
     let contentType: String?
@@ -58,14 +20,13 @@ struct LastFMEntityAnswerTrace: Equatable, Sendable {
     /// The JSON type found under the entity's key: `object`, `string`,
     /// `array`, `number`, `boolean`, `null`, `other`, or `absent`.
     let entityShape: String
-    /// True when the body is a JSON object with no keys: the answer Last.fm
-    /// sends for a signed read it does not accept, and the only answer that
-    /// triggers a retry.
-    let emptyObject: Bool
     /// The decoding failure's kind and coding path, when decoding threw.
     var decodeFailure: String?
+    /// Set when the decoded entity carried no facts and no link.
+    var emptyEntityRejected = false
 
-    init(method _: String, entityKey: String, response: HTTPResponse) {
+    init(method: String, entityKey: String, response: HTTPResponse) {
+        self.method = method
         statusCode = response.statusCode
         bodyBytes = response.body.count
         contentType = Self.mediaType(response.header("Content-Type"))
@@ -74,22 +35,21 @@ struct LastFMEntityAnswerTrace: Equatable, Sendable {
         let dictionary = object as? [String: Any]
         topLevelKeys = Self.keyNames(dictionary?.keys)
         entityShape = Self.shape(of: dictionary?[entityKey])
-        emptyObject = dictionary?.isEmpty == true
-        decodeFailure = nil
     }
 
-    /// The fields after the attempt's name, in the order the line uses.
-    fileprivate var fields: [String] {
+    /// The one line the host log receives for an unreadable answer.
+    var logLine: String {
         [
+            "Last.fm \(method) answer unreadable:",
             "status=\(statusCode)",
             "bytes=\(bodyBytes)",
             "content-type=\(contentType ?? "none")",
             "json=\(parsedAsJSON ? "yes" : "no")",
             "keys=\(topLevelKeys.isEmpty ? "none" : topLevelKeys.joined(separator: ","))",
             "entity=\(entityShape)",
-            "present=\(entityShape == "object" ? "yes" : "no")",
             "decode=\(decodeFailure ?? "ok")",
-        ]
+            "empty-entity=\(emptyEntityRejected ? "yes" : "no")",
+        ].joined(separator: " ")
     }
 
     func recordingDecodeFailure(_ error: any Error) -> Self {
@@ -99,6 +59,12 @@ struct LastFMEntityAnswerTrace: Equatable, Sendable {
         } else {
             copy.decodeFailure = "other"
         }
+        return copy
+    }
+
+    func rejectingEmptyEntity() -> Self {
+        var copy = self
+        copy.emptyEntityRejected = true
         return copy
     }
 

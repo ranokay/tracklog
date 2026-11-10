@@ -11,9 +11,6 @@ public final class EntityDetailReadModel {
     public nonisolated static let maximumStackDepth = 20
     public nonisolated static let topTrackLimit = 5
     public nonisolated static let defaultTimeout: TimeInterval = 15
-    /// The most sequential Last.fm calls one entity read can make: the signed
-    /// POST and its three retries. The service read waits for all of them.
-    nonisolated static let lastFMServiceCallBudget: Double = 4
 
     private let state: TracklogAppState
     private let store: any EntityDetailStore
@@ -432,9 +429,7 @@ public final class EntityDetailReadModel {
             return
         }
         serviceTask?.cancel()
-        // The Last.fm read may make up to four sequential calls, each with its
-        // own transport timeout, so it gets the budget for all four.
-        let timeout = timeout * Self.lastFMServiceCallBudget
+        let timeout = timeout
         serviceTask = Task { [weak self] in
             guard let self else { return }
             let outcome = await Self.timed(seconds: timeout) {

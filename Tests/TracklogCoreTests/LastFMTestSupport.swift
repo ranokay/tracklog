@@ -3,8 +3,13 @@ import Foundation
 
 // MARK: - Requests
 
-/// Parses an `application/x-www-form-urlencoded` body into its parameters.
+/// Parses a Last.fm request's parameters: the `application/x-www-form-urlencoded`
+/// body of a POST, or the query of a GET, which carries the same pairs.
 func formParameters(_ request: HTTPRequest) -> [String: String] {
+    if request.method == .get {
+        let items = URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return items.reduce(into: [:]) { $0[$1.name] = $1.value ?? "" }
+    }
     guard let body = request.body, let text = String(data: body, encoding: .utf8) else { return [:] }
     return text.split(separator: "&").reduce(into: [:]) { result, pair in
         let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
