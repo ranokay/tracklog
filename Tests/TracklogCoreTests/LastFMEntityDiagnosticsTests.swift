@@ -68,9 +68,12 @@ struct LastFMEntityDiagnosticsTests {
         ))
 
         #expect(outcome.failure == .unreadable)
-        #expect(outcome.lines == [
-            "Last.fm track.getInfo answer unreadable: status=200 bytes=2 content-type=application/json json=yes keys=none entity=absent decode=ok empty-entity=no",
-        ])
+        let expected = [
+            "Last.fm track.getInfo answer unreadable:",
+            "status=200 bytes=2 content-type=application/json json=yes",
+            "keys=none entity=absent decode=ok empty-entity=no",
+        ].joined(separator: " ")
+        #expect(outcome.lines == [expected])
     }
 
     @Test func aTopLevelArrayLogsTheDecodingFailureWithoutItsValues() async throws {
