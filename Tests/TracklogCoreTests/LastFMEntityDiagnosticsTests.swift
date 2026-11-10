@@ -65,9 +65,12 @@ struct LastFMEntityDiagnosticsTests {
         let outcome = try await run(HTTPResponse(statusCode: 200, headers: jsonHeaders(), body: body))
 
         #expect(outcome.failure == .unreadable)
-        #expect(outcome.lines == [
-            "Last.fm track.getInfo answer unreadable: status=200 bytes=\(body.count) content-type=application/json json=yes keys=none entity=absent decode=typeMismatch@root empty-entity=no",
-        ])
+        let expected = [
+            "Last.fm track.getInfo answer unreadable:",
+            "status=200 bytes=\(body.count) content-type=application/json json=yes",
+            "keys=none entity=absent decode=typeMismatch@root empty-entity=no",
+        ].joined(separator: " ")
+        #expect(outcome.lines == [expected])
     }
 
     @Test func anEntityThatIsNotAnObjectLogsItsShapeAndNoValue() async throws {
