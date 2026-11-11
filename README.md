@@ -26,15 +26,14 @@ the bounded engine tests, `droppykit build` and `droppykit validate`, with no
 surface shots. Run the full `mise run gate` for approval and on the PR head;
 it runs `verify` and then the surface-shot matrix.
 
-`mise run lint` runs SwiftFormat, SwiftLint and jactionlint through `hk`; `mise run format` applies SwiftFormat. The same `hk check --all` runs in CI.
+`mise run lint` runs SwiftFormat, SwiftLint, jactionlint and shellcheck through `hk`; `mise run format` applies SwiftFormat. The same `hk check --all` runs in CI.
 
 See [SDK setup and Last.fm credentials](tracklog/README.md#sdk-setup) before building.
 
-## Publication preparation
+## Retired Last.fm credentials
 
-Public visibility is a separate owner action. On 2026-10-31 the owner authorized
-retiring the Last.fm app pair retained in historical commits. The matching API
-application was disabled through Last.fm, and a read-only API request with its
-old key returned HTTP 403, error 26 (API Key Suspended). Source builds use the
-user-supplied credentials described in the package README. This preparation does
-not publish or submit a Droppy Store release.
+Early commits contain a Last.fm application pair. It was retired on 2026-10-31:
+the API application is disabled, and a read-only request with the old key
+returns HTTP 403, error 26 (API Key Suspended). Source builds use the
+user-supplied credentials described in the package README. Tracklog is not yet
+published in the Droppy Store.

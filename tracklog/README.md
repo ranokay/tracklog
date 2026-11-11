@@ -46,7 +46,7 @@ mise install         # hk, jactionlint, SwiftLint, SwiftFormat, shellcheck
 mise run hooks       # install the hk Git hooks
 mise run verify      # fix loop: lint, test, build, validate, no shots
 mise run gate        # approval and PR head: verify plus surface shots
-mise run lint        # SwiftFormat, SwiftLint and jactionlint
+mise run lint        # SwiftFormat, SwiftLint, jactionlint and shellcheck
 mise run format      # apply SwiftFormat fixes
 ```
 

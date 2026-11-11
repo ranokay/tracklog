@@ -11,4 +11,5 @@ steps {
     check = "swiftlint lint --strict {{files}}"
   }
   ["jactionlint"] = Builtins.jactionlint
+  ["shellcheck"] = Builtins.shellcheck
 }
