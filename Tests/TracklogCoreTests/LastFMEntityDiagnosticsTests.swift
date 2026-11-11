@@ -162,6 +162,20 @@ struct LastFMEntityDiagnosticsTests {
         }
     }
 
+    @Test func aKeyThatIsNotALastFMKeyIsLoggedAsOtherNotByName() async throws {
+        // The top-level key itself carries a value; only the schema names may be logged.
+        let outcome = try await run(HTTPResponse(
+            statusCode: 200,
+            headers: jsonHeaders(),
+            body: Data(#"{"\#(Self.bodyValue)":"x","track":{"foo":"y"}}"#.utf8),
+        ))
+
+        #expect(outcome.failure == .unreadable)
+        let line = try #require(outcome.lines.first)
+        #expect(line.contains("keys=<other>,track"))
+        #expect(!line.contains(Self.bodyValue))
+    }
+
     @Test func aReadableAnswerLogsNothing() async throws {
         let outcome = try await run(HTTPResponse(
             statusCode: 200,

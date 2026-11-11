@@ -82,17 +82,14 @@ struct LastFMEntityAnswerTrace: Equatable, Sendable {
         return String(type.prefix(mediaTypeLimit))
     }
 
-    /// Schema key names only. A key outside the plain identifier pattern is
-    /// replaced, so an unexpected key cannot carry a value into the line.
+    /// The top-level keys Last.fm's `getInfo` answers use. A key is logged only
+    /// when it is one of these; any other key is logged as `<other>`, so a key
+    /// the service did not define cannot carry a value into the line.
+    private static let knownKeys: Set<String> = ["artist", "album", "track", "error", "message", "links"]
+
     private static func keyNames(_ keys: [String: Any].Keys?) -> [String] {
         guard let keys else { return [] }
-        let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_#@")
-        let names = keys.map { key -> String in
-            guard !key.isEmpty, key.count <= 32, key.allSatisfy({ allowed.contains($0) }) else {
-                return "<redacted>"
-            }
-            return key
-        }
+        let names = keys.map { knownKeys.contains($0) ? $0 : "<other>" }
         return Array(names.sorted().prefix(keyLimit))
     }
 

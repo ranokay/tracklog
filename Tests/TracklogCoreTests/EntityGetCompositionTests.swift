@@ -147,6 +147,19 @@ struct EntityGetCompositionTests {
         }
     }
 
+    @Test func aTimedOutReadMakesOneRequestAndShowsTimedOut() async throws {
+        let composition = try await entityComposition(timeout: 0.05) { _ in
+            // Answer after the page timeout, so the read is cut short.
+            Thread.sleep(forTimeInterval: 0.3)
+            return entityLastFMTrackInfo(userPlays: 9)
+        }
+
+        let service = try await openEntity(composition, request: trackRequest())
+
+        #expect(service == .failed(.timedOut))
+        #expect(await lastFMRequests(composition).count == 1)
+    }
+
     @Test func aGetCarriesEveryCharacterIntactAndASignatureOverItsParameters() async throws {
         // Spaces, `&`, `+`, `=`, `#`, `/` and non-ASCII text in both names.
         let title = "Rock & Roll + Blues = #1 / Mötley 日本"
