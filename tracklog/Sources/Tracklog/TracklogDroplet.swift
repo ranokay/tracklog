@@ -90,6 +90,7 @@ public final class TracklogDroplet: NSObject, Droplet {
         self.host = host
 
         let isHarness = host.environment.isHarness
+        HarnessEnvironment.isActive = isHarness
         if !isHarness {
             // No default chord: the user rebinds it on Droppy's Shortcuts page.
             host.shortcuts.register(

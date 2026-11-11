@@ -9,12 +9,12 @@ func listenCountText(_ count: Int) -> String {
 }
 
 /// Whether the surfaces should draw their increased-contrast separators. The
-/// harness override exists because the runtime checks cannot change a system
-/// accessibility setting; production only reads the environment value.
+/// override is read only in the harness, whose runtime checks cannot change a
+/// system accessibility setting.
 enum SurfaceContrast {
     static func isIncreased(_ contrast: ColorSchemeContrast) -> Bool {
         contrast == .increased
-            || ProcessInfo.processInfo.environment["TRACKLOG_HARNESS_CONTRAST"] == "increased"
+            || HarnessEnvironment.value("TRACKLOG_HARNESS_CONTRAST") == "increased"
     }
 }
 

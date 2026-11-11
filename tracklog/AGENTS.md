@@ -214,3 +214,11 @@ the merge request; when a maintainer merges it, the pipeline builds, signs and p
 it. `droppykit submit --print` shows the plan without doing it (needs `glab`, signed in).
 Opening the merge request means accepting the Droplet developer terms at
 https://getdroppy.app/droplet-developer-terms.
+
+## Tracklog notes
+
+- **Reduce Motion is the one exception to the transition rule.** With Reduce Motion on,
+  `TracklogMotion` swaps content with its own 0.16 s crossfade, not a `DroppyTransition`.
+  The accessibility checklist keeps every droplet-owned change under 200 ms, and the host's
+  reduced spring can run longer. Normal motion still takes `DroppyTransition.element` and
+  `DroppyTransition.compactContent`.
