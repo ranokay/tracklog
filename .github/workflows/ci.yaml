@@ -31,6 +31,19 @@ jobs:
       - name: Run engine tests
         run: swift test --package-path Tests
 
+  # The test job compiles only the engine targets. This compiles the SwiftUI
+  # droplet target and the harness too, so a break there fails before the
+  # local gate runs.
+  build:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compile the droplet and harness
+        run: swift build --package-path tracklog --product TracklogHarness
+
   lint:
     runs-on: macos-26
     timeout-minutes: 20
@@ -46,7 +59,7 @@ jobs:
 
   pr-body:
     if: github.event_name == 'pull_request'
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

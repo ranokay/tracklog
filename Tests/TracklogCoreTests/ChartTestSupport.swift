@@ -222,7 +222,7 @@ func chartDate(
     _ minute: Int = 0,
     timeZone: TimeZone = TimeZone(identifier: "UTC")!,
 ) -> Date {
-    var calendar = chartCalendar(timeZone)
+    let calendar = chartCalendar(timeZone)
     return calendar.date(from: DateComponents(
         year: year,
         month: month,

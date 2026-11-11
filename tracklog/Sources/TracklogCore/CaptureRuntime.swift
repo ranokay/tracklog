@@ -56,12 +56,6 @@ public final class CaptureRuntime {
     /// The newest row of a window that does not extend to the live top. Nil
     /// means the normal newest-first feed.
     var historyWindowStart: ListenCursor?
-    /// Identifies the newest track-history read, so closing the view or
-    /// opening another track cannot be overwritten by an older read.
-    var trackHistoryGeneration = 0
-    /// Identifies the newest load-more request, so a cancelled task cannot
-    /// clear the loading flag of a newer one.
-    var trackHistoryLoadSequence = 0
     var artworkIdentity: String?
     /// Covers filled this session, keyed by raw track identity. A page can be
     /// read before `attachArtwork` and applied after it; the visible-row fill

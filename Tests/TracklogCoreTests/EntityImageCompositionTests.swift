@@ -386,7 +386,7 @@ struct EntityImageCompositionTests {
                 return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
             }
             if request.url.path.hasSuffix("album.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.4, green: 0.3, blue: 0.8))
+                return entityImageResponse(testImageData(red: 0.4, green: 0.3, blue: 0.8))
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
@@ -426,7 +426,7 @@ struct EntityImageCompositionTests {
                 return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
             }
             if request.url.path.hasSuffix("album.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.4, green: 0.3, blue: 0.8))
+                return entityImageResponse(testImageData(red: 0.4, green: 0.3, blue: 0.8))
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
@@ -598,7 +598,7 @@ struct EntityImageCompositionTests {
                 return entityLastFMAlbumInfo(image: "https://images.example/album.jpg")
             }
             if request.url.path.hasSuffix("album.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.35, green: 0.55, blue: 0.3))
+                return entityImageResponse(testImageData(red: 0.35, green: 0.55, blue: 0.3))
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
@@ -720,7 +720,7 @@ struct EntityImageCompositionTests {
                 return entityITunesResponse(rows)
             }
             if request.url.path.hasSuffix("artist.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.3, green: 0.8, blue: 0.4))
+                return entityImageResponse(testImageData(red: 0.3, green: 0.8, blue: 0.4))
             }
             if formParameters(request)["method"] == "artist.getInfo" {
                 return entityLastFMArtistInfo()
@@ -763,7 +763,7 @@ struct EntityImageCompositionTests {
                 ])
             }
             if request.url.path.hasSuffix("600x600bb.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.3, green: 0.8, blue: 0.4))
+                return entityImageResponse(testImageData(red: 0.3, green: 0.8, blue: 0.4))
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
@@ -784,7 +784,7 @@ struct EntityImageCompositionTests {
                 ])
             }
             if request.url.path.hasSuffix("600x600bb.jpg") {
-                return entityImageResponse(try? testImageData(red: 0.4, green: 0.5, blue: 0.6))
+                return entityImageResponse(testImageData(red: 0.4, green: 0.5, blue: 0.6))
             }
             return entityLastFMError(3, message: "Invalid Method")
         }
@@ -960,7 +960,7 @@ struct EntityImageCompositionTests {
             if request.url.path.hasSuffix("artist.jpg") {
                 let index = counter.take()
                 return entityImageResponse(
-                    try? testImageData(
+                    testImageData(
                         red: 0.15 + Double(index) * 0.2,
                         green: 0.3,
                         blue: 0.5,

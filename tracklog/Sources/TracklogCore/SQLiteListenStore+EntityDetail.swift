@@ -9,10 +9,7 @@ extension SQLiteListenStore: EntityDetailStore {
         key: String,
         topTrackLimit: Int,
     ) async throws -> EntityLocalDetail {
-        guard let chartReader else {
-            throw DatabaseError.open("the detail reader is unavailable")
-        }
-        return try await chartReader.entityLocalDetail(
+        try await chartReader.entityLocalDetail(
             kind: kind,
             key: key,
             topTrackLimit: topTrackLimit,

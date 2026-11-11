@@ -60,7 +60,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         try await store.abandon(deliveries[2].id, attempts: 1, lastAttemptAt: now, reason: "abandoned")
 
         for index in 0 ..< 114 {
-            try await store.insert(
+            _ = try await store.insert(
                 chartListen(
                     title: "Other \(index)",
                     artist: "Artist \(index % 57)",
@@ -68,7 +68,7 @@ struct ChartLocalTests: CaptureTestHelpers {
                 ),
             )
         }
-        try await store.insert(
+        _ = try await store.insert(
             chartListen(
                 title: "Untargeted",
                 artist: "Zero Target",
@@ -122,7 +122,7 @@ struct ChartLocalTests: CaptureTestHelpers {
             ("Song", "", "", "", "com.apple.Music", 5),
         ]
         for row in rows {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: row.0,
                 artist: row.1,
                 album: row.2,
@@ -195,7 +195,7 @@ struct ChartLocalTests: CaptureTestHelpers {
             ("D", "Track Artist", "Fallback", "   "),
         ]
         for (index, row) in rows.enumerated() {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: row.0,
                 artist: row.1,
                 album: row.2,
@@ -231,13 +231,13 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "Older",
             artist: "Art",
             startedAt: now,
             artworkHash: "old-cover",
         ))
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "Newer",
             artist: "Art",
             startedAt: now.addingTimeInterval(10),
@@ -268,7 +268,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         let atEnd = chartDate(2026, 11, 1)
         let previous = chartDate(2026, 10, 30, 23, 59)
         for (index, date) in [atStart, beforeEnd, atEnd, previous].enumerated() {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Track \(index)",
                 artist: "Artist \(index)",
                 startedAt: date,
@@ -299,12 +299,12 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 3, 8, 12, timeZone: losAngeles)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "UTC only",
             artist: "UTC Artist",
             startedAt: chartDate(2026, 3, 9, 3),
         ))
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "Los Angeles only",
             artist: "Los Angeles Artist",
             startedAt: chartDate(2026, 3, 8, 1),
@@ -339,7 +339,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(title: "Song", artist: "Artist", startedAt: now))
+        _ = try await store.insert(chartListen(title: "Song", artist: "Artist", startedAt: now))
         let state = TracklogAppState()
         let calendarBox = ChartCalendarBox(chartCalendar(utc))
         let runtime = makeChartRuntime(
@@ -373,7 +373,7 @@ struct ChartLocalTests: CaptureTestHelpers {
             chartDate(2026, 10, 14, 23, 59),
             chartDate(2026, 10, 15),
         ].enumerated() {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Track \(index)",
                 artist: "Artist \(index)",
                 startedAt: date,
@@ -431,7 +431,7 @@ struct ChartLocalTests: CaptureTestHelpers {
         let store = try SQLiteListenStore(url: database.url)
         let spellings = ["Alpha", "  ALPHA  ", "beta", "Beta", "zeta"]
         for (index, artist) in spellings.enumerated() {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Song \(index)",
                 artist: artist,
                 album: "Album",
@@ -473,14 +473,14 @@ struct ChartLocalTests: CaptureTestHelpers {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "No Album One",
             artist: "Artist One",
             album: "",
             albumArtist: "",
             startedAt: chartDate(2026, 10, 31, 9),
         ))
-        try await store.insert(chartListen(
+        _ = try await store.insert(chartListen(
             title: "No Album Two",
             artist: "Artist Two",
             album: "   ",

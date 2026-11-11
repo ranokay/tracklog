@@ -127,8 +127,8 @@ struct SimpleEditStoreTests {
     @Test func deletingARuleRemovesIt() async throws {
         let database = try TemporaryDatabase()
         let store = try SQLiteListenStore(url: database.url)
-        let saved = try #require(
-            try await store.save(simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One"))),
+        let saved = try await store.save(
+            simpleEditRule(match: .init(track: "Song"), replace: .init(album: "One")),
         )
 
         try await store.deleteEdit(id: saved.id ?? -1)

@@ -44,7 +44,7 @@ a forward seek followed by a backward seek inside the first 20 seconds of the
 track can read as a restart, and the replaced session's played time resets.
 The worst case is up to 20 seconds of played time on a listen that has barely
 begun. Nothing is delivered twice. The fix, to report the last seek or resume
-time from that path, is tracked in a follow-up issue.
+time from that path, is tracked in #125.
 
 Detection and `finalize(at:)` happen in `ScrobbleEngine.ingest`, before the
 new-session branch. The new session is created through the same path as a new

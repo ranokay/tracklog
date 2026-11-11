@@ -12,7 +12,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        source.artworkData = try #require(testImageData())
+        source.artworkData = testImageData()
         let runtime = runtime(database: database, clock: clock, source: source)
         await runtime.start()
 
@@ -36,7 +36,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        source.artworkData = try #require(testImageData())
+        source.artworkData = testImageData()
         let runtime = runtime(database: database, clock: clock, source: source)
         await runtime.start()
 
@@ -62,7 +62,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let firstClock = FakeClock(base)
         let firstSource = ReplayedNowPlaying()
-        firstSource.artworkData = try #require(testImageData())
+        firstSource.artworkData = testImageData()
         let first = runtime(database: database, clock: firstClock, source: firstSource)
         await first.start()
 
@@ -85,7 +85,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        source.artworkData = try #require(testImageData())
+        source.artworkData = testImageData()
         source.artworkDelay = .seconds(10)
         let runtime = runtime(database: database, clock: clock, source: source)
         await runtime.start()
@@ -121,7 +121,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let store = StaleArtworkStore(baseStore)
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        source.artworkData = try #require(testImageData())
+        source.artworkData = testImageData()
         let runtime = CaptureRuntime(
             clock: clock,
             source: source,
@@ -166,7 +166,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let firstClock = FakeClock(base)
         let firstSource = ReplayedNowPlaying()
-        firstSource.artworkData = try #require(testImageData())
+        firstSource.artworkData = testImageData()
         let first = runtime(database: database, clock: firstClock, source: firstSource)
         await first.start()
         await replay(thresholdSamples(track()), on: first, clock: firstClock)
@@ -177,7 +177,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
 
         let secondClock = FakeClock(base)
         let secondSource = ReplayedNowPlaying()
-        secondSource.artworkData = try #require(testImageData(red: 0.9, green: 0.1, blue: 0.1))
+        secondSource.artworkData = testImageData(red: 0.9, green: 0.1, blue: 0.1)
         let second = runtime(database: database, clock: secondClock, source: secondSource)
         await second.start()
         await replay([sample(track(), at: 0, elapsed: 0)], on: second, clock: secondClock)
@@ -192,7 +192,7 @@ struct CaptureArtworkTests: CaptureTestHelpers {
         let database = try TemporaryDatabase()
         let clock = FakeClock(base)
         let source = ReplayedNowPlaying()
-        source.artworkData = try #require(testImageData())
+        source.artworkData = testImageData()
         let runtime = runtime(database: database, clock: clock, source: source)
         await runtime.start()
 
