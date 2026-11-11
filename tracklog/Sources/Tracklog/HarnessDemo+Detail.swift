@@ -14,6 +14,10 @@ enum HarnessDetailFixture: String {
     case albumListenBrainz = "album-listenbrainz"
     case artistApproximate = "artist-approximate"
     case artistAmbiguous = "artist-ambiguous"
+    case artistUnreadable = "artist-unreadable"
+    case albumUnreadable = "album-unreadable"
+    case trackUnreadable = "track-unreadable"
+    case artistServerError = "artist-server-error"
     case override
     case corruptOverride = "corrupt-override"
     case longNames = "long-names"
@@ -30,7 +34,8 @@ enum HarnessDetailFixture: String {
         switch self {
         case .artist, .album, .track, .artistApproximate, .artistAmbiguous,
              .override, .corruptOverride, .longNames, .albumServiceImage,
-             .historyJumpBack, .lovedBack, .trackDelete:
+             .historyJumpBack, .lovedBack, .trackDelete, .artistUnreadable,
+             .albumUnreadable, .trackUnreadable, .artistServerError:
             true
         case .artistNoConnection, .albumListenBrainz:
             false
@@ -94,13 +99,13 @@ enum HarnessDetailDemo {
     private static func request(for fixture: HarnessDetailFixture) -> EntityRequest? {
         switch fixture {
         case .artist, .artistNoConnection, .artistApproximate, .artistAmbiguous,
-             .override, .corruptOverride:
+             .override, .corruptOverride, .artistUnreadable, .artistServerError:
             EntityRequest.artist(name: fixture == .corruptOverride ? "Talking Heads" : "Blondie")
-        case .album:
+        case .album, .albumUnreadable:
             EntityRequest.album(album: "Parallel Lines", artist: "Blondie")
         case .albumServiceImage:
             EntityRequest.album(album: "Eat to the Beat", artist: "Blondie")
-        case .track:
+        case .track, .trackUnreadable:
             EntityRequest.track(
                 title: "Heart of Glass",
                 artist: "Blondie",
@@ -257,6 +262,14 @@ extension HarnessDemoLastFMAdapter: EntityServiceReading {
         let fixture = HarnessDetailFixture.selected
         if fixture == .artistAmbiguous {
             throw EntityServiceReadError.missing
+        }
+        if fixture == .artistUnreadable
+            || fixture == .albumUnreadable
+            || fixture == .trackUnreadable {
+            throw EntityServiceFailure.unreadable
+        }
+        if fixture == .artistServerError {
+            throw EntityServiceFailure.serviceUnavailable
         }
         let artworkURL = URL(string: "https://harness.invalid/album.jpg")
         switch request.kind {

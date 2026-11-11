@@ -1,42 +1,5 @@
 import Foundation
 
-/// One request-token exchange. The authorization page carries the token the
-/// listener approves in their browser.
-public struct LastFMLinkChallenge: Equatable, Sendable {
-    public let token: String
-    public let authorizationURL: URL
-
-    public init(token: String, authorizationURL: URL) {
-        self.token = token
-        self.authorizationURL = authorizationURL
-    }
-}
-
-/// A listener's Last.fm session. The key is the credential that belongs in the
-/// Keychain; it is never logged or persisted anywhere else.
-public struct LastFMSession: Equatable, Sendable {
-    public let name: String
-    public let key: String
-
-    public init(name: String, key: String) {
-        self.name = name
-        self.key = key
-    }
-}
-
-/// What a Last.fm-protocol service said about one item in a scrobble batch.
-public enum LastFMScrobbleResult: Equatable, Sendable {
-    case accepted
-    case ignored(code: Int)
-}
-
-/// The browser-link half of the Last.fm client, kept narrow so the page model
-/// can be tested without the delivery surface.
-public protocol LastFMLinkClient: Sendable {
-    func requestToken() async throws -> LastFMLinkChallenge
-    func session(token: String) async throws -> LastFMSession
-}
-
 /// Last.fm's signed form-post protocol. Every call is a POST to the same
 /// endpoint; the signature covers every parameter except `format` and
 /// `callback`.
@@ -281,7 +244,7 @@ extension LastFMClient {
 
     /// Reads the effective pair. A credential-store failure is its own error:
     /// falling back to the compiled pair could sign with the wrong account.
-    private func resolvedCredentials() async throws -> LastFMAppCredentials {
+    func resolvedCredentials() async throws -> LastFMAppCredentials {
         do {
             return try await credentialsProvider.appCredentials()
         } catch {
@@ -309,11 +272,30 @@ extension LastFMClient {
         sessionKey: String?,
         credentials: LastFMAppCredentials,
     ) async throws -> Data {
+        try await checkedResponse(
+            method: method,
+            parameters: parameters,
+            sessionKey: sessionKey,
+            credentials: credentials,
+        ).body
+    }
+
+    /// Sends one signed call and returns its successful response. Every
+    /// service-level failure throws here, so a returned response is a 2xx the
+    /// service did not reject in its body.
+    func checkedResponse(
+        method: String,
+        parameters: [String: String],
+        sessionKey: String?,
+        credentials: LastFMAppCredentials,
+        verb: HTTPMethod = .post,
+    ) async throws -> HTTPResponse {
         let request = try makeRequest(
             method: method,
             parameters: parameters,
             sessionKey: sessionKey,
             credentials: credentials,
+            verb: verb,
         )
         let response: HTTPResponse
         do {
@@ -346,7 +328,7 @@ extension LastFMClient {
         }
 
         if (200 ..< 300).contains(response.statusCode) {
-            return response.body
+            return response
         }
         throw LastFMError.http(
             statusCode: response.statusCode,
@@ -359,6 +341,7 @@ extension LastFMClient {
         parameters: [String: String],
         sessionKey: String?,
         credentials: LastFMAppCredentials,
+        verb: HTTPMethod,
     ) throws -> HTTPRequest {
         let appKey = credentials.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = credentials.sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -381,6 +364,17 @@ extension LastFMClient {
             form["api_sig"] = LastFMSignature.signature(parameters: form, sharedSecret: secret)
         }
 
+        // The same parameters, signature included, travel either as a form
+        // body or as the query. Both use the strict encoder, so a value that
+        // holds `&`, `+`, `=`, `#` or `/` arrives decoded intact.
+        let encoded = Self.formEncode(form)
+        let headers = ["User-Agent": userAgent, "Accept": "application/json"]
+        if verb == .get {
+            guard let url = URL(string: "\(endpoint.description)/2.0/?\(encoded)") else {
+                throw LastFMError.malformedResponse
+            }
+            return HTTPRequest(method: .get, url: url, headers: headers)
+        }
         guard let url = URL(string: "\(endpoint.description)/2.0/") else {
             throw LastFMError.malformedResponse
         }
@@ -392,7 +386,7 @@ extension LastFMClient {
                 "User-Agent": userAgent,
                 "Accept": "application/json",
             ],
-            body: Data(Self.formEncode(form).utf8),
+            body: Data(encoded.utf8),
         )
     }
 }

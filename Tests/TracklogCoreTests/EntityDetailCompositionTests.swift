@@ -800,7 +800,7 @@ struct EntityDetailCompositionTests {
         #expect(composition.state.entityDetail?.local.count == 3)
     }
 
-    @Test func aFiveHundredIsReportedAsOfflineThroughTheExistingClassification() async throws {
+    @Test func aFiveHundredIsServiceTroubleNotUnreachable() async throws {
         let composition = try await entityComposition { _ in
             HTTPResponse(statusCode: 503, body: Data())
         }
@@ -813,7 +813,9 @@ struct EntityDetailCompositionTests {
                 false
             }
         }
-        #expect(service == .failed(.offline))
+        #expect(service == .failed(.serviceUnavailable))
+        guard case let .failed(failure) = service else { return }
+        #expect(!failure.message.contains("could not be reached"))
     }
 
     @Test func rateLimitCarriesTheRetryAfter() async throws {
@@ -931,6 +933,429 @@ struct EntityDetailCompositionTests {
         }
         #expect(composition.state.entityDetail?.request.title == "Fleetwood Mac")
     }
+
+    // MARK: - Unreadable and service-trouble answers
+
+    @Test func unreadableAnswersAreNotUnreachableAndTryAgainReadsAgain() async throws {
+        let calls = EntityMethodCalls()
+        let composition = try await entityComposition(timeout: 5) { request in
+            let method = formParameters(request)["method"] ?? ""
+            if calls.take(method) == 0 {
+                return HTTPResponse(
+                    statusCode: 200,
+                    body: Data("<html>not json</html>".utf8),
+                )
+            }
+            switch method {
+            case "artist.getInfo": return entityLastFMArtistInfo()
+            case "album.getInfo": return entityLastFMAlbumInfo()
+            case "track.getInfo": return entityLastFMTrackInfo()
+            default: return entityLastFMError(3, message: "Invalid Method")
+            }
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        for request in try [artistRequest(), albumRequest(), trackRequest()] {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) { $0 == .failed(.unreadable) })
+            guard case let .failed(failure)? = composition.state.entityDetail?.service else {
+                Issue.record("\(request.kind) did not report an unreadable answer")
+                continue
+            }
+            #expect(failure == .unreadable)
+            #expect(!failure.message.contains("could not be reached"))
+
+            await composition.runtime.retryEntityService()
+            let recovered = await waitForEntityService(composition.state) {
+                if case .facts = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
+            #expect(recovered, "Try again must read the \(request.kind) page again")
+        }
+    }
+
+    @Test func anAnswerWithoutItsEntityObjectIsUnreadableOnEveryPage() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            HTTPResponse(statusCode: 200, body: Data(#"{"error":0}"#.utf8))
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        for request in try [artistRequest(), albumRequest(), trackRequest()] {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) {
+                $0 == .failed(.unreadable)
+            })
+        }
+    }
+
+    @Test func anEmptyEntityObjectIsUnreadableOnEveryPage() async throws {
+        let composition = try await entityComposition(timeout: 5) { request in
+            switch formParameters(request)["method"] ?? "" {
+            case "artist.getInfo": entityLastFMEmptyEntity("artist")
+            case "album.getInfo": entityLastFMEmptyEntity("album")
+            case "track.getInfo": entityLastFMEmptyEntity("track")
+            default: entityLastFMError(3, message: "Invalid Method")
+            }
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        for request in try [artistRequest(), albumRequest(), trackRequest()] {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) {
+                $0 == .failed(.unreadable)
+            })
+        }
+    }
+
+    @Test func aLinkWithoutCountsStillShowsTheServiceSection() async throws {
+        let composition = try await entityComposition(timeout: 5) { request in
+            switch formParameters(request)["method"] ?? "" {
+            case "artist.getInfo": entityLastFMArtistInfoLinkOnly()
+            case "album.getInfo": entityLastFMAlbumInfoLinkOnly()
+            case "track.getInfo": entityLastFMTrackInfoLinkOnly()
+            default: entityLastFMError(3, message: "Invalid Method")
+            }
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        let cases: [(EntityRequest, String)] = try [
+            (artistRequest(), "https://www.last.fm/music/Blondie"),
+            (albumRequest(), "https://www.last.fm/music/Blondie/Parallel+Lines"),
+            (trackRequest(), "https://www.last.fm/music/Blondie/_/Heart+of+Glass"),
+        ]
+        for (request, link) in cases {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) {
+                if case .facts = $0 {
+                    true
+                } else {
+                    false
+                }
+            })
+            guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+                Issue.record("\(request.kind) did not show the link")
+                continue
+            }
+            #expect(facts.facts.isEmpty)
+            #expect(facts.link?.absoluteString == link)
+        }
+    }
+
+    @Test func missingOptionalKeysStillShowWhatTheEntityHas() async throws {
+        let composition = try await entityComposition(timeout: 5) { request in
+            switch formParameters(request)["method"] ?? "" {
+            case "artist.getInfo": entityLastFMArtistInfoMissingOptionals()
+            case "album.getInfo": entityLastFMAlbumInfoMissingOptionals()
+            case "track.getInfo": entityLastFMTrackInfoMissingAlbum()
+            default: entityLastFMError(3, message: "Invalid Method")
+            }
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        let cases: [(EntityRequest, String)] = try [
+            (artistRequest(), "https://www.last.fm/music/Blondie"),
+            (albumRequest(), "https://www.last.fm/music/Blondie/Parallel+Lines"),
+            (trackRequest(), "https://www.last.fm/music/Blondie/_/Heart+of+Glass"),
+        ]
+        for (request, link) in cases {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) {
+                if case .facts = $0 {
+                    true
+                } else {
+                    false
+                }
+            })
+            guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+                Issue.record("\(request.kind) did not show its link")
+                continue
+            }
+            #expect(facts.link?.absoluteString == link)
+            if request.kind == .artist {
+                #expect(facts.facts.isEmpty)
+            } else {
+                #expect(!facts.facts.isEmpty)
+            }
+        }
+    }
+
+    @Test func anEmptyEntityStringIsUnreadableOnEveryPage() async throws {
+        let composition = try await entityComposition(timeout: 5) { request in
+            switch formParameters(request)["method"] ?? "" {
+            case "artist.getInfo": entityLastFMEmptyEntityString("artist")
+            case "album.getInfo": entityLastFMEmptyEntityString("album")
+            case "track.getInfo": entityLastFMEmptyEntityString("track")
+            default: entityLastFMError(3, message: "Invalid Method")
+            }
+        }
+        try await seedEntityHistory(composition.store)
+        _ = try await linkLastFM(composition)
+
+        for request in try [artistRequest(), albumRequest(), trackRequest()] {
+            try await composition.runtime.openEntityDetail(request)
+            #expect(await waitForEntityService(composition.state) {
+                $0 == .failed(.unreadable)
+            })
+        }
+    }
+
+    // MARK: - Tolerant decoding
+
+    @Test func theFullArtistShapeKeepsEveryReadableCount() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMArtistInfo(listeners: 5, plays: 10, userPlays: 3)
+        }
+        _ = try await linkLastFM(composition)
+        let service = try await openArtistAndWaitForService(composition) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        }
+        guard case let .facts(facts) = service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Listeners on Last.fm", value: "5"),
+            EntityFact(label: "Plays on Last.fm", value: "10"),
+            EntityFact(label: "Your plays", value: "3"),
+        ])
+        #expect(facts.link?.absoluteString == "https://www.last.fm/music/Blondie")
+    }
+
+    @Test func artistVariantFieldsKeepTheReadableCounts() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMArtistInfoVariant()
+        }
+        _ = try await linkLastFM(composition)
+        let service = try await openArtistAndWaitForService(composition) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        }
+        guard case let .facts(facts) = service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Plays on Last.fm", value: 1_599_101.formatted()),
+            EntityFact(label: "Your plays", value: "12"),
+        ])
+        #expect(facts.link?.absoluteString == "https://www.last.fm/music/Blondie")
+    }
+
+    @Test func theFullAlbumShapeShowsReleaseCountsAndArtwork() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMAlbumInfo(userPlays: 7)
+        }
+        _ = try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(albumRequest())
+        #expect(await waitForEntityService(composition.state) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        })
+        guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Released", value: "23 Sep 1978"),
+            EntityFact(label: "Listeners on Last.fm", value: "100"),
+            EntityFact(label: "Plays on Last.fm", value: "200"),
+            EntityFact(label: "Your plays", value: "7"),
+        ])
+        #expect(facts.artworkURL?.absoluteString == "https://images.example/album.jpg")
+    }
+
+    @Test func albumVariantFieldsKeepTheReadableFacts() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMAlbumInfoVariant()
+        }
+        _ = try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(albumRequest())
+        #expect(await waitForEntityService(composition.state) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        })
+        guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Listeners on Last.fm", value: "100"),
+            EntityFact(label: "Plays on Last.fm", value: "200"),
+            EntityFact(label: "Your plays", value: "7"),
+        ])
+        #expect(facts.artworkURL == nil)
+        #expect(facts.link?.absoluteString == "https://www.last.fm/music/Blondie/Parallel+Lines")
+    }
+
+    @Test func theFullTrackShapeShowsDurationCountsAndLink() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMTrackInfo(userPlays: 9)
+        }
+        _ = try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(trackRequest())
+        #expect(await waitForEntityService(composition.state) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        })
+        guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Duration", value: "3:54"),
+            EntityFact(label: "Listeners on Last.fm", value: "100"),
+            EntityFact(label: "Plays on Last.fm", value: "200"),
+            EntityFact(label: "Your plays", value: "9"),
+        ])
+        #expect(facts.link?.absoluteString
+            == "https://www.last.fm/music/Blondie/_/Heart+of+Glass")
+    }
+
+    @Test func trackVariantFieldsKeepTheReadableFacts() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMTrackInfoVariant()
+        }
+        _ = try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(trackRequest())
+        #expect(await waitForEntityService(composition.state) {
+            if case .facts = $0 {
+                true
+            } else {
+                false
+            }
+        })
+        guard case let .facts(facts)? = composition.state.entityDetail?.service else {
+            Issue.record("expected service facts")
+            return
+        }
+        #expect(facts.facts == [
+            EntityFact(label: "Duration", value: "3:54"),
+            EntityFact(label: "Listeners on Last.fm", value: "100"),
+            EntityFact(label: "Plays on Last.fm", value: "200"),
+            EntityFact(label: "Your plays", value: "9"),
+        ])
+        #expect(facts.link?.absoluteString
+            == "https://www.last.fm/music/Blondie/_/Heart+of+Glass")
+    }
+
+    // MARK: - Failure classification
+
+    @Test(arguments: [8, 11, 16])
+    func aTemporaryServiceCodeIsServiceTrouble(_ code: Int) async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            entityLastFMError(code, message: "Temporary")
+        }
+        _ = try await linkLastFM(composition)
+        let service = try await openArtistAndWaitForService(composition) {
+            if case .failed = $0 {
+                true
+            } else {
+                false
+            }
+        }
+        #expect(service == .failed(.serviceUnavailable))
+    }
+
+    @Test func aRefusedRedirectIsServiceTrouble() async throws {
+        let composition = try await entityComposition(timeout: 5) { _ in
+            HTTPResponse(
+                statusCode: 302,
+                headers: ["Location": "http://www.last.fm/"],
+                body: Data(),
+            )
+        }
+        _ = try await linkLastFM(composition)
+        let service = try await openArtistAndWaitForService(composition) {
+            if case .failed = $0 {
+                true
+            } else {
+                false
+            }
+        }
+        #expect(service == .failed(.serviceUnavailable))
+    }
+
+    @Test func aCredentialStoreFailureIsNotUnreachable() async throws {
+        let composition = try await entityComposition(
+            appCredentialsProvider: FailingLastFMCredentials(),
+            timeout: 5,
+        ) { _ in
+            entityLastFMArtistInfo()
+        }
+        _ = try await linkLastFM(composition)
+        try await composition.runtime.openEntityDetail(artistRequest())
+        #expect(await waitForEntityService(composition.state) {
+            $0 == .failed(.credentialsUnavailable)
+        })
+        #expect(composition.state.entityDetail?.service == .failed(.credentialsUnavailable))
+        #expect(await composition.transport.requests(toHost: "ws.audioscrobbler.com").isEmpty)
+    }
+
+    @Test func anUnclassifiedFailureIsUnexpectedNotUnreachable() async throws {
+        let composition = try await entityComposition(
+            extraAdapters: [ThrowingEntityReader()],
+            timeout: 5,
+        ) { _ in
+            entityLastFMArtistInfo()
+        }
+        _ = try await linkLastFM(composition)
+        let service = try await openArtistAndWaitForService(composition) {
+            if case .failed = $0 {
+                true
+            } else {
+                false
+            }
+        }
+        #expect(service == .failed(.unexpected))
+    }
+
+    @Test func eachFailureCopyTellsItsCauseApart() {
+        #expect(EntityServiceFailure.offline.message
+            == "Last.fm could not be reached. Service details are unavailable.")
+        #expect(EntityServiceFailure.unreadable.message
+            == "Last.fm sent an answer this app could not read. Service details are unavailable.")
+        #expect(EntityServiceFailure.serviceUnavailable.message
+            == "Last.fm is having trouble answering. Service details are unavailable.")
+        #expect(EntityServiceFailure.credentialsUnavailable.message
+            == "Last.fm credentials could not be read. Service details are unavailable.")
+        #expect(EntityServiceFailure.unexpected.message
+            == "Last.fm service details could not be loaded. Try again.")
+
+        let failures: [EntityServiceFailure] = [
+            .offline,
+            .unreadable,
+            .serviceUnavailable,
+            .credentialsUnavailable,
+            .unexpected,
+        ]
+        let messages = failures.map(\.message)
+        #expect(Set(messages).count == messages.count)
+        #expect(messages.dropFirst().allSatisfy { !$0.contains("could not be reached") })
+    }
 }
 
 /// A Sendable counter for a scripted handler.
@@ -944,5 +1369,47 @@ final class EntityCallCounter: @unchecked Sendable {
         let current = value
         value += 1
         return current
+    }
+}
+
+/// A Sendable per-method counter, so one scripted handler can answer each
+/// Last.fm method differently.
+final class EntityMethodCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [String: Int] = [:]
+
+    func take(_ method: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = counts[method, default: 0]
+        counts[method] = current + 1
+        return current
+    }
+}
+
+private enum EntityTestError: Error {
+    case unreadable
+    case unexpected
+}
+
+private struct FailingLastFMCredentials: LastFMAppCredentialsProviding {
+    func appCredentials() async throws -> LastFMAppCredentials {
+        throw EntityTestError.unreadable
+    }
+}
+
+private struct ThrowingEntityReader: ServiceAdapter, EntityServiceReading {
+    let kind = ServiceKind.lastFM
+    let capabilities = ServiceCapabilities()
+
+    func validate(_: String, endpoint _: ServiceEndpoint) async throws -> ServiceIdentity {
+        ServiceIdentity(name: "listener")
+    }
+
+    func entityDetails(
+        _: EntityRequest,
+        connection _: Connection,
+    ) async throws -> EntityServiceFacts {
+        throw EntityTestError.unexpected
     }
 }

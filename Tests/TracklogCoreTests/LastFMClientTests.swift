@@ -231,4 +231,21 @@ struct LastFMClientTests {
             #expect(!failure.localizedDescription.contains(lastFMTestCredentials.sharedSecret))
         }
     }
+
+    /// The entity page classifies these cases before consulting
+    /// `serviceFailure`; delivery and every other surface keep reading
+    /// `.retryable` from it.
+    @Test(arguments: [
+        LastFMError.transport,
+        .credentialStorage,
+        .malformedResponse,
+        .http(statusCode: 503, retryAfter: nil),
+        .http(statusCode: 302, retryAfter: nil),
+        .service(code: 8, message: nil),
+        .service(code: 11, message: nil),
+        .service(code: 16, message: nil),
+    ])
+    func retryableClassificationIsUnchanged(_ error: LastFMError) {
+        #expect(error.serviceFailure == .retryable)
+    }
 }

@@ -125,9 +125,11 @@ run_detail_shots() {
 
 # Artist, album and track pages, Last.fm facts, the no-connection reason, the
 # ListenBrainz MBID link, the approximate artist image, an explicit override,
-# an unreadable stored copy and long metadata.
+# an unreadable stored copy, long metadata, and the unreadable/server-trouble
+# answers that must not read as unreachable.
 for fixture in artist artist-approximate artist-no-connection album album-service-image track \
-    album-listenbrainz override corrupt-override long-names track-delete; do
+    album-listenbrainz override corrupt-override long-names track-delete \
+    artist-unreadable album-unreadable track-unreadable artist-server-error; do
     run_detail_shots "$fixture"
 done
 
