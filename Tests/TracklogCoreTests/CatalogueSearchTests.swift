@@ -66,7 +66,7 @@ struct CatalogueSearchCompositionTests: CaptureTestHelpers {
                 identity: ServiceIdentity(name: "listener"),
             )
         }
-        try runtime.catalogueSearch?.beginSession()
+        runtime.catalogueSearch?.beginSession()
         return Harness(
             database: database,
             store: store,

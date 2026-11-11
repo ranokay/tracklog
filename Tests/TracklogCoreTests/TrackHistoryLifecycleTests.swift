@@ -156,7 +156,7 @@ struct TrackHistoryLifecycleTests: CaptureTestHelpers {
         let gate = ChartHoldGate()
         let counter = ChartHoldCounter()
         await gate.startHolding()
-        await store.chartReader?.setRowObserver { rowIndex in
+        await store.chartReader.setRowObserver { rowIndex in
             if rowIndex == 64, await counter.takeFirst() {
                 await gate.enter()
             }
@@ -172,7 +172,7 @@ struct TrackHistoryLifecycleTests: CaptureTestHelpers {
                 "a cancelled page releases the loading flag")
         #expect(state.entityDetail?.track?.listens.count == 100)
         #expect(state.entityDetail?.track?.hasMore == true)
-        await store.chartReader?.setRowObserver(nil)
+        await store.chartReader.setRowObserver(nil)
 
         await runtime.loadMoreEntityListens()
         let track = try #require(state.entityDetail?.track)
@@ -208,7 +208,7 @@ struct TrackHistoryLifecycleTests: CaptureTestHelpers {
         let gate = ChartHoldGate()
         let counter = ChartHoldCounter()
         await gate.startHolding()
-        await store.chartReader?.setRowObserver { rowIndex in
+        await store.chartReader.setRowObserver { rowIndex in
             if rowIndex == 64, await counter.takeFirst() {
                 await gate.enter()
             }
@@ -230,6 +230,6 @@ struct TrackHistoryLifecycleTests: CaptureTestHelpers {
         await open.value
         await runtime.reloadEntityDetail()
         #expect(state.entityDetail?.track?.totalCount == 2)
-        await store.chartReader?.setRowObserver(nil)
+        await store.chartReader.setRowObserver(nil)
     }
 }

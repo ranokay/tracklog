@@ -11,10 +11,7 @@ extension SQLiteListenStore: ChartStore {
         window: LocalChartWindow,
         limit: Int,
     ) async throws -> LocalChartAggregate {
-        guard let chartReader else {
-            throw DatabaseError.open("the local chart reader is unavailable")
-        }
-        return try await chartReader.localChart(type: type, window: window, limit: limit)
+        try await chartReader.localChart(type: type, window: window, limit: limit)
     }
 }
 

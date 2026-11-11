@@ -76,7 +76,7 @@ struct QuickBlockTests: CaptureTestHelpers {
                 replace: .init(track: editedTitle),
             ),
         )
-        let history = try await seededHistory(store: store, title: rawTitle)
+        _ = try await seededHistory(store: store, title: rawTitle)
         let before = try #require(try await store.recent(limit: 10).first)
 
         let clock = FakeClock(base)

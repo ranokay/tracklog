@@ -81,7 +81,7 @@ public final class ConnectionService {
                         reason: Self.lostCredentialReason,
                     )
                 } else {
-                    try await deliveries?.abandonPending(
+                    _ = try await deliveries?.abandonPending(
                         forConnection: id,
                         reason: Self.lostCredentialReason,
                     )
