@@ -9,12 +9,6 @@ public extension TracklogDroplet {
         }
         host.notchSurface.dismissExpandedSurface(tracklogHistorySurfaceID)
     }
-
-    /// The player's display name, for the widget's status line.
-    var sourceName: String? {
-        guard let bundleID = state.nowPlaying?.track.bundleID, !bundleID.isEmpty else { return nil }
-        return displayName(for: bundleID)
-    }
 }
 
 // MARK: - Shelf widget

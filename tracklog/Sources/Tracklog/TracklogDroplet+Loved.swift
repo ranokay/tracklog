@@ -48,12 +48,4 @@ public extension TracklogDroplet {
             title: "Last.fm app credentials",
         )
     }
-
-    func presentLoved() {
-        state.setTakeoverSection(.loved)
-        guard let host else { return }
-        host.notchSurface.presentExpandedSurface(
-            ExpandedSurfacePresentationRequest(surfaceID: tracklogHistorySurfaceID),
-        )
-    }
 }

@@ -26,12 +26,6 @@ public enum ChartType: String, CaseIterable, Codable, Identifiable, Sendable {
         case .tracks: "track"
         }
     }
-
-    /// The unit a row's count is spoken and drawn in. A service chart is a
-    /// play count it returned; local history is a listen count this Mac stored.
-    public var localCountUnit: ChartCountUnit {
-        .listens
-    }
 }
 
 public enum ChartCountUnit: String, Codable, Equatable, Sendable {
@@ -76,10 +70,6 @@ public enum ChartPeriod: String, CaseIterable, Codable, Sendable {
 
     public var isLocalOnly: Bool {
         self == .today || self == .custom
-    }
-
-    public var isSupportedByService: Bool {
-        !isLocalOnly
     }
 
     /// Last.fm exposes rolling windows, not calendar ones.
@@ -259,16 +249,6 @@ public enum ChartEffectiveSource: Equatable, Sendable {
     public var serviceKind: ServiceKind? {
         guard case let .service(_, kind, _, _, _) = self else { return nil }
         return kind
-    }
-
-    public var serviceLabel: String? {
-        guard case let .service(_, kind, _, _, _) = self else { return nil }
-        return kind.displayName
-    }
-
-    public var accountLabel: String? {
-        guard case let .service(_, _, _, _, displayName) = self else { return nil }
-        return displayName
     }
 }
 

@@ -23,10 +23,6 @@ enum HarnessPaletteFixture: String, CaseIterable {
         return HarnessPaletteFixture(rawValue: raw)
     }
 
-    var opensPanel: Bool {
-        self != .refusal
-    }
-
     var linksLastFM: Bool {
         self != .lovedUnavailable
     }
