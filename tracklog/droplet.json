@@ -7,9 +7,9 @@
   "category": "media",
   "kit": {
     "abi": 1,
-    "minAPI": "1.19.0"
+    "minAPI": "1.20.1"
   },
-  "minAppVersion": "15.3.0",
+  "minAppVersion": "16.0.1",
   "capabilities": ["apple-events", "clipboard-write", "expanded-surface", "global-shortcuts", "hud", "network-client"],
   "surfaces": [
     "shelf-widget",

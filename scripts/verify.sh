@@ -19,6 +19,7 @@ echo "==> license resources"
 for notice in LICENSE NOTICE THIRD_PARTY_NOTICES.txt; do
     cmp "$notice" "tracklog/Assets/Licenses/$notice"
 done
+cmp LICENSE tracklog/LICENSE
 
 echo "==> lint"
 hk check --all

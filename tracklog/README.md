@@ -64,8 +64,8 @@ The package lives in `tracklog/`. The map for the project is
 
 ## Licence
 
-Tracklog-owned code and documentation use [Apache-2.0](../LICENSE).
-[Third-party terms](../THIRD_PARTY_NOTICES.txt) apply to DroppyKit, its scaffold
+Tracklog-owned code and documentation use [Apache-2.0](LICENSE).
+[Third-party terms](Assets/Licenses/THIRD_PARTY_NOTICES.txt) apply to DroppyKit, its scaffold
 material and generated placeholder artwork. Project names and logos are reserved
 for official branding. The SDK build copies the license files in
 `Assets/Licenses/` into the droplet resources.
