@@ -45,8 +45,9 @@ seek) and `elapsedTime` is the position at that moment. `MediaHelperPayload`
 now reads the position as `elapsedTime + (observedAt - timestamp) * rate` while
 playing and as `elapsedTime` while paused. The earlier
 `max(elapsedTime, observedAt - timestamp)` froze the position after any
-mid-track report and let a forward-then-backward seek early in a track read as
-a restart. That limit no longer applies.
+mid-track report. The known limit recorded here before assumed `timestamp`
+was the track start; the measurement shows it is not, so a seek early in a
+track does not read as a restart on this path.
 
 Detection and `finalize(at:)` happen in `ScrobbleEngine.ingest`, before the
 new-session branch. The new session is created through the same path as a new
