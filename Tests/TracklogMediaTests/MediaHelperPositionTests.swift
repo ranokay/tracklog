@@ -71,7 +71,7 @@ struct MediaHelperPositionTests {
         for second in stride(from: 15.0, through: 19.0, by: 2.0) {
             effects += try engine.ingest(read(answer(reportedAt: 14, position: 5), at: second))
         }
-        #expect(abs(engine.status.played - 18) < 0.01, "the backward seek keeps the session's played time")
+        #expect(abs(engine.status.played - 19) < 0.01, "the backward seek keeps all 19 seconds played")
 
         for second in stride(from: 21.0, through: 121.0, by: 2.0) {
             effects += try engine.ingest(read(answer(reportedAt: 14, position: 5), at: second))
