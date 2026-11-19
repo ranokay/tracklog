@@ -32,16 +32,6 @@ public extension TracklogDroplet {
         imageOverrideTask = nil
         imageOverrideOperationID = nil
         imageOverrideGeneration += 1
-        if let alert = exportAlert {
-            exportAlert = nil
-            let ownsCurrentModal = NSApp.modalWindow === alert.window
-            alert.window.close()
-            if ownsCurrentModal {
-                // Only end the modal loop when it is our alert's. A host
-                // dialog nested above it must keep its own modal session.
-                NSApp.abortModal()
-            }
-        }
         activationTask?.cancel()
         activationTask = nil
         lastFMLink?.cancel()

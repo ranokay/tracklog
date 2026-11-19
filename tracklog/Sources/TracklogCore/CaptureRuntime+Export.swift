@@ -52,4 +52,18 @@ public extension CaptureRuntime {
             searchTemplate: state.playbackTemplate?.rawValue,
         )
     }
+
+    /// Clears the last export's failure when a new export starts, so the Data
+    /// page never shows an old reason beside a new attempt.
+    func beginSettingsExport() {
+        state.setExportFailure(nil)
+    }
+
+    /// Records why an export failed, for the Data page, and shows the "Not
+    /// exported" strip. Cancelling the save panel is not a failure and never
+    /// reaches here.
+    func reportSettingsExportFailure(_ detail: String) {
+        state.setExportFailure(detail)
+        showHUD(.exportFailed)
+    }
 }

@@ -69,6 +69,26 @@ struct HUDVocabularyTests {
         #expect(media.spoken == "Media feed unavailable. Playback will not be scrobbled.")
     }
 
+    @Test func blockAndExportFailuresUseTheExactCopyAndMechanics() {
+        let block = HUD.resolve(.blockFailed(title: "Song"))
+        #expect(block.id == "hud.failure.block")
+        #expect(block.duration == 4)
+        #expect(block.priority == .normal)
+        #expect(block.shape == .strip)
+        #expect(block.glyph == "exclamationmark.triangle.fill")
+        #expect(block.word == "Not blocked")
+        #expect(block.spoken == "Could not block Song. It may still scrobble.")
+
+        let export = HUD.resolve(.exportFailed)
+        #expect(export.id == "hud.failure.export")
+        #expect(export.duration == 4)
+        #expect(export.priority == .normal)
+        #expect(export.shape == .strip)
+        #expect(export.glyph == "exclamationmark.triangle.fill")
+        #expect(export.word == "Not exported")
+        #expect(export.spoken == "Settings could not be exported. The Data page says why.")
+    }
+
     @Test func confirmationsUseTheExactCopyAndMechanics() {
         let loved = HUD.resolve(.loved(services: ["Last.fm"]))
         #expect(loved.id == "hud.confirm.love")

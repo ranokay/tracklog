@@ -19,7 +19,7 @@ public enum HUD {
 
     public static func resolve(_ event: HUDEvent) -> HUDPresentation {
         switch event {
-        case .needsSignIn, .stuckQueue, .rateLimited, .mediaFeedUnavailable:
+        case .needsSignIn, .stuckQueue, .rateLimited, .mediaFeedUnavailable, .blockFailed, .exportFailed:
             failure(event)
         case .loved, .unloved, .hated, .blocked, .paused, .resumed, .exported:
             confirmation(event)
@@ -42,6 +42,22 @@ public enum HUD {
                 glyph: "waveform.slash",
                 word: "No feed",
                 spoken: "Media feed unavailable. Playback will not be scrobbled.",
+                style: .failure,
+            )
+        case let .blockFailed(title):
+            strip(
+                id: HUDIdentifier.failureBlock,
+                glyph: "exclamationmark.triangle.fill",
+                word: "Not blocked",
+                spoken: "Could not block \(title). It may still scrobble.",
+                style: .failure,
+            )
+        case .exportFailed:
+            strip(
+                id: HUDIdentifier.failureExport,
+                glyph: "exclamationmark.triangle.fill",
+                word: "Not exported",
+                spoken: "Settings could not be exported. The Data page says why.",
                 style: .failure,
             )
         default:

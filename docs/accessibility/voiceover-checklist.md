@@ -256,9 +256,11 @@ Expected speech, exactly as presented:
 - `Unloved on Last.fm.`
 - `Hated on ListenBrainz.`
 - `Blocked <title>. It will not scrobble again.`
+- `Could not block <title>. It may still scrobble.`
 - `Scrobbling paused for 1 hour.` / `Scrobbling paused until 14:00.`
 - `Scrobbling resumed.`
 - `Settings exported.`
+- `Settings could not be exported. The Data page says why.`
 - `Last.fm reconnected. 4 scrobbles sent.`
 - `Last.fm is accepting scrobbles again. 12 sent.`
 

@@ -7,6 +7,8 @@ public enum HUDIdentifier {
     public static let failureStuck = "hud.failure.stuck"
     public static let failureRateLimited = "hud.failure.ratelimit"
     public static let failureMedia = "hud.failure.media"
+    public static let failureBlock = "hud.failure.block"
+    public static let failureExport = "hud.failure.export"
     public static let confirmLove = "hud.confirm.love"
     public static let confirmUnlove = "hud.confirm.unlove"
     public static let confirmHate = "hud.confirm.hate"
@@ -75,6 +77,10 @@ public enum HUDEvent: Equatable, Sendable {
     case stuckQueue(count: Int, services: [String])
     case rateLimited(services: [String])
     case mediaFeedUnavailable
+    /// A quick block from the widget or a History row could not be saved.
+    case blockFailed(title: String)
+    /// Writing the settings export failed after the save panel closed.
+    case exportFailed
     case loved(services: [String])
     case unloved(services: [String])
     case hated(service: String)
