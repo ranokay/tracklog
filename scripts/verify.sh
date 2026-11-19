@@ -31,6 +31,8 @@ echo "==> engine tests"
 python3 scripts/run_with_timeout.py swift test --package-path Tests
 
 echo "==> droplet build"
+# Finder can drop a .DS_Store into the old build folder while the SDK deletes it.
+rm -rf tracklog/.build/droplet
 (cd tracklog && droppykit build)
 
 echo "==> droplet validation"
