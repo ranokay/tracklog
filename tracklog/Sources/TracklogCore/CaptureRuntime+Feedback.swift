@@ -174,55 +174,6 @@ public extension CaptureRuntime {
             )
         }
     }
-
-    /// Creates an exact artist + title block with blank album and album artist.
-    /// Existing history is untouched; the block applies to future captures.
-    ///
-    /// The raw values are the ones the next play arrives with. Blocks run
-    /// before simple edits, so blocking the processed display values would let
-    /// a rule-rewritten track through on its next play.
-    @discardableResult
-    func quickBlock(_ listen: Listen) async throws -> BlockRule {
-        try await quickSaveBlock(
-            BlockRule(
-                track: listen.raw.title,
-                artist: listen.raw.artist,
-                album: "",
-                albumArtist: "",
-                savedAt: clock.now,
-            ),
-        )
-    }
-
-    /// Creates the same raw artist + title block for the track in flight. The
-    /// engine keeps the player's raw observation while `state.nowPlaying`
-    /// publishes the edited values, so the block is authored against what the
-    /// next play will actually arrive as.
-    @discardableResult
-    func quickBlockCurrentTrack() async throws -> BlockRule? {
-        guard let raw = engine.currentRawTrack else { return nil }
-        return try await quickSaveBlock(
-            BlockRule(
-                track: raw.title,
-                artist: raw.artist,
-                album: "",
-                albumArtist: "",
-                savedAt: clock.now,
-            ),
-        )
-    }
-
-    /// A quick block has no form to show an error in, so a failed save says
-    /// so on the notch. The Blocks settings page keeps its inline error.
-    private func quickSaveBlock(_ block: BlockRule) async throws -> BlockRule {
-        do {
-            return try await saveBlock(block)
-        } catch {
-            let title = block.track.trimmingCharacters(in: .whitespacesAndNewlines)
-            showHUD(.blockFailed(title: title.isEmpty ? "this track" : title))
-            throw error
-        }
-    }
 }
 
 // MARK: - Ordering and fan-out
