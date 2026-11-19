@@ -13,7 +13,7 @@ import re
 import sys
 
 ISSUE_URL = re.compile(
-    r"https?://(?:www\.)?github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:issues|pull)/\d+",
+    r"https?://(?:www\.)?github\.com/[A-Z0-9_.-]+/[A-Z0-9_.-]+/(?:issues|pull)/\d+",
     re.IGNORECASE,
 )
 OWNER_REPO_ISSUE = re.compile(r"\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+")

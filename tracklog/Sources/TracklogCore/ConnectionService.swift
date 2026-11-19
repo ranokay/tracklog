@@ -22,7 +22,9 @@ public final class ConnectionService {
         deliveries: (any DeliveryStore)? = nil,
         adapters: [any ServiceAdapter],
         clock: any Clock,
-        log: @escaping @MainActor (ConnectionEvent) -> Void = { _ in },
+        log: @escaping @MainActor (ConnectionEvent) -> Void = { _ in
+            // Callers that pass no log drop connection events.
+        },
     ) {
         self.store = store
         self.credentials = credentials

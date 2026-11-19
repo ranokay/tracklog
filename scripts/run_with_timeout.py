@@ -137,7 +137,7 @@ def tear_down(child: subprocess.Popen, grace: float) -> set[int]:
         # the root and from every survivor before escalating.
         survivors = {pid for pid in targets if is_alive(pid)}
         refresh = descendants(root)
-        for pid in list(survivors):
+        for pid in survivors:
             refresh |= descendants(pid)
         survivors |= refresh
         survivors.add(root)
