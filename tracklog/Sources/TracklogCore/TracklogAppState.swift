@@ -174,6 +174,9 @@ public final class TracklogAppState: ObservableObject {
     /// A refused play or Settings handoff from a takeover row action. Shown by
     /// the takeover's refusal bar and cleared when it is dismissed.
     @Published public internal(set) var searchRefusal: String?
+    /// Why the last settings export failed, shown under Export on the Data
+    /// page until the next attempt.
+    @Published public internal(set) var exportFailure: String?
 
     public var pendingCount: Int {
         pendingQueue.count
@@ -243,6 +246,10 @@ public final class TracklogAppState: ObservableObject {
 
     public func setSearchRefusal(_ message: String?) {
         searchRefusal = message
+    }
+
+    public func setExportFailure(_ message: String?) {
+        exportFailure = message
     }
 
     public func setImageOverrideDraft(_ draft: ImageOverrideDraft?) {

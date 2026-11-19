@@ -74,7 +74,6 @@ public final class TracklogDroplet: NSObject, Droplet {
     var exportTask: Task<Void, Never>?
     var exportOperationID: UUID?
     var exportPanel: NSSavePanel?
-    var exportAlert: NSAlert?
     /// The image picker the Images page opened. Deactivation cancels it like
     /// the export panel.
     var imageOverridePanel: NSOpenPanel?

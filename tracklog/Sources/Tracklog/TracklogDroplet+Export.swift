@@ -9,12 +9,13 @@ import UniformTypeIdentifiers
 
 extension TracklogDroplet {
     /// The portable settings export. The document is built and encoded before
-    /// the save panel opens, so a failed rule read shows an alert instead of a
-    /// partial file. Cancellation is silent; a write failure gets a native
-    /// alert because the HUD has no copy for it.
+    /// the save panel opens, so a failed rule read writes no partial file.
+    /// Cancellation is silent. A failure shows the "Not exported" strip and
+    /// leaves its reason under Export on the Data page until the next attempt.
     func exportSettings() {
         guard exportTask == nil, let runtime, host != nil else { return }
 
+        state.setExportFailure(nil)
         let operationID = UUID()
         exportOperationID = operationID
         exportTask = Task { [weak self] in
@@ -36,12 +37,7 @@ extension TracklogDroplet {
                       !Task.isCancelled
                 else { return }
                 let detail = (error as? SettingsExportReadFailure)?.description ?? "\(error)"
-                self.presentExportError(
-                    title: "Settings could not be exported",
-                    detail: detail,
-                    operationID: operationID,
-                    runtime: runtime,
-                )
+                self.reportExportFailure(detail, operationID: operationID, runtime: runtime)
                 return
             }
 
@@ -73,12 +69,7 @@ extension TracklogDroplet {
                 self.hudSession?.show(HUD.resolve(.exported))
             } catch {
                 guard self.isCurrentExport(operationID, runtime: runtime), !Task.isCancelled else { return }
-                self.presentExportError(
-                    title: "Settings could not be exported",
-                    detail: error.localizedDescription,
-                    operationID: operationID,
-                    runtime: runtime,
-                )
+                self.reportExportFailure(error.localizedDescription, operationID: operationID, runtime: runtime)
             }
         }
     }
@@ -103,23 +94,12 @@ extension TracklogDroplet {
         }
     }
 
-    private func presentExportError(
-        title: String,
-        detail: String,
-        operationID: UUID,
-        runtime: CaptureRuntime,
-    ) {
+    /// No modal alert: deactivation has no loop to end, and the reason stays
+    /// on the Data page where the export started.
+    private func reportExportFailure(_ detail: String, operationID: UUID, runtime: CaptureRuntime) {
         guard self.isCurrentExport(operationID, runtime: runtime) else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = detail
-        alert.addButton(withTitle: "OK")
-        exportAlert = alert
-        alert.runModal()
-        if exportAlert === alert {
-            exportAlert = nil
-        }
+        state.setExportFailure(detail)
+        hudSession?.show(HUD.resolve(.exportFailed))
     }
 }
 

@@ -183,7 +183,7 @@ public extension CaptureRuntime {
     /// a rule-rewritten track through on its next play.
     @discardableResult
     func quickBlock(_ listen: Listen) async throws -> BlockRule {
-        try await saveBlock(
+        try await quickSaveBlock(
             BlockRule(
                 track: listen.raw.title,
                 artist: listen.raw.artist,
@@ -201,7 +201,7 @@ public extension CaptureRuntime {
     @discardableResult
     func quickBlockCurrentTrack() async throws -> BlockRule? {
         guard let raw = engine.currentRawTrack else { return nil }
-        return try await saveBlock(
+        return try await quickSaveBlock(
             BlockRule(
                 track: raw.title,
                 artist: raw.artist,
@@ -210,6 +210,18 @@ public extension CaptureRuntime {
                 savedAt: clock.now,
             ),
         )
+    }
+
+    /// A quick block has no form to show an error in, so a failed save says
+    /// so on the notch. The Blocks settings page keeps its inline error.
+    private func quickSaveBlock(_ block: BlockRule) async throws -> BlockRule {
+        do {
+            return try await saveBlock(block)
+        } catch {
+            let title = block.track.trimmingCharacters(in: .whitespacesAndNewlines)
+            showHUD(.blockFailed(title: title.isEmpty ? "this track" : title))
+            throw error
+        }
     }
 }
 

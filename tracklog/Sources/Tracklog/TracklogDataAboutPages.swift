@@ -87,6 +87,15 @@ struct TracklogDataPage: View {
                         }
                         .buttonStyle(DroppyAccentButtonStyle(size: .small))
                     }
+                    if let failure = state.exportFailure {
+                        DropletStackedRow(title: "Not exported") {
+                            Text(failure)
+                                .font(.caption)
+                                .foregroundStyle(AdaptiveColors.notchSurfaceSecondaryText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }
