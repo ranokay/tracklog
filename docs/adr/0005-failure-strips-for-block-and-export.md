@@ -28,7 +28,10 @@ that #48 chose for a failed export.
 - `QuickBlockFailureTests` drives `CaptureRuntime` with a block store whose
   save fails, and records through the same `HUDHostSession` the droplet uses.
   Both quick-block paths show "Not blocked" and never "Blocked".
-- The export path is in the droplet target, which has no test target because
-  the Store refuses tests in a submission. It calls the same `HUD.resolve` and
-  `TracklogAppState.setExportFailure`, and `TracklogDroplet+Export.swift`
-  holds no `NSAlert`.
+- The droplet's export path calls `CaptureRuntime.beginSettingsExport()`
+  when it starts and `reportSettingsExportFailure(_:)` for a read or a write
+  failure. `SettingsExportTests` covers both through a failing rule read: the
+  reason is kept for the Data page, the strip is spoken, and the next attempt
+  clears the reason. The save panel and its cancellation stay in the droplet
+  target, which has no test target because the Store refuses tests in a
+  submission. `TracklogDroplet+Export.swift` holds no `NSAlert`.

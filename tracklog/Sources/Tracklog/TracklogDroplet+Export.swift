@@ -15,7 +15,7 @@ extension TracklogDroplet {
     func exportSettings() {
         guard exportTask == nil, let runtime, host != nil else { return }
 
-        state.setExportFailure(nil)
+        runtime.beginSettingsExport()
         let operationID = UUID()
         exportOperationID = operationID
         exportTask = Task { [weak self] in
@@ -98,8 +98,7 @@ extension TracklogDroplet {
     /// on the Data page where the export started.
     private func reportExportFailure(_ detail: String, operationID: UUID, runtime: CaptureRuntime) {
         guard self.isCurrentExport(operationID, runtime: runtime) else { return }
-        state.setExportFailure(detail)
-        hudSession?.show(HUD.resolve(.exportFailed))
+        runtime.reportSettingsExportFailure(detail)
     }
 }
 
