@@ -37,14 +37,17 @@ a paused observation does not move it, so a seek made while paused is still
 visible when playback resumes. A source with no report time of its own
 (`timestamp == observedAt`) keeps the previous `elapsed < 3` behaviour.
 
-**Known limit.** The rule assumes the report timestamp resets on a seek or
-resume. The `get --now` path reports the track start instead
-(`MediaHelper`, the `timestamp` and `elapsedFromStart` lines). For that source,
-a forward seek followed by a backward seek inside the first 20 seconds of the
-track can read as a restart, and the replaced session's played time resets.
-The worst case is up to 20 seconds of played time on a listen that has barely
-begun. Nothing is delivered twice. The fix, to report the last seek or resume
-time from that path, is tracked in #125.
+**Helper report time (#125).** The rule needs the report time to move on a
+seek or a resume. Measured on 2026-11-19 against Droppy's and the Playground's
+`DroppyMediaHelper get --now` with Music, the helper does this: `timestamp` is
+when the player last reported its position (the start, a pause, a resume or a
+seek) and `elapsedTime` is the position at that moment. `MediaHelperPayload`
+now reads the position as `elapsedTime + (observedAt - timestamp) * rate` while
+playing and as `elapsedTime` while paused. The earlier
+`max(elapsedTime, observedAt - timestamp)` froze the position after any
+mid-track report. The known limit recorded here before assumed `timestamp`
+was the track start; the measurement shows it is not, so a seek early in a
+track does not read as a restart on this path.
 
 Detection and `finalize(at:)` happen in `ScrobbleEngine.ingest`, before the
 new-session branch. The new session is created through the same path as a new

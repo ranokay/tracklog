@@ -217,14 +217,14 @@ public final class MediaHelperReader: MediaHelperReading {
 /// launching the helper. Everything is optional by design: Droppy's helper is
 /// undocumented, and a changed payload reads as "nothing playing".
 public enum MediaHelperPayload {
-    public static func decode(_ data: Data) -> MediaSample? {
-        decodeSnapshot(data)?.sample
+    public static func decode(_ data: Data, observedAt: Date = Date()) -> MediaSample? {
+        decodeSnapshot(data, observedAt: observedAt)?.sample
     }
 
     /// The payload includes the cover bytes (`artworkData`). The separate
     /// `artworkIdentifier` URL is intentionally ignored: Tracklog never makes
     /// a network request for artwork.
-    public static func decodeSnapshot(_ data: Data) -> MediaHelperSnapshot? {
+    public static func decodeSnapshot(_ data: Data, observedAt: Date = Date()) -> MediaHelperSnapshot? {
         guard
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let payload = object["payload"] as? [String: Any],
@@ -244,14 +244,15 @@ public enum MediaHelperPayload {
         let bundleID = payload["parentApplicationBundleIdentifier"] as? String
             ?? payload["bundleIdentifier"] as? String
             ?? ""
-        let observedAt = Date()
         let timestamp = timestamp(from: payload["timestamp"] as? String) ?? observedAt
-        // The helper's get --now reports the track start and can keep
-        // elapsedTime at zero. Derive the position from the observation clock
-        // so polling advances played time; the reported timestamp still
-        // reconstructs the start.
-        let elapsedFromStart = playing ? max(0, observedAt.timeIntervalSince(timestamp)) : 0
-        let elapsed = max(payloadElapsed, elapsedFromStart)
+        // `timestamp` is when the player last reported its position: the
+        // start, a pause, a resume or a seek (measured on the helper in
+        // #125). `elapsedTime` is the position at that moment, so a playing
+        // track has advanced by the time since, at its rate. A paused track
+        // stays where it stopped.
+        let rate = playbackRate > 0 ? playbackRate : 1
+        let sinceReport = max(0, observedAt.timeIntervalSince(timestamp))
+        let elapsed = payloadElapsed + (playing ? sinceReport * rate : 0)
         let artwork = (payload["artworkData"] as? String)
             .flatMap { Data(base64Encoded: $0) }
             .flatMap { $0.isEmpty ? nil : $0 }
