@@ -60,10 +60,6 @@ enum ChartIdentity {
             Identity.joined([title, subtitle]),
         ].joined(separator: ":")
     }
-
-    static func nextRank(_ index: Int) -> Int {
-        index + 1
-    }
 }
 
 /// The host and fixtures both speak the one HTTP transport. A route answers

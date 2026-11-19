@@ -37,7 +37,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
     private let url: URL
     /// The local chart scan's own read-only connection: a full-history read
     /// must not occupy the writer actor that capture and delivery use.
-    let chartReader: ChartReadConnection?
+    let chartReader: ChartReadConnection
 
     public init(url: URL) throws {
         try self.init(url: url, migrations: Self.schemaMigrations)
@@ -46,7 +46,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
     init(url: URL, migrations: [Migration]) throws {
         self.url = url
         connection = try Self.open(url: url, migrations: migrations)
-        chartReader = try? ChartReadConnection(url: url)
+        chartReader = ChartReadConnection(url: url)
     }
 
     deinit {
@@ -95,7 +95,7 @@ public actor SQLiteListenStore: ListenStore, AppAllowlistStore, SimpleEditStore,
             sqlite3_close(connection)
             self.connection = nil
         }
-        await chartReader?.close()
+        await chartReader.close()
     }
 
     // MARK: - Opening and migrating

@@ -16,10 +16,22 @@ extension TracklogDroplet {
     }
 
     func quickBlock(_ listen: Listen) {
-        Task { try? await runtime?.quickBlock(listen) }
+        Task {
+            do {
+                try await runtime?.quickBlock(listen)
+            } catch {
+                host?.log.error("Could not save the block: \(error)")
+            }
+        }
     }
 
     func quickBlockCurrentTrack() {
-        Task { try? await runtime?.quickBlockCurrentTrack() }
+        Task {
+            do {
+                try await runtime?.quickBlockCurrentTrack()
+            } catch {
+                host?.log.error("Could not save the block: \(error)")
+            }
+        }
     }
 }

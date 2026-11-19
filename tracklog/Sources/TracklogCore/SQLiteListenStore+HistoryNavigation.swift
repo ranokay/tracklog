@@ -98,10 +98,7 @@ extension SQLiteListenStore: HistoryNavigationStore, TrackHistoryStore {
     // MARK: - Track history
 
     public func trackHistorySummary(matching key: String) async throws -> TrackHistorySummary {
-        guard let chartReader else {
-            throw DatabaseError.open("the track history reader is unavailable")
-        }
-        return try await chartReader.trackHistorySummary(matching: key)
+        try await chartReader.trackHistorySummary(matching: key)
     }
 
     public func trackHistoryPage(
@@ -109,10 +106,7 @@ extension SQLiteListenStore: HistoryNavigationStore, TrackHistoryStore {
         limit: Int,
         before cursor: ListenCursor?,
     ) async throws -> [Listen] {
-        guard let chartReader else {
-            throw DatabaseError.open("the track history reader is unavailable")
-        }
-        return try await chartReader.trackHistoryPage(matching: key, limit: limit, before: cursor)
+        try await chartReader.trackHistoryPage(matching: key, limit: limit, before: cursor)
     }
 
     // MARK: - Helpers

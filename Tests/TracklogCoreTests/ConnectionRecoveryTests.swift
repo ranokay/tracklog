@@ -32,7 +32,7 @@ struct ConnectionRecoveryTests {
             await credentials.resumeSaving()
         }
         var gateWaitIterator = gateWait.makeAsyncIterator()
-        let gateWaitEvent = await gateWaitIterator.next()
+        let gateWaitEvent: Void? = await gateWaitIterator.next()
         watchdog.cancel()
         #expect(gateWaitEvent != nil)
         await credentials.resumeSaving()

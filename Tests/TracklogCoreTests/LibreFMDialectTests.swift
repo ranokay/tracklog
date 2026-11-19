@@ -151,7 +151,7 @@ struct LibreFMDialectTests {
     @Test func sendsNowPlayingWithoutASignature() async throws {
         let (adapter, transport) = adapter([lastFMEmptyResponse()])
 
-        try await adapter.submitNowPlaying(
+        _ = try await adapter.submitNowPlaying(
             lastFMTestTrack(),
             connection: connection(),
             credential: "session-key",

@@ -88,6 +88,11 @@ extension TracklogDroplet: SettingsPagesProviding {
                 anchorID: tracklogRootPageID,
             ),
             SettingsSearchEntry(
+                title: "Apps",
+                keywords: ["players", "allow", "music", "spotify", "source", "app"],
+                anchorID: tracklogAppsPageID,
+            ),
+            SettingsSearchEntry(
                 title: "Services",
                 keywords: ["last.fm", "listenbrainz", "libre.fm", "account", "connect"],
                 anchorID: tracklogServicesPageID,

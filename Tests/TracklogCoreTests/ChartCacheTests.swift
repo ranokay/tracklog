@@ -937,7 +937,7 @@ struct ChartCacheTests {
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
         for index in 0 ..< 200 {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Seed \(index)",
                 artist: "Artist \(index % 20)",
                 album: "Album \(index % 10)",
@@ -959,7 +959,7 @@ struct ChartCacheTests {
         let gate = ChartHoldGate()
         let counter = ChartHoldCounter()
         await gate.startHolding()
-        await runtimeStore.chartReader?.setRowObserver { row in
+        await runtimeStore.chartReader.setRowObserver { row in
             if row == 64, await counter.takeFirst() {
                 await gate.enter()
             }
@@ -985,7 +985,7 @@ struct ChartCacheTests {
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
         for index in 0 ..< 200 {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Seed \(index)",
                 artist: "Artist \(index % 20)",
                 startedAt: now.addingTimeInterval(Double(index)),
@@ -1006,7 +1006,7 @@ struct ChartCacheTests {
         let gate = ChartHoldGate()
         let counter = ChartHoldCounter()
         await gate.startHolding()
-        await runtimeStore.chartReader?.setRowObserver { row in
+        await runtimeStore.chartReader.setRowObserver { row in
             if row == 64, await counter.takeFirst() {
                 await gate.enter()
             }
@@ -1032,7 +1032,7 @@ struct ChartCacheTests {
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
         for index in 0 ..< 100 {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Seed \(index)",
                 artist: "Artist \(index % 10)",
                 startedAt: now.addingTimeInterval(Double(index)),
@@ -1052,7 +1052,7 @@ struct ChartCacheTests {
         let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
         let gate = ChartHoldGate()
         await gate.startHolding()
-        await runtimeStore.chartReader?.setRowObserver { row in
+        await runtimeStore.chartReader.setRowObserver { row in
             if row == 64 {
                 await gate.enter()
             }
@@ -1183,7 +1183,7 @@ struct ChartCacheTests {
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
         for index in 0 ..< 200 {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Seed \(index)",
                 artist: "Artist \(index % 20)",
                 startedAt: now.addingTimeInterval(Double(index) - 1_000),
@@ -1209,7 +1209,7 @@ struct ChartCacheTests {
         let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
         let gate = ChartHoldGate()
         await gate.startHolding()
-        await runtimeStore.chartReader?.setRowObserver { row in
+        await runtimeStore.chartReader.setRowObserver { row in
             if row == 64 {
                 await gate.enter()
             }
@@ -1254,7 +1254,7 @@ struct ChartCacheTests {
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
         for index in 0 ..< 100 {
-            try await store.insert(chartListen(
+            _ = try await store.insert(chartListen(
                 title: "Seed \(index)",
                 artist: "Artist \(index % 10)",
                 startedAt: now.addingTimeInterval(Double(index)),
@@ -1274,7 +1274,7 @@ struct ChartCacheTests {
         let runtimeStore = try #require(runtime.store as? SQLiteListenStore)
         let gate = ChartHoldGate()
         await gate.startHolding()
-        await runtimeStore.chartReader?.setRowObserver { row in
+        await runtimeStore.chartReader.setRowObserver { row in
             if row == 64 {
                 await gate.enter()
             }

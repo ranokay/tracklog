@@ -10,7 +10,7 @@ the notch, the shelf, the lock screen and the menu bar.
 - Droplet id: `tracklog`. It is also `TracklogDroplet.id` in Swift and `id` in `droplet.json`; the three must agree or the loader refuses the bundle.
 - Swift product: `Tracklog`, a dynamic library. The harness target is `TracklogHarness`.
 - SDK checkout: set `DROPPYKIT_ROOT` to your local checkout and add its `Scripts` directory to PATH (see [setup](README.md#sdk-setup)). The package requires DroppyKit 1.20.1 or compatible later 1.x. Docs online: https://getdroppy.app/docs/droppykit
-- Host: Droppy 15.3 or later, which runs an unsigned bundle once its user approves that build under Settings, Store, Local droplets and asks again each time it opens, or the free Droppy Playground (https://getdroppy.app/download/playground), which loads unsigned bundles without asking.
+- Host: Droppy 16.0.1 or later, which runs an unsigned bundle once its user approves that build under Settings, Store, Local droplets and asks again each time it opens, or the free Droppy Playground (https://getdroppy.app/download/playground), which loads unsigned bundles without asking.
 
 ## The loop
 
@@ -136,8 +136,9 @@ package pins; `droppykit update` moves both to the newest release. A build that 
   inside the droplet's own UI are fine to make.
 - **`droplet.json` is the truth for the build.** `Info.plist` is generated from it.
   `version` is numeric `major.minor.patch`; `summary` is at most 60 characters;
-  `minAppVersion` stays `15.3.0` unless the droplet needs something newer; `kit.minAPI` is
-  the oldest DroppyKit API the droplet actually calls. `droppykit build` fails when it is
+  `minAppVersion` stays `16.0.1`, the first Droppy that ships DroppyKit 1.20.1, unless the droplet needs something newer; `kit.minAPI` is
+  the oldest DroppyKit the droplet uses and matches `from:` in `Package.swift` (1.20.1 here;
+  the newest API it calls is 1.19.0). `droppykit build` fails when it is
   older than that and names the calls and the version to set; set that version, never
   lower it to get a droplet loaded.
 - **Do not edit anything under `$DROPPYKIT_ROOT`.** That is the SDK checkout; fixes there go
@@ -214,3 +215,11 @@ the merge request; when a maintainer merges it, the pipeline builds, signs and p
 it. `droppykit submit --print` shows the plan without doing it (needs `glab`, signed in).
 Opening the merge request means accepting the Droplet developer terms at
 https://getdroppy.app/droplet-developer-terms.
+
+## Tracklog notes
+
+- **Reduce Motion is the one exception to the transition rule.** With Reduce Motion on,
+  `TracklogMotion` swaps content with its own 0.16 s crossfade, not a `DroppyTransition`.
+  The accessibility checklist keeps every droplet-owned change under 200 ms, and the host's
+  reduced spring can run longer. Normal motion still takes `DroppyTransition.element` and
+  `DroppyTransition.compactContent`.

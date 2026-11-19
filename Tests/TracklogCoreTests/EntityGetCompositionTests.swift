@@ -57,7 +57,7 @@ struct EntityGetCompositionTests {
             credential: "session",
             identity: ServiceIdentity(name: identity),
         )
-        try await composition.runtime.openEntityDetail(request)
+        await composition.runtime.openEntityDetail(request)
         #expect(await waitForEntityService(composition.state) { $0 != .loading })
         return try #require(composition.state.entityDetail?.service)
     }

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Validate one harness shot report and the files it claims.
 
-The gate renders four shelf states. Each report must be independently clean:
-no problems, an ok verdict, a live activation, a loaded manifest, every
-declared surface provided, both widget widths declared, and a non-empty PNG
-for every declared surface.
+The gate renders one harness run per fixture. Each report must be
+independently clean: no problems, an ok verdict, a live activation, a loaded
+manifest, every declared surface provided, both widget widths declared, and a
+non-empty PNG for every declared surface.
 """
 
 from __future__ import annotations

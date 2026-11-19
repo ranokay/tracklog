@@ -643,7 +643,7 @@ struct HistoryMutationTests {
                 clock: clock,
             )
         }
-        try await edit.value
+        _ = try await edit.value
         await capture.value
 
         #expect(try await store.count() == 2)

@@ -122,11 +122,6 @@ public extension CaptureRuntime {
         deliveryOutbox?.retry(connectionID: id)
     }
 
-    /// Resumes a connection after a successful re-auth or credential change.
-    func resumeDeliveries(forConnection id: Int64) {
-        deliveryOutbox?.resume(connectionID: id)
-    }
-
     /// Signs an existing connection in again. A same-identity sign-in clears
     /// needs sign-in, keeps pending deliveries and drains them now; a different
     /// identity asks through `confirmReplacement`, abandons the old pending

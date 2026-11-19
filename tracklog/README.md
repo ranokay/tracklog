@@ -46,7 +46,7 @@ mise install         # hk, jactionlint, SwiftLint, SwiftFormat, shellcheck
 mise run hooks       # install the hk Git hooks
 mise run verify      # fix loop: lint, test, build, validate, no shots
 mise run gate        # approval and PR head: verify plus surface shots
-mise run lint        # SwiftFormat, SwiftLint and jactionlint
+mise run lint        # SwiftFormat, SwiftLint, jactionlint and shellcheck
 mise run format      # apply SwiftFormat fixes
 ```
 
@@ -64,8 +64,8 @@ The package lives in `tracklog/`. The map for the project is
 
 ## Licence
 
-Tracklog-owned code and documentation use [Apache-2.0](../LICENSE).
-[Third-party terms](../THIRD_PARTY_NOTICES.txt) apply to DroppyKit, its scaffold
+Tracklog-owned code and documentation use [Apache-2.0](LICENSE).
+[Third-party terms](Assets/Licenses/THIRD_PARTY_NOTICES.txt) apply to DroppyKit, its scaffold
 material and generated placeholder artwork. Project names and logos are reserved
 for official branding. The SDK build copies the license files in
 `Assets/Licenses/` into the droplet resources.

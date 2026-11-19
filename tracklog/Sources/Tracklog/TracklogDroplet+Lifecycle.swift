@@ -65,6 +65,7 @@ public extension TracklogDroplet {
         hudSession = nil
         automationGate = nil
         state.setHarnessSettingsPage(nil)
+        HarnessEnvironment.isActive = false
         host = nil
     }
 }

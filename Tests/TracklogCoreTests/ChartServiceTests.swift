@@ -14,7 +14,6 @@ struct ChartServiceTests {
         let database = try TemporaryDatabase()
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
-        let flags = ChartFlags()
         // swiftlint:disable:next large_tuple
         let artists: [(String, String, Int, String)] = [
             ("Blondie", "", 42, "artist-mbid"),
@@ -290,7 +289,7 @@ struct ChartServiceTests {
         let now = chartDate(2026, 10, 31, 12)
         let clock = FakeClock(now)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(title: "Local", artist: "Artist", startedAt: now))
+        _ = try await store.insert(chartListen(title: "Local", artist: "Artist", startedAt: now))
         let transport = ChartHTTPTransport { _ in
             HTTPResponse(statusCode: 500, body: Data())
         }
@@ -870,7 +869,7 @@ struct ChartServiceTests {
         let flags = ChartFlags()
         let transport = listenBrainzTransport(flags: flags, gate: gate)
         let store = try SQLiteListenStore(url: database.url)
-        try await store.insert(chartListen(title: "Local Song", artist: "Local Artist", startedAt: now))
+        _ = try await store.insert(chartListen(title: "Local Song", artist: "Local Artist", startedAt: now))
         let state = TracklogAppState()
         let calendarBox = ChartCalendarBox(chartCalendar(utc))
         let runtime = makeChartRuntime(

@@ -271,7 +271,7 @@ private extension CaptureRuntime {
     ) async -> [Connection] {
         guard started, startGeneration == generation, !Task.isCancelled else { return [] }
         let targets = feedbackTargets(for: action)
-        guard !targets.isEmpty, let feedbackStore else { return [] }
+        guard !targets.isEmpty, feedbackStore != nil else { return [] }
 
         let now = clock.now
         let written: (identities: [String], clearsTrack: Bool)

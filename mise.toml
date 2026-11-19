@@ -10,7 +10,7 @@ description = "Run the engine test suite under the process-tree timeout"
 run = "python3 scripts/run_with_timeout.py swift test --package-path Tests"
 
 [tasks.lint]
-description = "Run SwiftFormat, SwiftLint and jactionlint"
+description = "Run SwiftFormat, SwiftLint, jactionlint and shellcheck"
 run = "hk check --all"
 
 [tasks.format]

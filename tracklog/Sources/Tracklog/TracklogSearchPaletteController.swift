@@ -3,6 +3,8 @@ import DroppyKit
 import SwiftUI
 import TracklogCore
 
+// droppykit-lint: allow-file own-window: no Store exception agreed yet; #135 moves the palette onto the expanded surface before submission
+
 /// The palette's window. The controller owns the panel, the key monitor, the
 /// resign-key observers and the one activation, so every close path releases
 /// all four and finishes the activation exactly once.

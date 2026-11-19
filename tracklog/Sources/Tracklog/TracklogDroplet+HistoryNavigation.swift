@@ -238,7 +238,7 @@ extension TracklogDroplet {
     /// the activation generation plus the runtime identity stop a read that
     /// survives deactivation from saving through a replacement runtime.
     func chooseImageOverrideFile(for draft: ImageOverrideDraft) {
-        guard imageOverridePanel == nil, let host else { return }
+        guard imageOverridePanel == nil, host != nil else { return }
         guard let runtime else {
             state.setImageOverrideError("The image could not be saved. Tracklog is not active.")
             return

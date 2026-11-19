@@ -405,7 +405,7 @@ func entityComposition(
         imageLoader: HTTPRemoteImageLoader(transport: transport),
         entityDetailTimeout: timeout,
     )
-    try await runtime.start()
+    await runtime.start()
     return EntityTestComposition(
         database: database,
         store: store,

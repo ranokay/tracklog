@@ -409,7 +409,7 @@ struct EntityDetailCompositionTests {
         let composition = try await entityComposition { _ in
             entityLastFMArtistInfo()
         }
-        try await linkLastFM(composition)
+        _ = try await linkLastFM(composition)
         try await composition.runtime.openEntityDetail(artistRequest())
         let request = try artistRequest()
         composition.runtime.beginImageOverride(request)
@@ -448,7 +448,7 @@ struct EntityDetailCompositionTests {
                 ),
             )
         }
-        try await linkLastFM(composition)
+        _ = try await linkLastFM(composition)
         try await composition.runtime.openEntityDetail(trackRequest())
         #expect(composition.state.entityDetail?.track?.listens.count == 50)
         await composition.runtime.loadMoreEntityListens()
@@ -499,9 +499,9 @@ struct EntityDetailCompositionTests {
                 start: historyBase.addingTimeInterval(60),
             ),
         )
-        try await linkLastFM(composition)
+        _ = try await linkLastFM(composition)
         let dreams = try #require(EntityRequest.track(title: "Dreams", artist: "Fleetwood Mac"))
-        try await composition.runtime.openEntityDetail(dreams)
+        await composition.runtime.openEntityDetail(dreams)
         #expect(composition.state.entityDetail?.track?.totalCount == 1)
 
         // The delete of the other track lands while Dreams is open, and the
@@ -535,9 +535,9 @@ struct EntityDetailCompositionTests {
                 ),
             )
         }
-        try await linkLastFM(composition)
+        _ = try await linkLastFM(composition)
         let album = try albumRequest()
-        try await composition.runtime.openEntityDetail(album)
+        await composition.runtime.openEntityDetail(album)
         #expect(composition.state.entityDetail?.local.count == 2)
 
         let page = try await composition.store.page(limit: 10, before: nil)
@@ -575,7 +575,7 @@ struct EntityDetailCompositionTests {
                 ),
             )
         }
-        try await linkLastFM(composition)
+        _ = try await linkLastFM(composition)
         try await composition.runtime.openEntityDetail(trackRequest())
         await composition.runtime.loadMoreEntityListens()
         await composition.runtime.loadMoreEntityListens()
@@ -957,7 +957,7 @@ struct EntityDetailCompositionTests {
         _ = try await linkLastFM(composition)
 
         for request in try [artistRequest(), albumRequest(), trackRequest()] {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) { $0 == .failed(.unreadable) })
             guard case let .failed(failure)? = composition.state.entityDetail?.service else {
                 Issue.record("\(request.kind) did not report an unreadable answer")
@@ -986,7 +986,7 @@ struct EntityDetailCompositionTests {
         _ = try await linkLastFM(composition)
 
         for request in try [artistRequest(), albumRequest(), trackRequest()] {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) {
                 $0 == .failed(.unreadable)
             })
@@ -1006,7 +1006,7 @@ struct EntityDetailCompositionTests {
         _ = try await linkLastFM(composition)
 
         for request in try [artistRequest(), albumRequest(), trackRequest()] {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) {
                 $0 == .failed(.unreadable)
             })
@@ -1031,7 +1031,7 @@ struct EntityDetailCompositionTests {
             (trackRequest(), "https://www.last.fm/music/Blondie/_/Heart+of+Glass"),
         ]
         for (request, link) in cases {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) {
                 if case .facts = $0 {
                     true
@@ -1066,7 +1066,7 @@ struct EntityDetailCompositionTests {
             (trackRequest(), "https://www.last.fm/music/Blondie/_/Heart+of+Glass"),
         ]
         for (request, link) in cases {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) {
                 if case .facts = $0 {
                     true
@@ -1100,7 +1100,7 @@ struct EntityDetailCompositionTests {
         _ = try await linkLastFM(composition)
 
         for request in try [artistRequest(), albumRequest(), trackRequest()] {
-            try await composition.runtime.openEntityDetail(request)
+            await composition.runtime.openEntityDetail(request)
             #expect(await waitForEntityService(composition.state) {
                 $0 == .failed(.unreadable)
             })
