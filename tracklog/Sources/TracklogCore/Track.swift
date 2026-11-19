@@ -60,8 +60,8 @@ public struct MediaSample: Equatable, Sendable {
     /// `1` while playing normally; `0` while paused.
     public let playbackRate: Double
     public let isPlaying: Bool
-    /// The timestamp the media source reported. For a helper snapshot this is
-    /// the track's start, not the poll time.
+    /// When the media source last reported its position: the start, a pause,
+    /// a resume or a seek. `elapsed` is measured at `observedAt`, not here.
     public let timestamp: Date
     /// When Tracklog observed this sample. Played time is measured from this
     /// clock, so a helper that repeats its start timestamp cannot freeze the
