@@ -97,20 +97,15 @@ struct HarnessDemoCatalogue: CatalogueSearching {
 
     func lovedTracks(account _: String, page: Int, limit _: Int) async throws -> CataloguePage {
         switch fixture {
-        case .loading:
+        case .loading, .lovedHeld:
             try await Task.sleep(for: .seconds(600))
             return CataloguePage(rows: [], hasMore: false)
-        case .empty:
+        case .empty, .failed:
             return CataloguePage(rows: [], hasMore: false)
         case .credentialsMissing:
             throw ServiceFailure.appCredentialAuth(.missing)
         case .credentialsRejected:
             throw ServiceFailure.appCredentialAuth(.invalidKey)
-        case .failed:
-            return CataloguePage(rows: [], hasMore: false)
-        case .lovedHeld:
-            try await Task.sleep(for: .seconds(600))
-            return CataloguePage(rows: [], hasMore: false)
         case .longNames:
             return CataloguePage(rows: longRows(.loved), hasMore: false)
         case .cjk:

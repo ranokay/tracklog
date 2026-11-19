@@ -29,7 +29,7 @@ jobs:
       - name: Run script tests
         run: python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Run engine tests
-        run: swift test --package-path Tests
+        run: swift test --package-path Tests --force-resolved-versions
 
   # The test job compiles only the engine targets. This compiles the SwiftUI
   # droplet target and the harness too, so a break there fails before the
@@ -42,7 +42,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Compile the droplet and harness
-        run: swift build --package-path tracklog --product TracklogHarness
+        run: swift build --package-path tracklog --product TracklogHarness --force-resolved-versions
 
   lint:
     runs-on: macos-26

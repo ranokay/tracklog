@@ -19,7 +19,8 @@ SCRIPT = Path(__file__).resolve().parents[1] / "run_with_timeout.py"
 WAIT_SECONDS = 60.0
 
 _SPEC = importlib.util.spec_from_file_location("run_with_timeout", str(SCRIPT))
-assert _SPEC is not None and _SPEC.loader is not None
+assert _SPEC is not None
+assert _SPEC.loader is not None
 WRAPPER = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(WRAPPER)
 

@@ -2,7 +2,6 @@
 .swiftpm/
 .DS_Store
 shots/
-Package.resolved
 
 .vscode/
 # Local credentials and review artifacts

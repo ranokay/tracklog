@@ -160,7 +160,9 @@ public final class CaptureRuntime {
                 deliveries: store as? any DeliveryStore,
                 adapters: serviceAdapters,
                 clock: clock,
-                log: connectionLog ?? { _ in },
+                log: connectionLog ?? { _ in
+                    // No log sink was given: connection events are dropped.
+                },
             )
         } else {
             nil
@@ -439,7 +441,9 @@ private struct UnavailableAppAllowlist: AppAllowlistStore {
         nil
     }
 
-    func setAllowed(_: String, allowed _: Bool) async throws {}
+    func setAllowed(_: String, allowed _: Bool) async throws {
+        // Nothing is stored, so there is nothing to allow.
+    }
 }
 
 extension CaptureRuntime {
