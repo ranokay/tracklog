@@ -30,7 +30,7 @@ that #48 chose for a failed export.
   Both quick-block paths show "Not blocked" and never "Blocked".
 - The droplet's export path calls `CaptureRuntime.beginSettingsExport()`
   when it starts and `reportSettingsExportFailure(_:)` for a read or a write
-  failure. `SettingsExportTests` covers both through a failing rule read: the
+  failure. `SettingsExportFailureTests` covers both through a failing rule read: the
   reason is kept for the Data page, the strip is spoken, and the next attempt
   clears the reason. The save panel and its cancellation stay in the droplet
   target, which has no test target because the Store refuses tests in a
